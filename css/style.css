@@ -1349,6 +1349,25 @@ section { padding: clamp(4rem, 9vw, 8rem) 0; }
 .hero-ctas { justify-content: center; }
 
 /* =====================================================
+   REAL-PORTRAIT KEY CARDS
+   Crop individual portraits out of /img/menu-keys.jpg 3x3 grid
+   ===================================================== */
+.key-card-photo[class*="key-photo-"] {
+  background-image: url("/img/menu-keys.jpg");
+  background-size: 300% 300%;
+  background-repeat: no-repeat;
+}
+.key-photo-1 { background-position: 0% 0%; }
+.key-photo-2 { background-position: 50% 0%; }
+.key-photo-3 { background-position: 100% 0%; }
+.key-photo-4 { background-position: 0% 50%; }
+.key-photo-5 { background-position: 50% 50%; }
+.key-photo-6 { background-position: 100% 50%; }
+.key-photo-7 { background-position: 0% 100%; }
+.key-photo-8 { background-position: 50% 100%; }
+.key-photo-9 { background-position: 100% 100%; }
+
+/* =====================================================
    EDITORIAL OVERHAUL (ed-*)
    Premium, asymmetric, real-photo-led layout system.
    ===================================================== */
