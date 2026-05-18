@@ -1321,3 +1321,16 @@ section { padding: clamp(4rem, 9vw, 8rem) 0; }
   height: 2px; background: var(--gold-bg);
 }
 
+/* =====================================================
+   OVERRIDES: hero layout corrections
+   ===================================================== */
+.hero h1 { max-width: none !important; }
+.hero-content > .eyebrow { display: inline-block !important; }
+.hero-content > .eyebrow::before { display: none !important; }
+.hero-lede { max-width: 580px; margin: 0 auto 2rem; }
+
+/* Force centered hero content */
+.hero-content { text-align: center; }
+.hero-content > .eyebrow { margin: 0 auto 1.5rem; }
+
+
