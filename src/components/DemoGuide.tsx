@@ -1,0 +1,102 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+
+const KEY = "partsport_demo_guide_v1";
+
+export default function DemoGuide() {
+  const [open, setOpen] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!localStorage.getItem(KEY)) setOpen(true);
+    setReady(true);
+  }, []);
+
+  function close() {
+    setOpen(false);
+    localStorage.setItem(KEY, "1");
+  }
+
+  if (!ready) return null;
+
+  if (!open) {
+    return (
+      <button
+        className="demo-launch"
+        onClick={() => setOpen(true)}
+        aria-label="Open the demo guide"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z" />
+        </svg>
+        Demo guide
+      </button>
+    );
+  }
+
+  return (
+    <div className="demo-guide" role="dialog" aria-label="Demo guide">
+      <div className="dg-head">
+        <strong>Exploring the PartsPort prototype</strong>
+        <button className="dg-close" onClick={close} aria-label="Close">
+          ×
+        </button>
+      </div>
+      <p className="dg-intro">
+        A live demo of an energy &amp; utilities equipment marketplace. There
+        are three sides to try:
+      </p>
+      <ol className="dg-steps">
+        <li>
+          <span className="dg-num">1</span>
+          <div>
+            <strong>Shop as a buyer</strong>
+            <span>
+              Search for a part (try &ldquo;protective relay&rdquo; or
+              &ldquo;backup generator&rdquo;), open it, and check out — or
+              request a quote on big-ticket gear. No login needed.
+            </span>
+          </div>
+        </li>
+        <li>
+          <span className="dg-num">2</span>
+          <div>
+            <strong>Run a supplier</strong>
+            <span>
+              Sign in to manage listings, price incoming quote requests, and
+              fulfill orders.
+            </span>
+          </div>
+        </li>
+        <li>
+          <span className="dg-num">3</span>
+          <div>
+            <strong>See the admin console</strong>
+            <span>
+              Sign in for marketplace metrics, supplier approvals, orders, and
+              quotes.
+            </span>
+          </div>
+        </li>
+      </ol>
+      <div className="dg-creds">
+        <div className="dg-creds-h">
+          Demo sign-ins · password <code>demo1234</code>
+        </div>
+        <div>Buyer — <code>buyer@partsport.example</code></div>
+        <div>Supplier — <code>supplier@partsport.example</code></div>
+        <div>Admin — <code>admin@partsport.example</code></div>
+      </div>
+      <div className="dg-actions">
+        <Link href="/catalog" className="btn btn-primary btn-sm" onClick={close}>
+          Start with the catalog
+        </Link>
+        <button className="btn btn-ghost btn-sm" onClick={close}>
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+}

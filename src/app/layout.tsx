@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import DemoGuide from "@/components/DemoGuide";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rok-preview.vercel.app"),
@@ -40,7 +41,10 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <DemoGuide />
+      </body>
     </html>
   );
 }
