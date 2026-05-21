@@ -12,6 +12,7 @@ const DASHBOARD: Record<string, { href: string; label: string }> = {
   ADMIN: { href: "/admin", label: "Admin console" },
   SUPPLIER: { href: "/supplier", label: "Supplier dashboard" },
   BUYER: { href: "/account", label: "My orders" },
+  MANUFACTURER: { href: "/oem", label: "Manufacturer dashboard" },
 };
 
 export default function HeaderNav({ user }: { user: NavUser }) {

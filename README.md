@@ -57,6 +57,7 @@ Password `demo1234` for all three:
 | Buyer | `buyer@partsport.example` |
 | Supplier | `supplier@partsport.example` |
 | Admin | `admin@partsport.example` |
+| Manufacturer (OEM) | `oem@partsport.example` |
 
 ---
 

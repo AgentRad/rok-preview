@@ -12,6 +12,7 @@ enum Role {
   BUYER
   SUPPLIER
   ADMIN
+  MANUFACTURER
 }
 
 enum SupplierStatus {
@@ -41,14 +42,21 @@ enum QuoteStatus {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  role         Role     @default(BUYER)
-  supplier     Supplier?
-  orders       Order[]
-  createdAt    DateTime @default(now())
+  id               String   @id @default(cuid())
+  email            String   @unique
+  passwordHash     String
+  name             String
+  role             Role     @default(BUYER)
+  manufacturerName String?
+  supplier         Supplier?
+  orders           Order[]
+  createdAt        DateTime @default(now())
+}
+
+model SearchEvent {
+  id        String   @id @default(cuid())
+  query     String
+  createdAt DateTime @default(now())
 }
 
 model Supplier {

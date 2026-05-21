@@ -34,34 +34,42 @@ export async function POST(
   }
 
   if (action === "approve") {
+    const isOem = app.category === "Manufacturer / OEM";
+    const role = isOem ? "MANUFACTURER" : "SUPPLIER";
     const existingUser = await prisma.user.findUnique({
       where: { email: app.email },
     });
-    const supplierUser = existingUser
+    const account = existingUser
       ? await prisma.user.update({
           where: { id: existingUser.id },
-          data: { role: "SUPPLIER" },
+          data: {
+            role,
+            ...(isOem ? { manufacturerName: app.companyName } : {}),
+          },
         })
       : await prisma.user.create({
           data: {
             email: app.email,
             name: app.contactName,
-            role: "SUPPLIER",
+            role,
             passwordHash: await hashPassword(TEMP_PASSWORD),
+            ...(isOem ? { manufacturerName: app.companyName } : {}),
           },
         });
 
-    await prisma.supplier.create({
-      data: {
-        name: app.companyName,
-        contactEmail: app.email,
-        status: "APPROVED",
-        certifications: app.certs,
-        rating: 4.7,
-        reviews: 0,
-        userId: supplierUser.id,
-      },
-    });
+    if (!isOem) {
+      await prisma.supplier.create({
+        data: {
+          name: app.companyName,
+          contactEmail: app.email,
+          status: "APPROVED",
+          certifications: app.certs,
+          rating: 4.7,
+          reviews: 0,
+          userId: account.id,
+        },
+      });
+    }
     await prisma.supplierApplication.update({
       where: { id },
       data: { status: "APPROVED" },

@@ -70,31 +70,33 @@ export default function DemoGuide() {
           <li>
             <span className="dg-num">2</span>
             <div>
-              <strong>Run a supplier</strong>
+              <strong>The supplier side</strong>
               <span>
-                Sign in to manage listings, price incoming quote requests, and
-                fulfill orders.
+                Distributors manage listings, price incoming quote requests,
+                and fulfill orders.
               </span>
             </div>
           </li>
           <li>
             <span className="dg-num">3</span>
             <div>
-              <strong>See the admin console</strong>
+              <strong>The manufacturer &amp; admin side</strong>
               <span>
-                Sign in for marketplace metrics, supplier approvals, orders,
-                and quotes.
+                OEMs get demand intelligence and a branded storefront; admins
+                oversee metrics, approvals, orders, and quotes.
               </span>
             </div>
           </li>
         </ol>
         <div className="dg-creds">
           <div className="dg-creds-h">
-            Demo sign-ins · password <code>demo1234</code>
+            Demo buyer sign-in · password <code>demo1234</code>
           </div>
-          <div>Buyer — <code>buyer@partsport.example</code></div>
-          <div>Supplier — <code>supplier@partsport.example</code></div>
-          <div>Admin — <code>admin@partsport.example</code></div>
+          <div>Email — <code>buyer@partsport.example</code></div>
+          <div style={{ marginTop: 4, color: "var(--steel-light)" }}>
+            Supplier, manufacturer &amp; admin logins available from the
+            PartsPort team.
+          </div>
         </div>
         <div className="dg-actions">
           <Link href="/catalog" className="btn btn-primary btn-sm" onClick={close}>

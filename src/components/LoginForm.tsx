@@ -8,6 +8,7 @@ const HOME: Record<string, string> = {
   ADMIN: "/admin",
   SUPPLIER: "/supplier",
   BUYER: "/account",
+  MANUFACTURER: "/oem",
 };
 
 export default function LoginForm() {

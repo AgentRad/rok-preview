@@ -34,6 +34,8 @@ const PRODUCTS = [
   { sku: "SRG-ARR18", name: "18 kV Distribution Surge Arrester", category: "Grounding & Surge", manufacturer: "Eaton", icon: "ground", price: 96.0, unit: "each", etaDays: 8, stock: 510, supplier: "Gridline Power Supply", specs: { "Duty Cycle": "18 kV", MCOV: "15.3 kV", Class: "Distribution, heavy-duty", Technology: "Metal-oxide varistor", Mounting: "Polymer-housed" }, description: "Polymer-housed metal-oxide surge arrester that protects transformers and line equipment from lightning and switching surges. Pressure-relief design for fault safety." },
   { sku: "SCD-RTAC", name: "SEL-3530 Real-Time Automation Controller", category: "Controls & SCADA", manufacturer: "Schweitzer Engineering", icon: "controller", price: 2950.0, unit: "each", etaDays: 15, stock: 26, supplier: "Relay & Protection Partners", specs: { Function: "RTU / automation controller", Protocols: "DNP3, IEC 61850, Modbus", Logic: "IEC 61131 programmable", Ports: "Serial + Ethernet", Use: "Substation automation" }, description: "Substation automation controller and protocol gateway that ties relays, meters, and SCADA together. Deterministic logic engine for local control and data concentration." },
   { sku: "SAF-AFK40", name: "40 cal/cm² Arc-Flash PPE Kit", category: "Safety & Arc-Flash", manufacturer: "Honeywell Salisbury", icon: "shield", price: 1290.0, unit: "each", etaDays: 6, stock: 75, supplier: "Gridline Power Supply", specs: { "Arc Rating": "40 cal/cm²", Category: "PPE Category 4", Includes: "Coat, bib overall, ventilated hood", Standard: "NFPA 70E / ASTM F1959", Sizes: "M-3XL" }, description: "Complete arc-flash protection kit for switching and live-line work — arc-rated coat, bib overall, and ventilated hood. Meets NFPA 70E Category 4 requirements." },
+  { sku: "SWG-3VA-250", name: "3VA Molded Case Circuit Breaker, 250 A", category: "Switchgear & Breakers", manufacturer: "Siemens", icon: "breaker", price: 680.0, unit: "each", etaDays: 5, stock: 140, supplier: "Voltworks Switchgear", specs: { "Frame Size": "250 A", Poles: "3", "Interrupting Rating": "65 kA @ 480 V", Trip: "Electronic (ETU)", Standard: "UL 489" }, description: "Molded-case circuit breaker for distribution panels and motor feeders. Electronic trip unit with adjustable settings and field-installable accessories." },
+  { sku: "RLY-SIPRO5", name: "SIPROTEC 5 Feeder Protection Relay", category: "Protective Relays", manufacturer: "Siemens", icon: "relay", price: 4250.0, unit: "each", etaDays: 16, stock: 9, supplier: "Relay & Protection Partners", specs: { Protection: "Directional overcurrent, distance, breaker failure", Comms: "IEC 61850, DNP3", Mounting: "Flush / rack", "I/O": "Modular, expandable", Display: "Large graphical" }, description: "Modular feeder protection and bay controller for distribution and sub-transmission. Configurable function library with full IEC 61850 station integration." },
 ];
 
 async function main() {
@@ -74,6 +76,7 @@ async function main() {
   const demoUsers = [
     { email: "admin@partsport.example", name: "Avery Ops", role: "ADMIN" },
     { email: "buyer@partsport.example", name: "Jordan Buyer", role: "BUYER" },
+    { email: "oem@partsport.example", name: "Morgan Reed", role: "MANUFACTURER", manufacturerName: "Siemens" },
   ];
   for (const u of demoUsers) {
     await prisma.user.upsert({

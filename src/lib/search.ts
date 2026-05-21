@@ -195,6 +195,13 @@ export async function runSearch(query: string): Promise<SearchResult> {
     return { interpretation: "", products, ai: false };
   }
 
+  // Log the query as demand signal (surfaced to manufacturers).
+  try {
+    await prisma.searchEvent.create({ data: { query: q } });
+  } catch {
+    /* non-fatal */
+  }
+
   if (isAISearchEnabled()) {
     const ai = await aiRank(q, products);
     if (ai) {

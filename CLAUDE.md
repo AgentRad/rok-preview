@@ -37,13 +37,16 @@ delivery.
 
 ## Stack & architecture
 - Next.js 15 (App Router) + TypeScript, Prisma ORM, PostgreSQL.
-- Auth: hand-rolled cookie sessions (JWT via `jose`, bcrypt) — roles BUYER / SUPPLIER / ADMIN.
+- Auth: hand-rolled cookie sessions (JWT via `jose`, bcrypt) — roles BUYER / SUPPLIER /
+  ADMIN / MANUFACTURER. Manufacturer (OEM) accounts carry a `manufacturerName` and get a
+  read-only demand/storefront dashboard at `/oem`.
 - Payments: PayPal sandbox when env keys are set; built-in demo checkout otherwise.
 - Search: Anthropic API (`claude-opus-4-7`) for natural-language catalog search when
   `ANTHROPIC_API_KEY` is set; heuristic keyword fallback otherwise. See `src/lib/search.ts`.
 - Key dirs: `src/app` (pages + `api` routes), `src/components`, `src/lib`, `prisma`.
 - Data model (`prisma/schema.prisma`): User, Supplier, Product, Order, OrderItem,
-  SupplierApplication, QuoteRequest.
+  SupplierApplication, QuoteRequest, SearchEvent (logged buyer searches → manufacturer
+  demand intelligence).
 
 ## Conventions
 - Design system in `src/app/globals.css`: editorial / industrial — warm off-white,
@@ -60,7 +63,8 @@ See `README.md`. In short: needs Postgres; `npm install`, set `.env` (`DATABASE_
 
 ## Demo accounts
 Password `demo1234`: `buyer@partsport.example`, `supplier@partsport.example`,
-`admin@partsport.example`.
+`admin@partsport.example`, `oem@partsport.example` (manufacturer — Siemens).
+Only the buyer login is shown publicly in the on-site demo guide.
 
 ## Environment variables
 `DATABASE_URL` + `DATABASE_URL_UNPOOLED` (required). Optional: `ANTHROPIC_API_KEY`,
