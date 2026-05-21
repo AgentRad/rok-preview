@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 const VALUE = [
   {
     title: "Brand protection",
-    body: "We verify that every seller is an authorized distributor of your brand — keeping counterfeit and gray-market listings off the platform.",
+    body: "We verify that every seller is an authorized distributor of your brand, keeping counterfeit and gray-market listings off the platform.",
   },
   {
     title: "Zero channel conflict",
@@ -16,19 +16,19 @@ const VALUE = [
   },
   {
     title: "Demand intelligence",
-    body: "See what buyers search for, by region and segment — including backorder demand for long-lead items — and plan production against real signal.",
+    body: "See what buyers search for, by region and segment, including backorder demand for long-lead items, then plan production against real signal.",
   },
   {
     title: "Reach the long tail",
-    body: "Small co-ops, municipals, and contractors a field-sales team can't justify visiting — reached at near-zero channel cost.",
+    body: "Small co-ops, municipals, and contractors a field-sales team can't justify visiting, reached at near-zero channel cost.",
   },
   {
     title: "Qualified leads",
-    body: "Structured RFQs and orders flow to your distributors, not a generic inbox — warm demand instead of cold outreach.",
+    body: "Structured RFQs and orders flow to your distributors, not a generic inbox. Warm demand instead of cold outreach.",
   },
   {
     title: "A storefront you control",
-    body: "Specs, datasheets, photos, and price ranges in one branded place — always current, so buyers and distributors quote the right thing.",
+    body: "Specs, datasheets, photos, and price ranges in one branded place, always current, so buyers and distributors quote the right thing.",
   },
 ];
 
@@ -45,7 +45,7 @@ export default function ManufacturersPage() {
               List your brand on PartsPort for free. We send qualified demand
               to your authorized distributors, protect your name from
               counterfeits, and show you the end-demand you&rsquo;ve never had
-              visibility into — with no channel conflict.
+              visibility into, with no channel conflict.
             </p>
             <div className="mt-32">
               <a className="btn btn-primary" href="#apply">List your brand</a>
@@ -89,7 +89,7 @@ export default function ManufacturersPage() {
               <div>
                 <span className="eyebrow">Onboarding</span>
                 <h2 className="section-head" style={{ marginBottom: 24 }}>
-                  Live in about a week — and free
+                  Live in about a week, and free
                 </h2>
                 <ol className="timeline">
                   <li>
@@ -102,7 +102,7 @@ export default function ManufacturersPage() {
                   </li>
                   <li>
                     <h3>Your storefront goes live</h3>
-                    <p>Specs, datasheets, photos, and price ranges — branded to you.</p>
+                    <p>Specs, datasheets, photos, and price ranges, branded to you.</p>
                   </li>
                   <li>
                     <h3>You get demand signal</h3>
@@ -119,7 +119,7 @@ export default function ManufacturersPage() {
                 <p className="muted" style={{ marginTop: 14 }}>
                   PartsPort earns its fee on the transaction, paid by the
                   distributor who fulfills the order. Manufacturers participate
-                  free — the platform monetizes the sale, not your listing.
+                  free. The platform monetizes the sale, not your listing.
                 </p>
               </div>
             </div>

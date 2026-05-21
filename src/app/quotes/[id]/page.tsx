@@ -52,13 +52,13 @@ export default async function QuotePage({
 
           {quote.status === "OPEN" && (
             <div className="alert alert-info" style={{ marginTop: 18 }}>
-              Request received. A vetted supplier is preparing your price —
-              you&rsquo;ll see it here, typically within one business day.
+              Request received. A vetted supplier is preparing your price.
+              You&rsquo;ll see it here, typically within one business day.
             </div>
           )}
           {quote.status === "ACCEPTED" && quote.orderId && (
             <div className="alert alert-ok" style={{ marginTop: 18 }}>
-              ✓ Quote accepted — an order has been created.{" "}
+              ✓ Quote accepted. An order has been created.{" "}
               <Link href={`/orders/${quote.orderId}`} style={{ color: "inherit", fontWeight: 700 }}>
                 Go to your order →
               </Link>

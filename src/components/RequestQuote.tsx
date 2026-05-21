@@ -48,7 +48,7 @@ export default function RequestQuote({ sku, user }: Props) {
         </button>
         <p className="muted-text" style={{ fontSize: 12.5, marginTop: 10 }}>
           Configured, made-to-order equipment. A vetted supplier prices it and
-          responds — typically within one business day.
+          responds, typically within one business day.
         </p>
       </div>
     );

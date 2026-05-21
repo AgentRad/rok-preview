@@ -12,7 +12,7 @@ const CRITERIA = [
   },
   {
     title: "Certified & authentic",
-    body: "ISO 9001 or equivalent quality management, and only genuine OEM or authorized-distributor stock — no counterfeits.",
+    body: "ISO 9001 or equivalent quality management, and only genuine OEM or authorized-distributor stock. No counterfeits.",
   },
   {
     title: "Lead-time reliability",
@@ -43,7 +43,7 @@ export default function SuppliersPage() {
             <h1>Sell to buyers who are ready to order.</h1>
             <p>
               PartsPort sends you qualified demand, collects payment, and
-              handles delivery — so you can focus on supplying great parts. We
+              handles delivery, so you can focus on supplying great parts. We
               work only with suppliers who meet the bar below.
             </p>
             <div className="mt-32">
@@ -104,7 +104,7 @@ export default function SuppliersPage() {
                   </li>
                   <li>
                     <h3>Catalog onboarding</h3>
-                    <p>Add listings from your supplier dashboard — photos, specs, pricing, live stock.</p>
+                    <p>Add listings from your supplier dashboard: photos, specs, pricing, live stock.</p>
                   </li>
                   <li>
                     <h3>Go live</h3>

@@ -1,4 +1,4 @@
-/* PartsPort — editorial industrial design system */
+/* PartsPort - editorial industrial design system */
 
 :root {
   --bg: #f3f2ef;
@@ -743,7 +743,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .hiw-h-answer { color: var(--amber-deep); }
 .hiw-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
 .hiw-list li { font-size: 14.5px; color: var(--steel); padding-left: 22px; position: relative; line-height: 1.5; }
-.hiw-list li::before { content: "—"; position: absolute; left: 0; color: var(--steel-light); }
+.hiw-list li::before { content: "\00B7"; position: absolute; left: 0; color: var(--steel-light); }
 .hiw-list-answer li { color: var(--ink); }
 .hiw-list-answer li::before { content: "\2192"; color: var(--amber-deep); }
 

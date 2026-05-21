@@ -33,8 +33,8 @@ function Row({ app }: { app: PendingApplication }) {
     if (action === "approve") {
       setResult(
         data.tempPassword
-          ? `Approved — supplier login ${data.loginEmail} / password ${data.tempPassword}`
-          : `Approved — existing account ${data.loginEmail} upgraded to supplier.`
+          ? `Approved. Supplier login ${data.loginEmail} / password ${data.tempPassword}`
+          : `Approved. Existing account ${data.loginEmail} upgraded to supplier.`
       );
     } else {
       setResult("Application rejected.");
@@ -53,7 +53,7 @@ function Row({ app }: { app: PendingApplication }) {
       <td>{app.yearsTrading}</td>
       <td style={{ maxWidth: 200 }}>
         <span className="muted-text" style={{ fontSize: 12.5 }}>
-          {app.certs || "—"}
+          {app.certs || "Not listed"}
         </span>
       </td>
       <td className="num">

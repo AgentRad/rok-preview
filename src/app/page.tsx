@@ -43,12 +43,12 @@ export default async function HomePage() {
           <div className="wrap">
             <span className="hero-eyebrow">The industrial parts marketplace</span>
             <h1>
-              Every part you need —{" "}
+              Every part you need,{" "}
               <span className="hl">in one search.</span>
             </h1>
             <p className="lede">
               Type it or describe it. Compare vetted suppliers, prices, and
-              real delivery ETAs — then order. We handle the rest.
+              real delivery ETAs, then order. We handle the rest.
             </p>
             <HeroSearch />
             <div className="hero-chips">
@@ -86,7 +86,7 @@ export default async function HomePage() {
             <div className="section-head center">
               <span className="eyebrow">Browse the catalog</span>
               <h2>Shop by category</h2>
-              <p>Every category in the catalog — sourced from vetted suppliers, delivery handled.</p>
+              <p>Every category in the catalog, sourced from vetted suppliers with delivery handled.</p>
             </div>
             <div className="cat-grid">
               {CATEGORIES.map((c) => (
@@ -137,7 +137,7 @@ export default async function HomePage() {
               <div className="step">
                 <div className="step-num">02</div>
                 <h3>Compare real options</h3>
-                <p>See each option side by side — photo, manufacturer, price, supplier rating, and an honest delivery ETA.</p>
+                <p>See each option side by side: photo, manufacturer, price, supplier rating, and an honest delivery ETA.</p>
               </div>
               <div className="step">
                 <div className="step-num">03</div>
@@ -168,7 +168,7 @@ export default async function HomePage() {
                   Qualified demand, without the chase.
                 </h2>
                 <p style={{ color: "var(--steel)", marginTop: 12 }}>
-                  We only work with suppliers who meet our bar — and in return
+                  We only work with suppliers who meet our bar, and in return
                   you reach buyers who are ready to order, with payment and
                   logistics handled for you.
                 </p>

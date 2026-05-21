@@ -12,7 +12,7 @@ export default function CartPage() {
         <div className="page-pad narrow">
           <h1 className="page-title">Your cart</h1>
           <p className="page-sub">
-            Review your parts, then check out — PartsPort handles payment and
+            Review your parts, then check out. PartsPort handles payment and
             delivery.
           </p>
           <div style={{ marginTop: 24 }}>

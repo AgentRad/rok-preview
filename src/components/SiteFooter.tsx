@@ -17,7 +17,7 @@ export default function SiteFooter() {
             </Link>
             <p>
               The industrial parts marketplace. Search, compare, and order from
-              vetted suppliers — with delivery handled end to end.
+              vetted suppliers, with delivery handled end to end.
             </p>
           </div>
           <div>

@@ -37,13 +37,13 @@ export default async function OrderPage({
         <div className="page-pad narrow">
           {paid && (
             <div className="alert alert-ok">
-              ✓ Payment received — thank you. Order {order.reference} is
+              ✓ Payment received. Thank you. Order {order.reference} is
               confirmed and routed to the supplier.
             </div>
           )}
           {!paid && order.status === "PENDING" && (
             <div className="alert alert-info">
-              Order {order.reference} is awaiting payment — review the details
+              Order {order.reference} is awaiting payment. Review the details
               below and pay to confirm.
             </div>
           )}
@@ -56,7 +56,7 @@ export default async function OrderPage({
             <div className={"order-step" + (paid ? " done" : "")}>
               <div className="os-label">Payment {paid ? "received" : "pending"}</div>
               <div className="os-sub">
-                {order.paidAt ? order.paidAt.toLocaleDateString() : "—"}
+                {order.paidAt ? order.paidAt.toLocaleDateString() : "Pending"}
               </div>
             </div>
             <div className={"order-step" + (fulfilled ? " done" : "")}>

@@ -62,7 +62,7 @@ export default function DemoGuide() {
               <strong>Shop as a buyer</strong>
               <span>
                 Search for a part (try &ldquo;protective relay&rdquo; or
-                &ldquo;backup generator&rdquo;), open it, and check out — or
+                &ldquo;backup generator&rdquo;), open it, and check out, or
                 request a quote on big-ticket gear. No login needed.
               </span>
             </div>
@@ -92,7 +92,7 @@ export default function DemoGuide() {
           <div className="dg-creds-h">
             Demo buyer sign-in · password <code>demo1234</code>
           </div>
-          <div>Email — <code>buyer@partsport.example</code></div>
+          <div>Email: <code>buyer@partsport.example</code></div>
           <div style={{ marginTop: 4, color: "var(--steel-light)" }}>
             Supplier, manufacturer &amp; admin logins available from the
             PartsPort team.

@@ -174,7 +174,7 @@ export default async function SupplierDashboard() {
                           ) : q.quotedUnitCents != null ? (
                             `${formatCents(q.quotedUnitCents)} / unit`
                           ) : (
-                            "—"
+                            "Sent"
                           )}
                         </td>
                       </tr>

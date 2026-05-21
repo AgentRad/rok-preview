@@ -83,7 +83,7 @@ function heuristicRank(query: string, products: SearchProduct[]): SearchProduct[
     const name = p.name.toLowerCase();
     const category = p.category.toLowerCase();
     const sku = p.sku.toLowerCase();
-    // Qualify on identity fields only — descriptions and supplier names are too noisy.
+    // Qualify on identity fields only; descriptions and supplier names are too noisy.
     const hay = `${name} ${p.manufacturer.toLowerCase()} ${category} ${sku}`;
     let score = 0;
     for (const term of terms) {
@@ -121,7 +121,7 @@ const SCHEMA = {
 } as const;
 
 const SYSTEM = `You are the search engine for PartsPort, an industrial parts and equipment
-marketplace. A buyer describes what they need — by part name, specification,
+marketplace. A buyer describes what they need, by part name, specification,
 manufacturer, or the problem/application they are solving. Using only the catalog
 provided, return the SKUs that genuinely fit the need, best match first. Understand
 intent, synonyms, applications, and specs. Only include SKUs that are reasonable
@@ -182,7 +182,7 @@ async function aiRank(
 }
 
 /* ---------- fast instant search (for the live hero) ---------- */
-// Keyword-only, no AI call, no logging — safe to hit on every keystroke.
+// Keyword-only, no AI call, no logging; safe to hit on every keystroke.
 export async function quickSearch(query: string): Promise<SearchProduct[]> {
   const q = query.trim();
   if (q.length < 2) return [];

@@ -14,7 +14,7 @@ export default async function CheckoutPage() {
         <div className="page-pad narrow">
           <h1 className="page-title">Checkout</h1>
           <p className="page-sub">
-            One payment to PartsPort — we coordinate the supplier and delivery.
+            One payment to PartsPort. We coordinate the supplier and delivery.
           </p>
           <div style={{ marginTop: 24 }}>
             <CheckoutClient

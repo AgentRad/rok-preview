@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     template: "%s | PartsPort",
   },
   description:
-    "PartsPort is the search engine for industrial parts and equipment. Type what you need, compare vetted-supplier options with real delivery ETAs, and order — we handle payment and delivery.",
+    "PartsPort is the search engine for industrial parts and equipment. Type what you need, compare vetted-supplier options with real delivery ETAs, and order. We handle payment and delivery.",
   icons: { icon: "/favicon.svg" },
   manifest: "/manifest.json",
   openGraph: {

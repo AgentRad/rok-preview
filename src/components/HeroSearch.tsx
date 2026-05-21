@@ -71,7 +71,7 @@ export default function HeroSearch() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => q.trim().length >= 2 && setOpen(true)}
-          placeholder="Search for any part — name, spec, or describe what you need"
+          placeholder="Search any part by name, spec, or plain-English description"
           aria-label="Search for a part"
         />
         <button type="submit">
@@ -89,7 +89,7 @@ export default function HeroSearch() {
             <div className="hs-msg">Searching…</div>
           )}
           {!loading && results.length === 0 && (
-            <div className="hs-msg">No matches — try describing it differently.</div>
+            <div className="hs-msg">No matches. Try describing it differently.</div>
           )}
           {results.map((r) => (
             <Link key={r.sku} href={`/product/${r.sku}`} className="hs-row">

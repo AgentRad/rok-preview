@@ -85,9 +85,9 @@ export default async function OemDashboard() {
         <div className="page-pad">
           <h1 className="page-title">{brand}</h1>
           <p className="page-sub">
-            Manufacturer dashboard — your demand, distributors, and sales on
-            PartsPort. Every order routes to an authorized distributor: zero
-            channel conflict.
+            Manufacturer dashboard: your demand, distributors, and sales on
+            PartsPort. Every order routes to an authorized distributor, with
+            zero channel conflict.
           </p>
 
           <div className="kpi-grid">
@@ -147,7 +147,7 @@ export default async function OemDashboard() {
               style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}
             >
               <span className="muted-text" style={{ fontSize: 12.5 }}>
-                Live demand intelligence — what utilities and contractors are
+                Live demand intelligence: what utilities and contractors are
                 looking for, before it reaches your distributors.
               </span>
             </div>
@@ -224,7 +224,7 @@ export default async function OemDashboard() {
               style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}
             >
               <span className="muted-text" style={{ fontSize: 12.5 }}>
-                Only verified, authorized distributors can list your brand —
+                Only verified, authorized distributors can list your brand, so
                 counterfeit and gray-market listings are kept off the platform.
               </span>
             </div>

@@ -28,7 +28,7 @@ export default function ManufacturerForm() {
       body: JSON.stringify({
         ...form,
         category: "Manufacturer / OEM",
-        yearsTrading: "—",
+        yearsTrading: "N/A",
       }),
     });
     const data = await res.json();
@@ -44,7 +44,7 @@ export default function ManufacturerForm() {
     return (
       <div className="form-card">
         <div className="alert alert-ok" style={{ marginBottom: 0 }}>
-          ✓ Thanks — our partnerships team will reach out to set up your
+          ✓ Thanks. Our partnerships team will reach out to set up your
           manufacturer storefront and verify your authorized distributors.
         </div>
       </div>
@@ -56,7 +56,7 @@ export default function ManufacturerForm() {
       <h2>List your brand on PartsPort</h2>
       <p className="form-intro">
         Tell us about your company. We set up your storefront and verify your
-        authorized distributors — no cost, and no channel conflict.
+        authorized distributors. No cost, no channel conflict.
       </p>
       {error && <div className="alert alert-error">{error}</div>}
       <form onSubmit={submit}>

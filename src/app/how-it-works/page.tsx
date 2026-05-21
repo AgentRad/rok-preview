@@ -19,12 +19,12 @@ const ROLES: Role[] = [
     who: "Utilities, co-ops, municipals, contractors, and EPCs.",
     today: [
       "Sourcing one part means calling several distributors and waiting on quotes.",
-      "Pricing and lead times are opaque — there's no easy way to compare.",
+      "Pricing and lead times are opaque, with no easy way to compare.",
       "No simple way to confirm a supplier or a part is legitimate.",
       "Big-ticket equipment turns into weeks of back-and-forth.",
     ],
     withUs: [
-      "Search — or describe — what you need; AI surfaces every vetted option.",
+      "Search or describe what you need; AI surfaces every vetted option.",
       "Compare photo, manufacturer, price, rating, and a real delivery ETA at a glance.",
       "Buy in-stock items instantly; request a quote for configured equipment.",
       "One invoice, one accountable partner, delivery handled end to end.",
@@ -35,7 +35,7 @@ const ROLES: Role[] = [
     title: "Qualified demand, landing in one dashboard.",
     who: "Regional distributors and suppliers who stock and sell the brands.",
     today: [
-      "Demand is feast-or-famine — you chase leads and spend on marketing.",
+      "Demand is feast-or-famine, so you chase leads and spend on marketing.",
       "Quoting is manual, slow, and easy to lose track of.",
       "You carry the credit risk and chase receivables.",
       "Logistics and buyer support quietly eat your margin.",
@@ -43,14 +43,14 @@ const ROLES: Role[] = [
     withUs: [
       "Qualified buyers find your listings the moment they search.",
       "Instant orders and structured RFQs arrive in one place.",
-      "Guaranteed payment — PartsPort collects and pays you on dispatch.",
+      "Guaranteed payment: PartsPort collects and pays you on dispatch.",
       "We coordinate delivery and buyer support; you focus on supply.",
     ],
   },
   {
     eyebrow: "For manufacturers",
     title: "A demand channel with zero channel conflict.",
-    who: "OEMs — the companies that design and build the equipment.",
+    who: "OEMs: the companies that design and build the equipment.",
     today: [
       "You sell through distribution and are largely blind to end-demand.",
       "Counterfeit and gray-market listings put your brand at risk.",
@@ -58,8 +58,8 @@ const ROLES: Role[] = [
       "There's no low-cost channel to reach new buyers.",
     ],
     withUs: [
-      "A free branded storefront — specs, datasheets, and price ranges.",
-      "Every sale routes to your authorized distributors — no channel conflict.",
+      "A free branded storefront with specs, datasheets, and price ranges.",
+      "Every sale routes to your authorized distributors, with no channel conflict.",
       "Verified-seller checks protect your brand from counterfeits.",
       "Demand intelligence: what buyers search, where, and backorder demand for long-lead items.",
     ],
@@ -77,7 +77,7 @@ export default function HowItWorksPage() {
             <h1>One marketplace, three sides that finally fit together.</h1>
             <p>
               Manufacturers build it, distributors stock and sell it, buyers
-              need it. PartsPort connects all three — and answers what each
+              need it. PartsPort connects all three, and answers what each
               side has always struggled with.
             </p>
           </div>
@@ -105,7 +105,7 @@ export default function HowItWorksPage() {
               </div>
             </div>
             <p className="flow-caption">
-              PartsPort sits in the middle — search and discovery, vetting,
+              PartsPort sits in the middle: search and discovery, vetting,
               quoting, payment, and delivery run on one platform.
             </p>
           </div>

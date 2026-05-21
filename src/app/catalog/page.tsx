@@ -97,7 +97,7 @@ export default async function CatalogPage({
             </div>
             <h1>{cat || "Parts catalog"}</h1>
             <p>
-              Compare parts from vetted suppliers — photo, manufacturer,
+              Compare parts from vetted suppliers: photo, manufacturer,
               price, rating, and delivery ETA.
             </p>
           </div>

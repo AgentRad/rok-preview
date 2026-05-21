@@ -60,7 +60,7 @@ export default function AddToCart({
       )}
       {!inStock && (
         <p className="muted-text" style={{ marginTop: 10, fontSize: 12.5 }}>
-          This part is on backorder — delivery takes longer than the listed ETA.
+          This part is on backorder. Delivery takes longer than the listed ETA.
         </p>
       )}
     </div>
