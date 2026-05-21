@@ -114,10 +114,10 @@ export default function SuppliersPage() {
               </div>
               <div className="panel">
                 <h3>What a transaction looks like</h3>
-                <div className="fee-row"><span>Buyer orders your part</span><span>$612.00</span></div>
-                <div className="fee-row"><span>PartsPort service fee (4%)</span><span className="amber">+ $24.48</span></div>
-                <div className="fee-row"><span>Buyer is charged</span><span>$636.48</span></div>
-                <div className="fee-row total"><span>You receive on dispatch</span><span>$612.00</span></div>
+                <div className="fee-row"><span>Buyer orders your equipment</span><span>$8,450.00</span></div>
+                <div className="fee-row"><span>PartsPort service fee (4%)</span><span className="amber">+ $338.00</span></div>
+                <div className="fee-row"><span>Buyer is charged</span><span>$8,788.00</span></div>
+                <div className="fee-row total"><span>You receive on dispatch</span><span>$8,450.00</span></div>
                 <p className="muted" style={{ marginTop: 14 }}>
                   You set the part price and keep it in full. PartsPort&rsquo;s
                   small percentage is added on top.

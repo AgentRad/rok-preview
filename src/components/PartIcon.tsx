@@ -1,136 +1,113 @@
 import React from "react";
 
 const PATHS: Record<string, React.ReactNode> = {
-  bearing: (
+  transformer: (
     <>
-      <circle cx="32" cy="32" r="22" />
-      <circle cx="32" cy="32" r="9" />
-      <circle cx="32" cy="11.5" r="3.4" />
-      <circle cx="46.5" cy="17.5" r="3.4" />
-      <circle cx="52.5" cy="32" r="3.4" />
-      <circle cx="46.5" cy="46.5" r="3.4" />
-      <circle cx="32" cy="52.5" r="3.4" />
-      <circle cx="17.5" cy="46.5" r="3.4" />
-      <circle cx="11.5" cy="32" r="3.4" />
-      <circle cx="17.5" cy="17.5" r="3.4" />
+      <rect x="13" y="26" width="38" height="28" rx="2" />
+      <path d="M22 26v-7M32 26v-7M42 26v-7" />
+      <circle cx="22" cy="15" r="3.6" />
+      <circle cx="32" cy="15" r="3.6" />
+      <circle cx="42" cy="15" r="3.6" />
+      <path d="M19 54v5M45 54v5" />
     </>
   ),
-  pump: (
+  breaker: (
     <>
-      <rect x="12" y="20" width="40" height="28" rx="3" />
-      <circle cx="26" cy="34" r="8" />
-      <circle cx="40" cy="34" r="8" />
-      <rect x="28" y="10" width="8" height="10" rx="1" />
-      <path d="M12 44h-4M52 44h4" />
+      <rect x="17" y="13" width="30" height="38" rx="2" />
+      <circle cx="32" cy="22" r="2.6" />
+      <circle cx="32" cy="42" r="2.6" />
+      <path d="M32 22l9 17" />
+      <path d="M25 13v-5M39 13v-5M25 51v5M39 51v5" />
     </>
   ),
-  cylinder: (
+  relay: (
     <>
-      <rect x="8" y="24" width="32" height="16" rx="2" />
-      <path d="M40 32h12" />
-      <rect x="52" y="27" width="5" height="10" rx="1" />
-      <path d="M14 24v-5M22 24v-5M30 24v-5" />
+      <rect x="14" y="14" width="36" height="36" rx="2" />
+      <rect x="20" y="20" width="24" height="11" rx="1" />
+      <circle cx="23" cy="41" r="2.4" />
+      <circle cx="32" cy="41" r="2.4" />
+      <circle cx="41" cy="41" r="2.4" />
     </>
   ),
-  motor: (
+  cable: (
     <>
-      <rect x="12" y="20" width="32" height="26" rx="3" />
-      <path d="M44 33h13" />
-      <path d="M18 20v26M24 20v26M30 20v26M36 20v26" strokeWidth="1.6" />
-      <path d="M16 46v5h6v-5M34 46v5h6v-5" />
+      <ellipse cx="32" cy="18" rx="20" ry="6" />
+      <ellipse cx="32" cy="46" rx="20" ry="6" />
+      <path d="M12 18v28M52 18v28" />
+      <path d="M20 26h24M20 32h24M20 38h24" strokeWidth="1.7" />
     </>
   ),
-  contactor: (
+  insulator: (
     <>
-      <rect x="18" y="16" width="28" height="32" rx="2" />
-      <path d="M24 16v-6M32 16v-6M40 16v-6M24 48v6M32 48v6M40 48v6" />
-      <path d="M24 30h16" strokeWidth="1.6" />
+      <path d="M32 9v46" />
+      <circle cx="32" cy="9" r="3.4" />
+      <ellipse cx="32" cy="22" rx="13" ry="3.6" />
+      <ellipse cx="32" cy="32" rx="13" ry="3.6" />
+      <ellipse cx="32" cy="42" rx="13" ry="3.6" />
+      <path d="M27 55h10" />
     </>
   ),
-  belt: (
+  meter: (
     <>
-      <circle cx="21" cy="32" r="11" />
-      <circle cx="45" cy="32" r="9" />
-      <circle cx="21" cy="32" r="3" />
-      <circle cx="45" cy="32" r="3" />
-      <path d="M21 21h24M21 43h24" />
+      <rect x="16" y="12" width="32" height="40" rx="3" />
+      <circle cx="32" cy="27" r="11" />
+      <path d="M32 27l6-5" />
+      <path d="M25 44h14" strokeWidth="1.7" />
     </>
   ),
-  sensor: (
+  generator: (
     <>
-      <rect x="9" y="22" width="20" height="20" rx="2" />
-      <path d="M29 32h26" strokeDasharray="3 4" />
-      <path d="M55 23v18" />
-      <path d="M14 22v-4M24 22v-4" />
+      <rect x="9" y="22" width="44" height="26" rx="2" />
+      <path d="M15 28v14M21 28v14M27 28v14" strokeWidth="1.8" />
+      <circle cx="40" cy="35" r="7" />
+      <rect x="42" y="11" width="6" height="11" rx="1" />
+      <path d="M15 48v5M47 48v5" />
     </>
   ),
-  valve: (
+  solar: (
     <>
-      <path d="M12 22v20l20-10zM52 22v20L32 32z" />
-      <path d="M32 32V14" />
-      <ellipse cx="32" cy="12" rx="13" ry="4.5" />
-      <path d="M12 32H6M52 32h6" />
+      <rect x="10" y="13" width="44" height="30" rx="1.5" />
+      <path d="M24.7 13v30M39.3 13v30M10 23h44M10 33h44" strokeWidth="1.7" />
+      <path d="M32 43v11M24 54h16" />
     </>
   ),
-  bolt: (
+  battery: (
     <>
-      <path d="M20 19l12 7v12l-12 7-12-7V26z" />
-      <path d="M32 27h22v10H32" />
-      <path d="M38 27v10M44 27v10M50 27v10" strokeWidth="1.6" />
+      <rect x="11" y="21" width="38" height="26" rx="2" />
+      <rect x="49" y="28" width="5" height="12" rx="1" />
+      <path d="M20 27v14M28 27v14M36 27v14" strokeWidth="1.8" />
     </>
   ),
-  gear: (
+  ground: (
     <>
-      <circle cx="32" cy="32" r="14" />
-      <circle cx="32" cy="32" r="6" />
-      <rect x="29" y="9" width="6" height="9" />
-      <rect x="29" y="46" width="6" height="9" />
-      <rect x="9" y="29" width="9" height="6" />
-      <rect x="46" y="29" width="9" height="6" />
-      <rect x="29" y="9" width="6" height="9" transform="rotate(45 32 32)" />
-      <rect x="29" y="46" width="6" height="9" transform="rotate(45 32 32)" />
-      <rect x="9" y="29" width="9" height="6" transform="rotate(45 32 32)" />
-      <rect x="46" y="29" width="9" height="6" transform="rotate(45 32 32)" />
+      <path d="M32 8v26" />
+      <circle cx="32" cy="8" r="3.2" />
+      <path d="M15 34h34" />
+      <path d="M21 42h22" />
+      <path d="M26 50h12" />
     </>
   ),
-  coupling: (
+  controller: (
     <>
-      <rect x="11" y="18" width="16" height="28" rx="2" />
-      <rect x="37" y="18" width="16" height="28" rx="2" />
-      <path d="M27 26h10M27 38h10" />
-      <path d="M19 18v-4M45 18v-4" />
+      <rect x="15" y="20" width="27" height="30" rx="2" />
+      <rect x="20" y="25" width="17" height="8" rx="1" />
+      <circle cx="22" cy="42" r="2.3" />
+      <circle cx="30" cy="42" r="2.3" />
+      <path d="M21 20v-4M28.5 20v-4M36 20v-4M21 50v4M28.5 50v4M36 50v4" />
+      <path d="M42 24l9-9" />
+      <circle cx="52" cy="14" r="2.6" />
     </>
   ),
-  gasket: (
+  shield: (
     <>
-      <rect x="10" y="10" width="44" height="44" rx="3" />
-      <circle cx="32" cy="32" r="13" />
-      <circle cx="18" cy="18" r="2.6" />
-      <circle cx="46" cy="18" r="2.6" />
-      <circle cx="18" cy="46" r="2.6" />
-      <circle cx="46" cy="46" r="2.6" />
+      <path d="M32 7l21 7v15c0 13-9 20-21 25-12-5-21-12-21-25V14Z" />
+      <path d="M34 21l-9 13h7l-2 10 10-14h-7z" />
     </>
   ),
-  insert: (
+  part: (
     <>
-      <path d="M32 11l21 21-21 21-21-21z" />
-      <circle cx="32" cy="32" r="6" />
-    </>
-  ),
-  hose: (
-    <>
-      <path d="M12 46C16 18 30 50 36 30s14-6 16-14" />
-      <rect x="8" y="42" width="9" height="9" rx="1" />
-      <rect x="48" y="11" width="9" height="9" rx="1" />
-    </>
-  ),
-  vfd: (
-    <>
-      <rect x="14" y="11" width="30" height="42" rx="3" />
-      <rect x="20" y="17" width="18" height="9" rx="1" />
-      <circle cx="24" cy="38" r="3" />
-      <circle cx="34" cy="38" r="3" />
-      <path d="M44 18v28M49 18v28M54 18v28" strokeWidth="1.6" />
+      <path d="M32 8l20 11v22L32 52 12 41V19Z" />
+      <path d="M32 8v44M12 19l20 11 20-11" />
     </>
   ),
 };
@@ -150,7 +127,7 @@ export default function PartIcon({ icon, className }: { icon: string; className?
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {PATHS[icon] ?? PATHS.gear}
+      {PATHS[icon] ?? PATHS.part}
     </svg>
   );
 }

@@ -4,17 +4,17 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://rok-preview.vercel.app"),
   title: {
-    default: "PartsPort | The Industrial Parts Marketplace",
+    default: "PartsPort | The Energy & Utilities Equipment Marketplace",
     template: "%s | PartsPort",
   },
   description:
-    "PartsPort is the simplest way to source industrial parts. Search what you need, compare vetted-supplier options, and we handle payment and delivery.",
+    "PartsPort is the simplest way to source energy & utilities equipment — transformers, switchgear, relays, conductors, metering, generators, solar and storage. Compare vetted-supplier options; we handle payment and delivery.",
   icons: { icon: "/favicon.svg" },
   manifest: "/manifest.json",
   openGraph: {
-    title: "PartsPort | The Industrial Parts Marketplace",
+    title: "PartsPort | The Energy & Utilities Equipment Marketplace",
     description:
-      "Source industrial parts as easily as online shopping. Vetted suppliers, transparent pricing, delivery handled end to end.",
+      "Source utility equipment as easily as online shopping. Vetted suppliers, transparent pricing, delivery handled end to end.",
     type: "website",
     siteName: "PartsPort",
   },

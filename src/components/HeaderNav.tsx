@@ -52,7 +52,7 @@ export default function HeaderNav({ user }: { user: NavUser }) {
           <input
             type="text"
             name="q"
-            placeholder="Search bearings, valves, motors, part numbers…"
+            placeholder="Search transformers, breakers, relays, conductors…"
             aria-label="Search parts"
           />
           <button type="submit" aria-label="Search">

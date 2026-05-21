@@ -16,16 +16,16 @@ export default function SiteFooter() {
               </span>
             </Link>
             <p>
-              The industrial parts marketplace. Search, compare, and order from
-              vetted suppliers — with delivery handled end to end.
+              The energy &amp; utilities equipment marketplace. Search, compare,
+              and order from vetted suppliers — with delivery handled end to end.
             </p>
           </div>
           <div>
             <h4>Buy</h4>
             <ul>
               <li><Link href="/catalog">Browse catalog</Link></li>
-              <li><Link href="/catalog?cat=Bearings">Bearings</Link></li>
-              <li><Link href="/catalog?cat=Hydraulics">Hydraulics</Link></li>
+              <li><Link href="/catalog?cat=Transformers">Transformers</Link></li>
+              <li><Link href="/catalog?cat=Switchgear+%26+Breakers">Switchgear</Link></li>
               <li><Link href="/cart">Your cart</Link></li>
             </ul>
           </div>

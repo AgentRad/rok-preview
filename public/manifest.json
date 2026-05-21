@@ -1,16 +1,16 @@
 {
   "name": "PartsPort",
   "short_name": "PartsPort",
-  "description": "An online marketplace for industrial parts. Search, compare vetted-supplier options, and get delivery handled end to end.",
+  "description": "The energy & utilities equipment marketplace. Search, compare vetted-supplier options, and get delivery handled end to end.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#11161d",
+  "background_color": "#f3f2ef",
+  "theme_color": "#f3f2ef",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/img/favicon.svg",
+      "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

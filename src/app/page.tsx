@@ -8,18 +8,18 @@ import ProductCard from "@/components/ProductCard";
 export const dynamic = "force-dynamic";
 
 const CATEGORIES: { name: string; icon: string }[] = [
-  { name: "Bearings", icon: "bearing" },
-  { name: "Hydraulics", icon: "pump" },
-  { name: "Pneumatics", icon: "cylinder" },
-  { name: "Motors & Drives", icon: "motor" },
-  { name: "Electrical", icon: "contactor" },
-  { name: "Belts & Pulleys", icon: "belt" },
-  { name: "Sensors", icon: "sensor" },
-  { name: "Valves", icon: "valve" },
-  { name: "Fasteners", icon: "bolt" },
-  { name: "Power Transmission", icon: "gear" },
-  { name: "Seals & Gaskets", icon: "gasket" },
-  { name: "Cutting Tools", icon: "insert" },
+  { name: "Transformers", icon: "transformer" },
+  { name: "Switchgear & Breakers", icon: "breaker" },
+  { name: "Protective Relays", icon: "relay" },
+  { name: "Conductors & Cable", icon: "cable" },
+  { name: "Line Hardware", icon: "insulator" },
+  { name: "Metering", icon: "meter" },
+  { name: "Generators & ATS", icon: "generator" },
+  { name: "Solar & Inverters", icon: "solar" },
+  { name: "Energy Storage", icon: "battery" },
+  { name: "Grounding & Surge", icon: "ground" },
+  { name: "Controls & SCADA", icon: "controller" },
+  { name: "Safety & Arc-Flash", icon: "shield" },
 ];
 
 export default async function HomePage() {
@@ -47,7 +47,7 @@ export default async function HomePage() {
               AI-powered parts sourcing
             </span>
             <h1>
-              Source industrial parts as easily as{" "}
+              Source utility equipment as easily as{" "}
               <span className="hl">online shopping.</span>
             </h1>
             <p className="lede">
@@ -56,7 +56,7 @@ export default async function HomePage() {
               price, and a real delivery ETA. We handle payment and delivery.
             </p>
             <form className="hero-search" action="/catalog" method="get" role="search">
-              <input type="text" name="q" placeholder="Describe the part you need — e.g. “motor for a conveyor”" aria-label="Search for a part" />
+              <input type="text" name="q" placeholder="Describe the part you need — e.g. “transformer for a substation”" aria-label="Search for a part" />
               <button type="submit">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
                   <circle cx="11" cy="11" r="7" />
@@ -67,11 +67,11 @@ export default async function HomePage() {
             </form>
             <div className="hero-chips">
               <span>Popular:</span>
-              <Link href="/catalog?q=ball+bearing">ball bearing</Link>
-              <Link href="/catalog?cat=Hydraulics">hydraulic pump</Link>
-              <Link href="/catalog?cat=Motors+%26+Drives">3-phase motor</Link>
-              <Link href="/catalog?cat=Valves">stainless ball valve</Link>
-              <Link href="/catalog?q=timing+belt">timing belt</Link>
+              <Link href="/catalog?q=pad-mount+transformer">pad-mount transformer</Link>
+              <Link href="/catalog?cat=Protective+Relays">protection relay</Link>
+              <Link href="/catalog?q=ACSR+conductor">ACSR conductor</Link>
+              <Link href="/catalog?cat=Solar+%26+Inverters">solar inverter</Link>
+              <Link href="/catalog?q=standby+generator">standby generator</Link>
             </div>
             <div className="hero-stats">
               <div><div className="num">{productCount}</div><div className="lbl">parts in catalog</div></div>
@@ -84,14 +84,14 @@ export default async function HomePage() {
 
         <div className="industries">
           <div className="wrap">
-            <span className="ind-label">Sourcing for teams in</span>
+            <span className="ind-label">Sourcing for</span>
             <div className="ind-list">
-              <span>Manufacturing</span>
-              <span>Energy &amp; Utilities</span>
-              <span>Aerospace &amp; Defense</span>
-              <span>Automotive</span>
-              <span>Heavy Equipment</span>
-              <span>Food &amp; Beverage</span>
+              <span>Electric Utilities</span>
+              <span>Transmission &amp; Distribution</span>
+              <span>Power Generation</span>
+              <span>Renewables &amp; Storage</span>
+              <span>Substation EPCs</span>
+              <span>Co-ops &amp; Municipals</span>
             </div>
           </div>
         </div>
@@ -101,7 +101,7 @@ export default async function HomePage() {
             <div className="section-head center">
               <span className="eyebrow">Browse the catalog</span>
               <h2>Shop by category</h2>
-              <p>Core categories covering MRO, automation, and power transmission.</p>
+              <p>Substation, transmission, distribution, generation, and renewables — sourced from vetted suppliers.</p>
             </div>
             <div className="cat-grid">
               {CATEGORIES.map((c) => (
@@ -168,9 +168,9 @@ export default async function HomePage() {
             <div className="split">
               <div className="panel">
                 <h3>How a transaction works</h3>
-                <div className="fee-row"><span>Part price (set by supplier)</span><span>$612.00</span></div>
-                <div className="fee-row"><span>PartsPort service fee (4%)</span><span className="amber">$24.48</span></div>
-                <div className="fee-row total"><span>Buyer pays</span><span>$636.48</span></div>
+                <div className="fee-row"><span>Equipment price (set by supplier)</span><span>$8,450.00</span></div>
+                <div className="fee-row"><span>PartsPort service fee (4%)</span><span className="amber">$338.00</span></div>
+                <div className="fee-row total"><span>Buyer pays</span><span>$8,788.00</span></div>
                 <p className="muted" style={{ marginTop: 14 }}>
                   PartsPort takes a small percentage of each transaction.
                   Suppliers get qualified demand and guaranteed payment; buyers

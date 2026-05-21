@@ -19,9 +19,9 @@ export type SupplierProduct = {
 };
 
 const CATEGORIES = [
-  "Bearings", "Hydraulics", "Pneumatics", "Motors & Drives", "Electrical",
-  "Belts & Pulleys", "Sensors", "Valves", "Fasteners", "Power Transmission",
-  "Seals & Gaskets", "Cutting Tools",
+  "Transformers", "Switchgear & Breakers", "Protective Relays", "Conductors & Cable",
+  "Line Hardware", "Metering", "Generators & ATS", "Solar & Inverters", "Energy Storage",
+  "Grounding & Surge", "Controls & SCADA", "Safety & Arc-Flash",
 ];
 
 function Row({ p }: { p: SupplierProduct }) {

@@ -95,9 +95,9 @@ export default async function CatalogPage({
               <Link href="/">Home</Link> › Catalog
               {cat ? ` › ${cat}` : ""}
             </div>
-            <h1>{cat || "Industrial parts catalog"}</h1>
+            <h1>{cat || "Energy & utilities catalog"}</h1>
             <p>
-              Compare options from vetted suppliers — photo, manufacturer,
+              Compare equipment from vetted suppliers — photo, manufacturer,
               price, rating, and delivery ETA.
             </p>
           </div>

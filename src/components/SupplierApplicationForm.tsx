@@ -3,9 +3,9 @@
 import { useState } from "react";
 
 const CATEGORIES = [
-  "Bearings", "Hydraulics", "Pneumatics", "Motors & Drives", "Electrical",
-  "Belts & Pulleys", "Sensors", "Valves", "Fasteners", "Power Transmission",
-  "Seals & Gaskets", "Cutting Tools", "Other / multiple",
+  "Transformers", "Switchgear & Breakers", "Protective Relays", "Conductors & Cable",
+  "Line Hardware", "Metering", "Generators & ATS", "Solar & Inverters", "Energy Storage",
+  "Grounding & Surge", "Controls & SCADA", "Safety & Arc-Flash", "Other / multiple",
 ];
 
 export default function SupplierApplicationForm() {

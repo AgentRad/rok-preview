@@ -18,38 +18,41 @@ export function isAISearchEnabled(): boolean {
 /* ---------- heuristic fallback (no API key) ---------- */
 // Maps intents / applications / synonyms to catalog vocabulary.
 const EXPANSIONS: Record<string, string[]> = {
-  motor: ["motor", "drive", "tefc", "three-phase"],
-  drive: ["drive", "vfd", "motor", "inverter"],
-  vfd: ["drive", "powerflex", "inverter", "frequency"],
-  inverter: ["drive", "vfd", "powerflex"],
-  pump: ["pump", "hydraulic", "gear"],
-  bearing: ["bearing", "ball", "deep groove"],
-  belt: ["belt", "timing", "synchronous", "powergrip"],
-  pulley: ["belt", "pulley"],
-  valve: ["valve", "ball valve", "shutoff"],
-  seal: ["seal", "gasket", "sealing"],
-  "o-ring": ["seal", "gasket"],
-  gasket: ["gasket", "seal", "sheet"],
-  sensor: ["sensor", "photoelectric", "laser", "proximity"],
-  detect: ["sensor", "photoelectric", "laser"],
-  bolt: ["bolt", "screw", "hex", "fastener", "cap screw"],
-  screw: ["screw", "bolt", "hex", "fastener"],
-  fastener: ["fastener", "bolt", "screw", "hex"],
-  coupling: ["coupling", "jaw", "flexible"],
-  gearbox: ["gearbox", "reducer", "helical"],
-  reducer: ["gearbox", "helical", "reducer"],
-  hose: ["hose", "hydraulic", "assembly"],
-  cutting: ["insert", "carbide", "turning"],
-  tooling: ["insert", "carbide", "cutting"],
-  insert: ["insert", "carbide", "turning"],
-  contactor: ["contactor", "switching"],
-  relay: ["contactor"],
+  transformer: ["transformer", "pad-mount", "distribution", "kva"],
+  breaker: ["breaker", "vacuum", "switchgear", "circuit"],
+  switchgear: ["switchgear", "breaker", "vacuum"],
+  cutout: ["cutout", "fused", "fuse"],
+  relay: ["relay", "protection", "feeder", "sel"],
+  protection: ["relay", "protection", "feeder"],
+  conductor: ["conductor", "acsr", "overhead", "cable", "wire"],
+  cable: ["cable", "conductor", "urd", "underground", "wire"],
+  wire: ["wire", "conductor", "cable"],
+  insulator: ["insulator", "polymer", "suspension"],
+  meter: ["meter", "metering", "smart", "revenue", "ami"],
+  generator: ["generator", "standby", "genset", "backup"],
+  genset: ["generator", "standby", "backup"],
+  backup: ["generator", "standby", "battery", "storage"],
+  ats: ["transfer", "ats", "automatic"],
+  solar: ["solar", "pv", "module", "panel", "photovoltaic"],
+  pv: ["solar", "pv", "module"],
+  panel: ["solar", "pv", "module"],
+  inverter: ["inverter", "string", "solar"],
+  battery: ["battery", "storage", "lfp", "bess"],
+  storage: ["battery", "storage", "bess"],
+  ground: ["ground", "grounding", "earth", "rod"],
+  grounding: ["ground", "grounding", "rod"],
+  surge: ["surge", "arrester", "lightning"],
+  arrester: ["surge", "arrester"],
+  scada: ["controller", "rtac", "automation", "scada"],
+  controller: ["controller", "rtac", "automation"],
+  "arc-flash": ["arc-flash", "ppe", "safety"],
+  ppe: ["arc-flash", "ppe", "safety"],
   // applications
-  conveyor: ["motor", "belt", "bearing", "gearbox", "coupling", "drive"],
-  pneumatic: ["pneumatic", "cylinder", "air"],
-  hydraulic: ["hydraulic", "pump", "hose"],
-  leak: ["valve", "seal", "gasket"],
-  rotating: ["bearing", "motor", "coupling"],
+  substation: ["transformer", "breaker", "switchgear", "relay", "insulator"],
+  feeder: ["relay", "conductor", "breaker"],
+  overhead: ["conductor", "acsr", "insulator", "cutout"],
+  underground: ["cable", "urd", "transformer"],
+  outage: ["generator", "standby", "battery", "storage"],
 };
 
 const STOPWORDS = new Set([
@@ -117,13 +120,15 @@ const SCHEMA = {
   required: ["interpretation", "skus"],
 } as const;
 
-const SYSTEM = `You are the search engine for PartsPort, an industrial parts marketplace.
-A buyer describes what they need — by part name, specification, manufacturer, or the
-problem/application they are solving. Return the catalog SKUs that genuinely fit the
-need, best match first. Understand intent, synonyms, applications, and specs (e.g.
-"motor for a conveyor" should surface motors, drives, and related power-transmission
-parts). Only include SKUs that are reasonable matches; omit irrelevant ones. If nothing
-in the catalog fits, return an empty list. Keep "interpretation" to one plain sentence.`;
+const SYSTEM = `You are the search engine for PartsPort, an energy & utilities equipment
+marketplace (transformers, switchgear, relays, conductors, metering, generators, solar,
+storage, grounding, SCADA). A buyer describes what they need — by part name,
+specification, manufacturer, or the problem/application they are solving. Return the
+catalog SKUs that genuinely fit the need, best match first. Understand intent, synonyms,
+applications, and specs (e.g. "equipment for a new substation feeder" should surface
+transformers, breakers, relays, and related gear). Only include SKUs that are reasonable
+matches; omit irrelevant ones. If nothing in the catalog fits, return an empty list.
+Keep "interpretation" to one plain sentence.`;
 
 async function aiRank(
   query: string,
