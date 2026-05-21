@@ -52,8 +52,8 @@ export default function DemoGuide() {
           </button>
         </div>
         <p className="dg-intro">
-          A live demo of an energy &amp; utilities equipment marketplace. There
-          are three sides to try:
+          A live demo of the industrial parts marketplace. There are three
+          sides to try:
         </p>
         <ol className="dg-steps">
           <li>

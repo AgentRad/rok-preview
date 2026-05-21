@@ -1,7 +1,7 @@
 {
   "name": "PartsPort",
   "short_name": "PartsPort",
-  "description": "The energy & utilities equipment marketplace. Search, compare vetted-supplier options, and get delivery handled end to end.",
+  "description": "The industrial parts marketplace. Search, compare vetted-supplier options, and get delivery handled end to end.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

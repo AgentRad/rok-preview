@@ -53,7 +53,7 @@ export default function HeaderNav({ user }: { user: NavUser }) {
           <input
             type="text"
             name="q"
-            placeholder="Search transformers, breakers, relays, conductors…"
+            placeholder="Search for any part, equipment, or part number…"
             aria-label="Search parts"
           />
           <button type="submit" aria-label="Search">

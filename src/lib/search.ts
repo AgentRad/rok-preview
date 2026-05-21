@@ -120,13 +120,11 @@ const SCHEMA = {
   required: ["interpretation", "skus"],
 } as const;
 
-const SYSTEM = `You are the search engine for PartsPort, an energy & utilities equipment
-marketplace (transformers, switchgear, relays, conductors, metering, generators, solar,
-storage, grounding, SCADA). A buyer describes what they need — by part name,
-specification, manufacturer, or the problem/application they are solving. Return the
-catalog SKUs that genuinely fit the need, best match first. Understand intent, synonyms,
-applications, and specs (e.g. "equipment for a new substation feeder" should surface
-transformers, breakers, relays, and related gear). Only include SKUs that are reasonable
+const SYSTEM = `You are the search engine for PartsPort, an industrial parts and equipment
+marketplace. A buyer describes what they need — by part name, specification,
+manufacturer, or the problem/application they are solving. Using only the catalog
+provided, return the SKUs that genuinely fit the need, best match first. Understand
+intent, synonyms, applications, and specs. Only include SKUs that are reasonable
 matches; omit irrelevant ones. If nothing in the catalog fits, return an empty list.
 Keep "interpretation" to one plain sentence.`;
 
@@ -181,6 +179,18 @@ async function aiRank(
   } catch {
     return null;
   }
+}
+
+/* ---------- fast instant search (for the live hero) ---------- */
+// Keyword-only, no AI call, no logging — safe to hit on every keystroke.
+export async function quickSearch(query: string): Promise<SearchProduct[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const products = await prisma.product.findMany({
+    where: { active: true },
+    include: { supplier: true },
+  });
+  return heuristicRank(q, products);
 }
 
 /* ---------- entry point ---------- */

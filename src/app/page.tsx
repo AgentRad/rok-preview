@@ -4,6 +4,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PartIcon from "@/components/PartIcon";
 import ProductCard from "@/components/ProductCard";
+import HeroSearch from "@/components/HeroSearch";
 
 export const dynamic = "force-dynamic";
 
@@ -40,37 +41,21 @@ export default async function HomePage() {
       <main id="main">
         <section className="hero">
           <div className="wrap">
-            <span className="hero-eyebrow">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z" />
-              </svg>
-              AI-powered parts sourcing
-            </span>
+            <span className="hero-eyebrow">The industrial parts marketplace</span>
             <h1>
-              Source utility equipment as easily as{" "}
-              <span className="hl">online shopping.</span>
+              Every part you need —{" "}
+              <span className="hl">in one search.</span>
             </h1>
             <p className="lede">
-              Describe what you need in plain English. Our AI searches every
-              vetted supplier and lays out the options — photo, manufacturer,
-              price, and a real delivery ETA. We handle payment and delivery.
+              Type it or describe it. Compare vetted suppliers, prices, and
+              real delivery ETAs — then order. We handle the rest.
             </p>
-            <form className="hero-search" action="/catalog" method="get" role="search">
-              <input type="text" name="q" placeholder="Describe the part you need — e.g. “transformer for a substation”" aria-label="Search for a part" />
-              <button type="submit">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="m21 21-4.3-4.3" />
-                </svg>
-                Search
-              </button>
-            </form>
+            <HeroSearch />
             <div className="hero-chips">
-              <span>Popular:</span>
-              <Link href="/catalog?q=pad-mount+transformer">pad-mount transformer</Link>
-              <Link href="/catalog?cat=Protective+Relays">protection relay</Link>
-              <Link href="/catalog?q=ACSR+conductor">ACSR conductor</Link>
-              <Link href="/catalog?cat=Solar+%26+Inverters">solar inverter</Link>
+              <span>Try:</span>
+              <Link href="/catalog?q=transformer">transformer</Link>
+              <Link href="/catalog?q=circuit+breaker">circuit breaker</Link>
+              <Link href="/catalog?q=protective+relay">protective relay</Link>
               <Link href="/catalog?q=standby+generator">standby generator</Link>
             </div>
             <div className="hero-stats">
@@ -84,14 +69,14 @@ export default async function HomePage() {
 
         <div className="industries">
           <div className="wrap">
-            <span className="ind-label">Sourcing for</span>
+            <span className="ind-label">Built for every industrial sector</span>
             <div className="ind-list">
-              <span>Electric Utilities</span>
-              <span>Transmission &amp; Distribution</span>
-              <span>Power Generation</span>
-              <span>Renewables &amp; Storage</span>
-              <span>Substation EPCs</span>
-              <span>Co-ops &amp; Municipals</span>
+              <span>Energy &amp; Utilities</span>
+              <span>Manufacturing</span>
+              <span>Construction</span>
+              <span>Oil &amp; Gas</span>
+              <span>Aerospace</span>
+              <span>Heavy Equipment</span>
             </div>
           </div>
         </div>
@@ -101,7 +86,7 @@ export default async function HomePage() {
             <div className="section-head center">
               <span className="eyebrow">Browse the catalog</span>
               <h2>Shop by category</h2>
-              <p>Substation, transmission, distribution, generation, and renewables — sourced from vetted suppliers.</p>
+              <p>Every category in the catalog — sourced from vetted suppliers, delivery handled.</p>
             </div>
             <div className="cat-grid">
               {CATEGORIES.map((c) => (

@@ -16,8 +16,8 @@ export default function SiteFooter() {
               </span>
             </Link>
             <p>
-              The energy &amp; utilities equipment marketplace. Search, compare,
-              and order from vetted suppliers — with delivery handled end to end.
+              The industrial parts marketplace. Search, compare, and order from
+              vetted suppliers — with delivery handled end to end.
             </p>
           </div>
           <div>
