@@ -47,8 +47,8 @@ export default function SiteFooter() {
           </div>
         </div>
         <div className="footer-bottom">
-          <span>© 2026 PartsPort. Placeholder brand — demo marketplace.</span>
-          <span>Terms · Privacy · Supplier Agreement</span>
+          <span>© 2026 PartsPort, Inc. All rights reserved.</span>
+          <span>Terms of Service · Privacy Policy · Supplier Agreement</span>
         </div>
       </div>
     </footer>

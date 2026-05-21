@@ -82,6 +82,20 @@ export default async function HomePage() {
           </div>
         </section>
 
+        <div className="industries">
+          <div className="wrap">
+            <span className="ind-label">Sourcing for teams in</span>
+            <div className="ind-list">
+              <span>Manufacturing</span>
+              <span>Energy &amp; Utilities</span>
+              <span>Aerospace &amp; Defense</span>
+              <span>Automotive</span>
+              <span>Heavy Equipment</span>
+              <span>Food &amp; Beverage</span>
+            </div>
+          </div>
+        </div>
+
         <section className="section">
           <div className="wrap">
             <div className="section-head center">

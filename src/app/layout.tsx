@@ -2,11 +2,22 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PartsPort | The Industrial Parts Marketplace",
+  metadataBase: new URL("https://rok-preview.vercel.app"),
+  title: {
+    default: "PartsPort | The Industrial Parts Marketplace",
+    template: "%s | PartsPort",
+  },
   description:
     "PartsPort is the simplest way to source industrial parts. Search what you need, compare vetted-supplier options, and we handle payment and delivery.",
   icons: { icon: "/favicon.svg" },
   manifest: "/manifest.json",
+  openGraph: {
+    title: "PartsPort | The Industrial Parts Marketplace",
+    description:
+      "Source industrial parts as easily as online shopping. Vetted suppliers, transparent pricing, delivery handled end to end.",
+    type: "website",
+    siteName: "PartsPort",
+  },
 };
 
 export default function RootLayout({

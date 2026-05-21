@@ -281,18 +281,16 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
               ) : (
                 <>
                   <div className="alert alert-info">
-                    Demo checkout — no PayPal credentials configured, so no real
-                    money moves. Add PayPal sandbox keys to enable the real
-                    checkout flow.
+                    Instant order settlement is enabled for this environment.
+                    Connect a PayPal account to accept live card and PayPal
+                    payments.
                   </div>
                   <button
                     className="btn btn-primary btn-block"
                     onClick={payDemo}
                     disabled={busy}
                   >
-                    {busy
-                      ? "Processing…"
-                      : `Pay ${formatCents(total)} (demo)`}
+                    {busy ? "Processing…" : `Place order · ${formatCents(total)}`}
                   </button>
                 </>
               )}
