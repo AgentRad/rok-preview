@@ -112,6 +112,9 @@ model Order {
   feeRateBps    Int         @default(400)
   paymentMethod String      @default("paypal")
   paypalOrderId String?
+  shipmentStage String      @default("")
+  carrier       String?
+  trackingCode  String?
   items         OrderItem[]
   createdAt     DateTime    @default(now())
   paidAt        DateTime?

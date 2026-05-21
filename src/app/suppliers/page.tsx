@@ -5,6 +5,33 @@ import SupplierApplicationForm from "@/components/SupplierApplicationForm";
 
 export const dynamic = "force-dynamic";
 
+const SELL = [
+  {
+    title: "Qualified demand finds you",
+    body: "Buyers searching for a part land on your listing the moment they need it. No lead-chasing, no marketing spend.",
+  },
+  {
+    title: "Everything in one dashboard",
+    body: "Instant orders and structured RFQs arrive in one place, not scattered across email, phone, and fax.",
+  },
+  {
+    title: "Guaranteed payment",
+    body: "PartsPort collects from the buyer and pays you on dispatch. No credit risk, no chasing receivables.",
+  },
+  {
+    title: "You keep the full price",
+    body: "You set the part price and receive it in full. Our small percentage is added on top of what the buyer pays.",
+  },
+  {
+    title: "Delivery and support handled",
+    body: "We coordinate logistics and buyer support, so you can focus on supplying great parts.",
+  },
+  {
+    title: "Steady, predictable demand",
+    body: "Feast-or-famine lead flow is replaced by qualified buyers who are ready to order now.",
+  },
+];
+
 const CRITERIA = [
   {
     title: "Verified business",
@@ -55,6 +82,29 @@ export default function SuppliersPage() {
               >
                 See criteria
               </a>
+            </div>
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="wrap">
+            <div className="section-head center">
+              <span className="eyebrow">Why sell with us</span>
+              <h2>Built so you can focus on supply</h2>
+              <p>What a PartsPort storefront does for your business.</p>
+            </div>
+            <div className="qual-grid">
+              {SELL.map((v, i) => (
+                <div className="qual-card" key={v.title}>
+                  <div className="q-ico">
+                    <strong style={{ fontSize: 16 }}>{i + 1}</strong>
+                  </div>
+                  <div>
+                    <h3>{v.title}</h3>
+                    <p>{v.body}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>
