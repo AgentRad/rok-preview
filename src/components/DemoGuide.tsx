@@ -37,65 +37,73 @@ export default function DemoGuide() {
   }
 
   return (
-    <div className="demo-guide" role="dialog" aria-label="Demo guide">
-      <div className="dg-head">
-        <strong>Exploring the PartsPort prototype</strong>
-        <button className="dg-close" onClick={close} aria-label="Close">
-          ×
-        </button>
-      </div>
-      <p className="dg-intro">
-        A live demo of an energy &amp; utilities equipment marketplace. There
-        are three sides to try:
-      </p>
-      <ol className="dg-steps">
-        <li>
-          <span className="dg-num">1</span>
-          <div>
-            <strong>Shop as a buyer</strong>
-            <span>
-              Search for a part (try &ldquo;protective relay&rdquo; or
-              &ldquo;backup generator&rdquo;), open it, and check out — or
-              request a quote on big-ticket gear. No login needed.
-            </span>
-          </div>
-        </li>
-        <li>
-          <span className="dg-num">2</span>
-          <div>
-            <strong>Run a supplier</strong>
-            <span>
-              Sign in to manage listings, price incoming quote requests, and
-              fulfill orders.
-            </span>
-          </div>
-        </li>
-        <li>
-          <span className="dg-num">3</span>
-          <div>
-            <strong>See the admin console</strong>
-            <span>
-              Sign in for marketplace metrics, supplier approvals, orders, and
-              quotes.
-            </span>
-          </div>
-        </li>
-      </ol>
-      <div className="dg-creds">
-        <div className="dg-creds-h">
-          Demo sign-ins · password <code>demo1234</code>
+    <div className="dg-overlay" onClick={close}>
+      <div
+        className="demo-guide"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Demo guide"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="dg-head">
+          <strong>Exploring the PartsPort prototype</strong>
+          <button className="dg-close" onClick={close} aria-label="Close">
+            ×
+          </button>
         </div>
-        <div>Buyer — <code>buyer@partsport.example</code></div>
-        <div>Supplier — <code>supplier@partsport.example</code></div>
-        <div>Admin — <code>admin@partsport.example</code></div>
-      </div>
-      <div className="dg-actions">
-        <Link href="/catalog" className="btn btn-primary btn-sm" onClick={close}>
-          Start with the catalog
-        </Link>
-        <button className="btn btn-ghost btn-sm" onClick={close}>
-          Got it
-        </button>
+        <p className="dg-intro">
+          A live demo of an energy &amp; utilities equipment marketplace. There
+          are three sides to try:
+        </p>
+        <ol className="dg-steps">
+          <li>
+            <span className="dg-num">1</span>
+            <div>
+              <strong>Shop as a buyer</strong>
+              <span>
+                Search for a part (try &ldquo;protective relay&rdquo; or
+                &ldquo;backup generator&rdquo;), open it, and check out — or
+                request a quote on big-ticket gear. No login needed.
+              </span>
+            </div>
+          </li>
+          <li>
+            <span className="dg-num">2</span>
+            <div>
+              <strong>Run a supplier</strong>
+              <span>
+                Sign in to manage listings, price incoming quote requests, and
+                fulfill orders.
+              </span>
+            </div>
+          </li>
+          <li>
+            <span className="dg-num">3</span>
+            <div>
+              <strong>See the admin console</strong>
+              <span>
+                Sign in for marketplace metrics, supplier approvals, orders,
+                and quotes.
+              </span>
+            </div>
+          </li>
+        </ol>
+        <div className="dg-creds">
+          <div className="dg-creds-h">
+            Demo sign-ins · password <code>demo1234</code>
+          </div>
+          <div>Buyer — <code>buyer@partsport.example</code></div>
+          <div>Supplier — <code>supplier@partsport.example</code></div>
+          <div>Admin — <code>admin@partsport.example</code></div>
+        </div>
+        <div className="dg-actions">
+          <Link href="/catalog" className="btn btn-primary btn-sm" onClick={close}>
+            Start with the catalog
+          </Link>
+          <button className="btn btn-ghost btn-sm" onClick={close}>
+            Got it
+          </button>
+        </div>
       </div>
     </div>
   );

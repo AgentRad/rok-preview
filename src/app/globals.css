@@ -764,12 +764,16 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   cursor: pointer; box-shadow: 0 8px 28px rgba(26, 25, 22, .22);
 }
 .demo-launch:hover { background: #000; }
+.dg-overlay {
+  position: fixed; inset: 0; z-index: 260;
+  background: rgba(22, 21, 15, .45);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
 .demo-guide {
-  position: fixed; right: 20px; bottom: 20px; z-index: 251;
-  width: 360px; max-width: calc(100vw - 40px);
+  width: 380px; max-width: 100%; max-height: 90vh; overflow-y: auto;
   background: var(--surface); border: 1px solid var(--line-strong);
-  border-radius: var(--radius); box-shadow: 0 20px 50px rgba(26, 25, 22, .24);
-  padding: 22px;
+  border-radius: var(--radius); box-shadow: 0 24px 60px rgba(26, 25, 22, .3);
+  padding: 24px;
 }
 .dg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .dg-head strong { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
