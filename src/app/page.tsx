@@ -41,22 +41,22 @@ export default async function HomePage() {
         <section className="hero">
           <div className="wrap">
             <span className="hero-eyebrow">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-                <path d="M20 6 9 17l-5-5" />
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z" />
               </svg>
-              Sourcing, simplified
+              AI-powered parts sourcing
             </span>
             <h1>
               Source industrial parts as easily as{" "}
               <span className="hl">online shopping.</span>
             </h1>
             <p className="lede">
-              Type what you need. PartsPort shows every option from vetted
-              suppliers — with photos, manufacturer, price and a real delivery
-              ETA. We handle payment and delivery.
+              Describe what you need in plain English. Our AI searches every
+              vetted supplier and lays out the options — photo, manufacturer,
+              price, and a real delivery ETA. We handle payment and delivery.
             </p>
             <form className="hero-search" action="/catalog" method="get" role="search">
-              <input type="text" name="q" placeholder="What part are you looking for?" aria-label="Search for a part" />
+              <input type="text" name="q" placeholder="Describe the part you need — e.g. “motor for a conveyor”" aria-label="Search for a part" />
               <button type="submit">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
                   <circle cx="11" cy="11" r="7" />

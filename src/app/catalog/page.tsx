@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { runSearch, type SearchProduct } from "@/lib/search";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductCard from "@/components/ProductCard";
@@ -18,6 +19,18 @@ const ORDER: Record<string, Prisma.ProductOrderByWithRelationInput> = {
   featured: { createdAt: "asc" },
 };
 
+function sortInMemory(list: SearchProduct[], sort: string): SearchProduct[] {
+  const l = [...list];
+  switch (sort) {
+    case "price-asc": l.sort((a, b) => a.priceCents - b.priceCents); break;
+    case "price-desc": l.sort((a, b) => b.priceCents - a.priceCents); break;
+    case "eta": l.sort((a, b) => a.etaDays - b.etaDays); break;
+    case "rating": l.sort((a, b) => b.supplier.rating - a.supplier.rating); break;
+    default: break; // 'featured' keeps relevance order
+  }
+  return l;
+}
+
 export default async function CatalogPage({
   searchParams,
 }: {
@@ -29,32 +42,37 @@ export default async function CatalogPage({
   const sort = sp.sort || "featured";
   const inStock = sp.instock === "1";
 
-  const where: Prisma.ProductWhereInput = { active: true };
-  if (cat) where.category = cat;
-  if (inStock) where.stock = { gt: 0 };
-  if (q) {
-    where.OR = [
-      { name: { contains: q, mode: "insensitive" } },
-      { manufacturer: { contains: q, mode: "insensitive" } },
-      { sku: { contains: q, mode: "insensitive" } },
-      { category: { contains: q, mode: "insensitive" } },
-      { description: { contains: q, mode: "insensitive" } },
-    ];
-  }
+  const grouped = await prisma.product.groupBy({
+    by: ["category"],
+    where: { active: true },
+    _count: true,
+    orderBy: { category: "asc" },
+  });
 
-  const [products, grouped] = await Promise.all([
-    prisma.product.findMany({
+  let products: SearchProduct[];
+  let interpretation = "";
+  let aiSearch = false;
+
+  if (q) {
+    const result = await runSearch(q);
+    interpretation = result.interpretation;
+    aiSearch = result.ai;
+    products = result.products.filter((p) => {
+      if (cat && p.category !== cat) return false;
+      if (inStock && p.stock <= 0) return false;
+      return true;
+    });
+    products = sortInMemory(products, sort);
+  } else {
+    const where: Prisma.ProductWhereInput = { active: true };
+    if (cat) where.category = cat;
+    if (inStock) where.stock = { gt: 0 };
+    products = await prisma.product.findMany({
       where,
       include: { supplier: true },
       orderBy: ORDER[sort] || ORDER.featured,
-    }),
-    prisma.product.groupBy({
-      by: ["category"],
-      where: { active: true },
-      _count: true,
-      orderBy: { category: "asc" },
-    }),
-  ]);
+    });
+  }
 
   function hrefWith(patch: Partial<SearchParams>) {
     const next = new URLSearchParams();
@@ -107,7 +125,7 @@ export default async function CatalogPage({
                   style={{
                     fontWeight: cat === g.category ? 700 : 400,
                     textDecoration: "none",
-                    color: cat === g.category ? "var(--amber-dark)" : "inherit",
+                    color: cat === g.category ? "var(--amber-deep)" : "inherit",
                   }}
                 >
                   {g.category}
@@ -134,11 +152,30 @@ export default async function CatalogPage({
           </aside>
 
           <div>
+            {q && (
+              <div className="ai-banner">
+                <span className="ai-spark" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z" />
+                  </svg>
+                </span>
+                <div>
+                  <div className="ai-banner-label">
+                    {aiSearch ? "AI search" : "Search"} ·{" "}
+                    <span className="ai-query">&ldquo;{q}&rdquo;</span>
+                  </div>
+                  <div className="ai-banner-text">
+                    {interpretation}
+                    {aiSearch ? "" : ""}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="results-bar">
               <span className="results-count">
                 <strong>{products.length}</strong> part
                 {products.length === 1 ? "" : "s"}
-                {q ? ` for “${q}”` : ""}
               </span>
               <CatalogSort value={sort} />
             </div>
@@ -147,8 +184,8 @@ export default async function CatalogPage({
               <div className="empty-block">
                 <h3>No parts match your search</h3>
                 <p>
-                  Try a different term or clear filters. Need something not
-                  listed? <Link href="/suppliers">We source it.</Link>
+                  Try describing the part differently, or{" "}
+                  <Link href="/suppliers">request a part we don&rsquo;t list</Link>.
                 </p>
               </div>
             ) : (
