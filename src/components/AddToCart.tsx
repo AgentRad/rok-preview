@@ -44,7 +44,7 @@ export default function AddToCart({
         Add to cart
       </button>
       <button
-        className="btn btn-dark btn-block"
+        className="btn btn-ghost btn-block"
         style={{ marginTop: 9 }}
         onClick={buyNow}
       >

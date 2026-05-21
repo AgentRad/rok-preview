@@ -131,17 +131,17 @@ export default async function HomePage() {
             </div>
             <div className="steps">
               <div className="step">
-                <div className="step-num">1</div>
+                <div className="step-num">01</div>
                 <h3>Search what you need</h3>
                 <p>Enter a part name, specification, or manufacturer number. PartsPort returns matching parts across every qualified supplier.</p>
               </div>
               <div className="step">
-                <div className="step-num">2</div>
+                <div className="step-num">02</div>
                 <h3>Compare real options</h3>
                 <p>See each option side by side — photo, manufacturer, price, supplier rating, and an honest delivery ETA.</p>
               </div>
               <div className="step">
-                <div className="step-num">3</div>
+                <div className="step-num">03</div>
                 <h3>We deliver it</h3>
                 <p>Pay once, through PartsPort. We coordinate the supplier, quality-check, and deliver to your dock.</p>
               </div>
