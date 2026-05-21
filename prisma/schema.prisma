@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  BUYER
+  SUPPLIER
+  ADMIN
+}
+
+enum SupplierStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(BUYER)
+  supplier     Supplier?
+  orders       Order[]
+  createdAt    DateTime @default(now())
+}
+
+model Supplier {
+  id             String         @id @default(cuid())
+  name           String
+  contactEmail   String
+  status         SupplierStatus @default(APPROVED)
+  rating         Float          @default(4.7)
+  reviews        Int            @default(0)
+  onTimeRate     Float          @default(97.5)
+  certifications String         @default("")
+  user           User?          @relation(fields: [userId], references: [id])
+  userId         String?        @unique
+  products       Product[]
+  createdAt      DateTime       @default(now())
+}
+
+model Product {
+  id           String      @id @default(cuid())
+  sku          String      @unique
+  name         String
+  category     String
+  manufacturer String
+  icon         String
+  priceCents   Int
+  unit         String      @default("each")
+  etaDays      Int
+  stock        Int         @default(0)
+  description  String
+  specs        Json
+  supplier     Supplier    @relation(fields: [supplierId], references: [id])
+  supplierId   String
+  active       Boolean     @default(true)
+  orderItems   OrderItem[]
+  createdAt    DateTime    @default(now())
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  reference     String      @unique
+  status        OrderStatus @default(PENDING)
+  buyer         User?       @relation(fields: [buyerId], references: [id])
+  buyerId       String?
+  buyerEmail    String
+  buyerName     String
+  shipTo        String
+  subtotalCents Int
+  feeCents      Int
+  totalCents    Int
+  feeRateBps    Int         @default(400)
+  paymentMethod String      @default("paypal")
+  paypalOrderId String?
+  items         OrderItem[]
+  createdAt     DateTime    @default(now())
+  paidAt        DateTime?
+}
+
+model OrderItem {
+  id           String  @id @default(cuid())
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId      String
+  product      Product @relation(fields: [productId], references: [id])
+  productId    String
+  nameSnapshot String
+  skuSnapshot  String
+  supplierName String
+  unitPriceCents Int
+  qty          Int
+}
+
+model SupplierApplication {
+  id           String            @id @default(cuid())
+  companyName  String
+  contactName  String
+  email        String
+  website      String            @default("")
+  category     String
+  yearsTrading String
+  certs        String            @default("")
+  message      String            @default("")
+  status       ApplicationStatus @default(PENDING)
+  createdAt    DateTime          @default(now())
+}

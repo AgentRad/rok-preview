@@ -1,0 +1,41 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { dollarsToCents } from "@/lib/money";
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getCurrentUser();
+  if (!user || (user.role !== "SUPPLIER" && user.role !== "ADMIN")) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+  }
+  const { id } = await params;
+  const product = await prisma.product.findUnique({ where: { id } });
+  if (!product) {
+    return NextResponse.json({ error: "Product not found." }, { status: 404 });
+  }
+  if (user.role === "SUPPLIER") {
+    const supplier = await prisma.supplier.findUnique({
+      where: { userId: user.id },
+    });
+    if (!supplier || supplier.id !== product.supplierId) {
+      return NextResponse.json({ error: "Not your product." }, { status: 403 });
+    }
+  }
+
+  const b = await req.json().catch(() => ({}));
+  const data: { priceCents?: number; stock?: number; active?: boolean } = {};
+  if (b.price !== undefined && Number(b.price) > 0) {
+    data.priceCents = dollarsToCents(Number(b.price));
+  }
+  if (b.stock !== undefined) {
+    data.stock = Math.max(0, Math.floor(Number(b.stock) || 0));
+  }
+  if (b.active !== undefined) {
+    data.active = Boolean(b.active);
+  }
+  await prisma.product.update({ where: { id }, data });
+  return NextResponse.json({ ok: true });
+}

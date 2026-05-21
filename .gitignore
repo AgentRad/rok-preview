@@ -3,5 +3,9 @@ Thumbs.db
 node_modules/
 .env
 .env.local
+.env*.local
 .vercel
 .claude/
+.next/
+next-env.d.ts
+*.tsbuildinfo
