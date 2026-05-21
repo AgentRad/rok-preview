@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
+import PayOrder from "@/components/PayOrder";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -42,10 +43,8 @@ export default async function OrderPage({
           )}
           {!paid && order.status === "PENDING" && (
             <div className="alert alert-info">
-              This order is awaiting payment.{" "}
-              <Link href="/checkout" style={{ color: "inherit", fontWeight: 700 }}>
-                Complete checkout →
-              </Link>
+              Order {order.reference} is awaiting payment — review the details
+              below and pay to confirm.
             </div>
           )}
 
@@ -163,6 +162,14 @@ export default async function OrderPage({
               service fee.
             </p>
           </div>
+
+          {order.status === "PENDING" && (
+            <PayOrder
+              orderId={order.id}
+              totalCents={order.totalCents}
+              paypalClientId={process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || ""}
+            />
+          )}
 
           <div style={{ marginTop: 24 }} className="row-gap">
             <Link className="btn btn-dark" href="/catalog">

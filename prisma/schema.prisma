@@ -32,6 +32,13 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum QuoteStatus {
+  OPEN
+  QUOTED
+  ACCEPTED
+  DECLINED
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -59,23 +66,26 @@ model Supplier {
 }
 
 model Product {
-  id           String      @id @default(cuid())
-  sku          String      @unique
-  name         String
-  category     String
-  manufacturer String
-  icon         String
-  priceCents   Int
-  unit         String      @default("each")
-  etaDays      Int
-  stock        Int         @default(0)
-  description  String
-  specs        Json
-  supplier     Supplier    @relation(fields: [supplierId], references: [id])
-  supplierId   String
-  active       Boolean     @default(true)
-  orderItems   OrderItem[]
-  createdAt    DateTime    @default(now())
+  id            String         @id @default(cuid())
+  sku           String         @unique
+  name          String
+  category      String
+  manufacturer  String
+  icon          String
+  imageUrl      String?
+  priceCents    Int
+  unit          String         @default("each")
+  etaDays       Int
+  stock         Int            @default(0)
+  quoteOnly     Boolean        @default(false)
+  description   String
+  specs         Json
+  supplier      Supplier       @relation(fields: [supplierId], references: [id])
+  supplierId    String
+  active        Boolean        @default(true)
+  orderItems    OrderItem[]
+  quoteRequests QuoteRequest[]
+  createdAt     DateTime       @default(now())
 }
 
 model Order {
@@ -109,6 +119,25 @@ model OrderItem {
   supplierName String
   unitPriceCents Int
   qty          Int
+}
+
+model QuoteRequest {
+  id              String      @id @default(cuid())
+  reference       String      @unique
+  product         Product     @relation(fields: [productId], references: [id])
+  productId       String
+  qty             Int         @default(1)
+  buyerId         String?
+  buyerName       String
+  buyerEmail      String
+  company         String      @default("")
+  message         String      @default("")
+  status          QuoteStatus @default(OPEN)
+  quotedUnitCents Int?
+  quoteNote       String      @default("")
+  orderId         String?
+  createdAt       DateTime    @default(now())
+  quotedAt        DateTime?
 }
 
 model SupplierApplication {

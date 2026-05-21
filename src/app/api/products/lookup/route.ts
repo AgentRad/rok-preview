@@ -15,6 +15,7 @@ export async function POST(req: Request) {
       sku: p.sku,
       name: p.name,
       icon: p.icon,
+      imageUrl: p.imageUrl,
       manufacturer: p.manufacturer,
       category: p.category,
       unit: p.unit,

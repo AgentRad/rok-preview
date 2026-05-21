@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import PartIcon from "./PartIcon";
+import ProductImage from "./ProductImage";
 import { getCart, setQty, onCartChange, type CartLine } from "@/lib/cart";
 import { formatCents, feeFor } from "@/lib/money";
 
@@ -10,6 +10,7 @@ type LookupProduct = {
   sku: string;
   name: string;
   icon: string;
+  imageUrl?: string | null;
   manufacturer: string;
   unit: string;
   priceCents: number;
@@ -81,7 +82,7 @@ export default function CartClient() {
           return (
             <div className="cart-line" key={l.sku}>
               <div className="cl-thumb">
-                <PartIcon icon={p.icon} />
+                <ProductImage imageUrl={p.imageUrl} icon={p.icon} name={p.name} />
               </div>
               <div className="cl-main">
                 <div className="cl-mfr">{p.manufacturer}</div>

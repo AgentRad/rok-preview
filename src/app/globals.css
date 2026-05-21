@@ -708,3 +708,48 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 }
 
 .filter-toggle { display: none; }
+
+/* ---------- Product photos ---------- */
+.pi-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ---------- Quote / RFQ ---------- */
+.quote-tag { color: var(--amber-deep); font-weight: 600; }
+.quote-product { display: flex; gap: 16px; align-items: center; }
+.quote-thumb {
+  width: 72px; height: 72px; border-radius: var(--radius-sm); background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;
+}
+.quote-thumb svg { width: 58%; height: 58%; color: var(--ink-soft); }
+
+/* ---------- How it works ---------- */
+.flow {
+  display: flex; align-items: stretch; flex-wrap: wrap;
+  border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+}
+.flow-node {
+  flex: 1; min-width: 200px; background: var(--surface); padding: 28px 26px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.flow-arrow + .flow-node { border-left: 1px solid var(--line); }
+.flow-k { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; color: var(--steel-light); }
+.flow-node strong { font-size: 18px; font-weight: 500; letter-spacing: -.02em; margin-top: 4px; }
+.flow-node span:last-child { font-size: 13.5px; color: var(--steel); }
+.flow-arrow { display: flex; align-items: center; padding: 0 6px; color: var(--steel-light); background: var(--surface); font-size: 17px; }
+.flow-caption { margin-top: 20px; color: var(--steel); font-size: 14.5px; max-width: 62ch; }
+
+.answer-card { border-color: var(--ink); }
+.hiw-h { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .12em; font-weight: 500; margin-bottom: 16px; }
+.hiw-h-problem { color: var(--steel); }
+.hiw-h-answer { color: var(--amber-deep); }
+.hiw-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.hiw-list li { font-size: 14.5px; color: var(--steel); padding-left: 22px; position: relative; line-height: 1.5; }
+.hiw-list li::before { content: "—"; position: absolute; left: 0; color: var(--steel-light); }
+.hiw-list-answer li { color: var(--ink); }
+.hiw-list-answer li::before { content: "\2192"; color: var(--amber-deep); }
+
+@media (max-width: 760px) {
+  .flow-arrow { display: none; }
+  .flow-node { border-top: 1px solid var(--line); }
+  .flow-node:first-child { border-top: 0; }
+  .flow-arrow + .flow-node { border-left: 0; }
+}

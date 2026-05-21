@@ -61,6 +61,7 @@ async function main() {
         unit: p.unit,
         etaDays: p.etaDays,
         stock: p.stock,
+        quoteOnly: p.price >= 3000,
         description: p.description,
         specs: p.specs,
         supplierId: supplierIds[p.supplier],
@@ -82,8 +83,8 @@ async function main() {
     });
   }
 
-  // Supplier demo account linked to Gridline Power Supply
-  const gridlineId = supplierIds["Gridline Power Supply"];
+  // Supplier demo account linked to Summit Power Systems (has a quote-only listing)
+  const demoSupplierId = supplierIds["Summit Power Systems"];
   const supplierUser = await prisma.user.upsert({
     where: { email: "supplier@partsport.example" },
     update: {},
@@ -94,10 +95,12 @@ async function main() {
       passwordHash: pw,
     },
   });
-  const gridline = await prisma.supplier.findUnique({ where: { id: gridlineId } });
-  if (gridline && !gridline.userId) {
+  const demoSupplier = await prisma.supplier.findUnique({
+    where: { id: demoSupplierId },
+  });
+  if (demoSupplier && !demoSupplier.userId) {
     await prisma.supplier.update({
-      where: { id: gridlineId },
+      where: { id: demoSupplierId },
       data: { userId: supplierUser.id },
     });
   }

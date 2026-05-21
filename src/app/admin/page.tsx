@@ -13,12 +13,16 @@ const STATUS_CLASS: Record<string, string> = {
   PAID: "badge-paid",
   FULFILLED: "badge-fulfilled",
   CANCELLED: "badge-cancelled",
+  OPEN: "badge-pending",
+  QUOTED: "badge-paid",
+  ACCEPTED: "badge-fulfilled",
+  DECLINED: "badge-cancelled",
 };
 
 export default async function AdminConsole() {
   await requireRole("ADMIN");
 
-  const [orders, paidAgg, applications, suppliers, productCount] =
+  const [orders, paidAgg, applications, suppliers, productCount, quotes] =
     await Promise.all([
       prisma.order.findMany({
         include: { items: true },
@@ -39,6 +43,11 @@ export default async function AdminConsole() {
         orderBy: { createdAt: "asc" },
       }),
       prisma.product.count(),
+      prisma.quoteRequest.findMany({
+        include: { product: true },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
     ]);
 
   const gmv = paidAgg._sum.totalCents || 0;
@@ -141,6 +150,61 @@ export default async function AdminConsole() {
                         <td className="num">
                           <Link
                             href={`/orders/${o.id}`}
+                            style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                          >
+                            View
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Quote requests</h2>
+            </div>
+            {quotes.length === 0 ? (
+              <div className="empty-block">
+                <h3>No quote requests yet</h3>
+                <p>RFQs for quote-only equipment appear here.</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Product</th>
+                      <th>Buyer</th>
+                      <th>Date</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quotes.map((q) => (
+                      <tr key={q.id}>
+                        <td style={{ fontWeight: 700 }}>{q.reference}</td>
+                        <td style={{ fontSize: 13 }}>{q.product.name}</td>
+                        <td>
+                          <div style={{ fontSize: 13 }}>{q.buyerName}</div>
+                          <div className="muted-text" style={{ fontSize: 11.5 }}>
+                            {q.buyerEmail}
+                          </div>
+                        </td>
+                        <td>{q.createdAt.toLocaleDateString()}</td>
+                        <td>
+                          <span className={"badge " + (STATUS_CLASS[q.status] || "")}>
+                            {q.status}
+                          </span>
+                        </td>
+                        <td className="num">
+                          <Link
+                            href={`/quotes/${q.id}`}
                             style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
                           >
                             View

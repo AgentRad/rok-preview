@@ -65,6 +65,7 @@ export default function HeaderNav({ user }: { user: NavUser }) {
 
         <div className={"nav-links" + (mobileOpen ? " open" : "")}>
           <Link href="/catalog" onClick={() => setMobileOpen(false)}>Catalog</Link>
+          <Link href="/how-it-works" onClick={() => setMobileOpen(false)}>How it works</Link>
           <Link href="/suppliers" onClick={() => setMobileOpen(false)}>For suppliers</Link>
           {dash && (
             <Link href={dash.href} onClick={() => setMobileOpen(false)}>

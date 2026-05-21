@@ -25,15 +25,15 @@ export default function SiteFooter() {
             <ul>
               <li><Link href="/catalog">Browse catalog</Link></li>
               <li><Link href="/catalog?cat=Transformers">Transformers</Link></li>
-              <li><Link href="/catalog?cat=Switchgear+%26+Breakers">Switchgear</Link></li>
+              <li><Link href="/how-it-works">How it works</Link></li>
               <li><Link href="/cart">Your cart</Link></li>
             </ul>
           </div>
           <div>
             <h4>Sell</h4>
             <ul>
-              <li><Link href="/suppliers">Become a supplier</Link></li>
-              <li><Link href="/suppliers#criteria">Qualification criteria</Link></li>
+              <li><Link href="/suppliers">For distributors</Link></li>
+              <li><Link href="/manufacturers">For manufacturers</Link></li>
               <li><Link href="/suppliers#apply">Apply now</Link></li>
             </ul>
           </div>

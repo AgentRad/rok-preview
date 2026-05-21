@@ -51,6 +51,7 @@ export async function POST(req: Request) {
       category,
       manufacturer,
       icon,
+      imageUrl: String(b.imageUrl || "").trim() || null,
       priceCents: dollarsToCents(price),
       unit: String(b.unit || "each"),
       etaDays,

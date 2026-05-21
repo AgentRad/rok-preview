@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
-import PartIcon from "./PartIcon";
+import ProductImage from "./ProductImage";
 import { getCart, clearCart, type CartLine } from "@/lib/cart";
 import { formatCents, feeFor } from "@/lib/money";
 
@@ -12,6 +12,7 @@ type LookupProduct = {
   sku: string;
   name: string;
   icon: string;
+  imageUrl?: string | null;
   manufacturer: string;
   unit: string;
   priceCents: number;
@@ -152,7 +153,7 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
           return (
             <div className="summary-item" key={l.sku}>
               <div className="si-thumb">
-                <PartIcon icon={p.icon} />
+                <ProductImage imageUrl={p.imageUrl} icon={p.icon} name={p.name} />
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600 }}>{p.name}</div>

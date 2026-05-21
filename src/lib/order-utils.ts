@@ -1,12 +1,12 @@
 import "server-only";
 import { prisma } from "./db";
 
-export function generateReference(): string {
+export function generateReference(prefix = "PP"): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let s = "";
   for (let i = 0; i < 6; i++)
     s += chars[Math.floor(Math.random() * chars.length)];
-  return `PP-${s}`;
+  return `${prefix}-${s}`;
 }
 
 /** Marks a PENDING order as PAID and decrements product stock. Idempotent. */

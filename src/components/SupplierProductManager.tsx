@@ -16,6 +16,7 @@ export type SupplierProduct = {
   etaDays: number;
   stock: number;
   active: boolean;
+  imageUrl?: string | null;
 };
 
 const CATEGORIES = [
@@ -28,6 +29,7 @@ function Row({ p }: { p: SupplierProduct }) {
   const router = useRouter();
   const [price, setPrice] = useState((p.priceCents / 100).toFixed(2));
   const [stock, setStock] = useState(String(p.stock));
+  const [image, setImage] = useState(p.imageUrl || "");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -37,7 +39,11 @@ function Row({ p }: { p: SupplierProduct }) {
     const res = await fetch(`/api/supplier/products/${p.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ price: Number(price), stock: Number(stock) }),
+      body: JSON.stringify({
+        price: Number(price),
+        stock: Number(stock),
+        imageUrl: image,
+      }),
     });
     setBusy(false);
     if (res.ok) {
@@ -81,6 +87,15 @@ function Row({ p }: { p: SupplierProduct }) {
         />
       </td>
       <td>
+        <input
+          className="input-sm"
+          style={{ width: 160 }}
+          placeholder="https://… photo"
+          value={image}
+          onChange={(e) => setImage(e.target.value)}
+        />
+      </td>
+      <td>
         <button
           className={"badge " + (p.active ? "badge-approved" : "badge-rejected")}
           style={{ border: 0, cursor: "pointer" }}
@@ -117,12 +132,13 @@ export default function SupplierProductManager({
     name: "",
     category: CATEGORIES[0],
     manufacturer: "",
-    icon: "gear",
+    icon: "part",
     price: "",
     unit: "each",
     etaDays: "3",
     stock: "0",
     description: "",
+    imageUrl: "",
   });
 
   function set(k: string, v: string) {
@@ -151,8 +167,8 @@ export default function SupplierProductManager({
     }
     setForm({
       sku: "", name: "", category: CATEGORIES[0], manufacturer: "",
-      icon: "gear", price: "", unit: "each", etaDays: "3", stock: "0",
-      description: "",
+      icon: "part", price: "", unit: "each", etaDays: "3", stock: "0",
+      description: "", imageUrl: "",
     });
     setShowForm(false);
     router.refresh();
@@ -241,6 +257,15 @@ export default function SupplierProductManager({
               />
             </div>
             <div className="form-row">
+              <label>Product photo URL <span style={{ textTransform: "none", letterSpacing: 0, color: "var(--steel-light)" }}>(optional)</span></label>
+              <input
+                type="url"
+                value={form.imageUrl}
+                onChange={(e) => set("imageUrl", e.target.value)}
+                placeholder="https://… link to a product photo"
+              />
+            </div>
+            <div className="form-row">
               <label>Description</label>
               <textarea
                 value={form.description}
@@ -267,6 +292,7 @@ export default function SupplierProductManager({
                 <th>Part</th>
                 <th>Price (USD)</th>
                 <th>Stock</th>
+                <th>Photo URL</th>
                 <th>Status</th>
                 <th></th>
               </tr>

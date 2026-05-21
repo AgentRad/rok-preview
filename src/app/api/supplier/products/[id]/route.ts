@@ -26,7 +26,12 @@ export async function PATCH(
   }
 
   const b = await req.json().catch(() => ({}));
-  const data: { priceCents?: number; stock?: number; active?: boolean } = {};
+  const data: {
+    priceCents?: number;
+    stock?: number;
+    active?: boolean;
+    imageUrl?: string | null;
+  } = {};
   if (b.price !== undefined && Number(b.price) > 0) {
     data.priceCents = dollarsToCents(Number(b.price));
   }
@@ -35,6 +40,9 @@ export async function PATCH(
   }
   if (b.active !== undefined) {
     data.active = Boolean(b.active);
+  }
+  if (b.imageUrl !== undefined) {
+    data.imageUrl = String(b.imageUrl || "").trim() || null;
   }
   await prisma.product.update({ where: { id }, data });
   return NextResponse.json({ ok: true });

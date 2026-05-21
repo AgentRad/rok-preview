@@ -2,8 +2,10 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
+import Link from "next/link";
 import SupplierProductManager from "@/components/SupplierProductManager";
 import FulfillButton from "@/components/FulfillButton";
+import QuoteResponder from "@/components/QuoteResponder";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +13,8 @@ export const dynamic = "force-dynamic";
 const STATUS_CLASS: Record<string, string> = {
   PAID: "badge-paid",
   FULFILLED: "badge-fulfilled",
+  OPEN: "badge-pending",
+  QUOTED: "badge-paid",
 };
 
 export default async function SupplierDashboard() {
@@ -47,6 +51,15 @@ export default async function SupplierDashboard() {
     orderBy: { createdAt: "desc" },
   });
 
+  const quotes = await prisma.quoteRequest.findMany({
+    where: {
+      product: { supplierId: supplier.id },
+      status: { in: ["OPEN", "QUOTED"] },
+    },
+    include: { product: true },
+    orderBy: { createdAt: "desc" },
+  });
+
   let revenue = 0;
   for (const o of orders) {
     for (const it of o.items) {
@@ -55,6 +68,7 @@ export default async function SupplierDashboard() {
     }
   }
   const unitsInStock = supplier.products.reduce((s, p) => s + p.stock, 0);
+  const openQuotes = quotes.filter((q) => q.status === "OPEN").length;
 
   return (
     <>
@@ -104,8 +118,72 @@ export default async function SupplierDashboard() {
               etaDays: p.etaDays,
               stock: p.stock,
               active: p.active,
+              imageUrl: p.imageUrl,
             }))}
           />
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Quote requests{openQuotes > 0 ? ` · ${openQuotes} open` : ""}</h2>
+            </div>
+            {quotes.length === 0 ? (
+              <div className="empty-block">
+                <h3>No quote requests</h3>
+                <p>RFQs for your quote-only listings appear here.</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Product</th>
+                      <th>Buyer</th>
+                      <th>Qty</th>
+                      <th>Status</th>
+                      <th>Respond</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quotes.map((q) => (
+                      <tr key={q.id}>
+                        <td>
+                          <Link
+                            href={`/quotes/${q.id}`}
+                            style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                          >
+                            {q.reference}
+                          </Link>
+                        </td>
+                        <td style={{ fontSize: 13 }}>{q.product.name}</td>
+                        <td>
+                          <div style={{ fontSize: 13 }}>{q.buyerName}</div>
+                          <div className="muted-text" style={{ fontSize: 11.5 }}>
+                            {q.buyerEmail}
+                          </div>
+                        </td>
+                        <td className="num">{q.qty}</td>
+                        <td>
+                          <span className={"badge " + (STATUS_CLASS[q.status] || "")}>
+                            {q.status}
+                          </span>
+                        </td>
+                        <td className="num">
+                          {q.status === "OPEN" ? (
+                            <QuoteResponder quoteId={q.id} />
+                          ) : q.quotedUnitCents != null ? (
+                            `${formatCents(q.quotedUnitCents)} / unit`
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           <div className="card">
             <div className="card-head">

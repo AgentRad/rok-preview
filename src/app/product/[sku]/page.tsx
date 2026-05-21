@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
-import PartIcon from "@/components/PartIcon";
+import ProductImage from "@/components/ProductImage";
 import AddToCart from "@/components/AddToCart";
+import RequestQuote from "@/components/RequestQuote";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +25,7 @@ export default async function ProductPage({
 
   const specs = product.specs as Record<string, string>;
   const inStock = product.stock > 0;
+  const user = await getCurrentUser();
 
   return (
     <>
@@ -39,7 +42,11 @@ export default async function ProductPage({
           </div>
           <div className="detail-grid">
             <div className="detail-gallery">
-              <PartIcon icon={product.icon} />
+              <ProductImage
+                imageUrl={product.imageUrl}
+                icon={product.icon}
+                name={product.name}
+              />
             </div>
             <div>
               <div className="detail-mfr">{product.manufacturer}</div>
@@ -51,12 +58,22 @@ export default async function ProductPage({
                 <span>SKU {product.sku}</span>
               </div>
               <div className="detail-price">
-                {formatCents(product.priceCents)}{" "}
-                <span className="unit">/ {product.unit}</span>
+                {product.quoteOnly ? (
+                  <>
+                    {formatCents(product.priceCents)}{" "}
+                    <span className="unit">indicative / {product.unit}</span>
+                  </>
+                ) : (
+                  <>
+                    {formatCents(product.priceCents)}{" "}
+                    <span className="unit">/ {product.unit}</span>
+                  </>
+                )}
               </div>
+
               <div className="detail-buybox">
                 <div className="buybox-row">
-                  <span>Delivery ETA</span>
+                  <span>{product.quoteOnly ? "Typical lead time" : "Delivery ETA"}</span>
                   <span className="v" style={{ color: "var(--green)" }}>
                     {product.etaDays} business day{product.etaDays > 1 ? "s" : ""}
                   </span>
@@ -65,11 +82,19 @@ export default async function ProductPage({
                   <span>Availability</span>
                   <span
                     className="v"
-                    style={{ color: inStock ? "var(--green)" : "#b4431f" }}
+                    style={{
+                      color: product.quoteOnly
+                        ? "var(--ink)"
+                        : inStock
+                          ? "var(--green)"
+                          : "#b4431f",
+                    }}
                   >
-                    {inStock
-                      ? `${product.stock.toLocaleString()} in stock`
-                      : "Backorder"}
+                    {product.quoteOnly
+                      ? "Made to order"
+                      : inStock
+                        ? `${product.stock.toLocaleString()} in stock`
+                        : "Backorder"}
                   </span>
                 </div>
                 <div className="buybox-row">
@@ -78,11 +103,22 @@ export default async function ProductPage({
                     {product.supplier.name} ★ {product.supplier.rating.toFixed(1)}
                   </span>
                 </div>
-                <AddToCart sku={product.sku} inStock={inStock} />
+
+                {product.quoteOnly ? (
+                  <div style={{ marginTop: 18 }}>
+                    <RequestQuote
+                      sku={product.sku}
+                      user={user ? { name: user.name, email: user.email } : null}
+                    />
+                  </div>
+                ) : (
+                  <AddToCart sku={product.sku} inStock={inStock} />
+                )}
+
                 <div className="fee-note">
-                  PartsPort verifies the supplier, handles payment, and delivers
-                  the part. A 4% service fee is added at checkout — you are not
-                  charged until you pay.
+                  {product.quoteOnly
+                    ? "Configured equipment is priced by a vetted supplier. The order, payment, and delivery all run through PartsPort — with a 4% service fee included."
+                    : "PartsPort verifies the supplier, handles payment, and delivers the part. A 4% service fee is added at checkout — you are not charged until you pay."}
                 </div>
               </div>
             </div>
