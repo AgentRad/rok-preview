@@ -17,12 +17,14 @@ const STATUS_CLASS: Record<string, string> = {
   QUOTED: "badge-paid",
   ACCEPTED: "badge-fulfilled",
   DECLINED: "badge-cancelled",
+  ISSUED: "badge-pending",
+  VOID: "badge-cancelled",
 };
 
 export default async function AdminConsole() {
   await requireRole("ADMIN");
 
-  const [orders, paidAgg, applications, suppliers, productCount, quotes] =
+  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices] =
     await Promise.all([
       prisma.order.findMany({
         include: { items: true },
@@ -47,6 +49,11 @@ export default async function AdminConsole() {
         include: { product: true },
         orderBy: { createdAt: "desc" },
         take: 10,
+      }),
+      prisma.invoice.findMany({
+        include: { order: { select: { reference: true } } },
+        orderBy: { issuedAt: "desc" },
+        take: 12,
       }),
     ]);
 
@@ -153,6 +160,63 @@ export default async function AdminConsole() {
                         <td className="num">
                           <Link
                             href={`/orders/${o.id}`}
+                            style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                          >
+                            View
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Invoices</h2>
+            </div>
+            {invoices.length === 0 ? (
+              <div className="empty-block">
+                <h3>No invoices yet</h3>
+                <p>Invoices are issued automatically when an order is paid.</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Invoice</th>
+                      <th>Order</th>
+                      <th>Buyer</th>
+                      <th>Issued</th>
+                      <th>Status</th>
+                      <th className="num">Total</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoices.map((inv) => (
+                      <tr key={inv.id}>
+                        <td style={{ fontWeight: 700 }}>{inv.number}</td>
+                        <td>{inv.order.reference}</td>
+                        <td>
+                          <div style={{ fontSize: 13 }}>{inv.buyerName}</div>
+                          <div className="muted-text" style={{ fontSize: 11.5 }}>
+                            {inv.buyerEmail}
+                          </div>
+                        </td>
+                        <td>{inv.issuedAt.toLocaleDateString()}</td>
+                        <td>
+                          <span className={"badge " + (STATUS_CLASS[inv.status] || "")}>
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="num">{formatCents(inv.totalCents)}</td>
+                        <td className="num">
+                          <Link
+                            href={`/orders/${inv.orderId}/invoice`}
                             style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
                           >
                             View

@@ -41,6 +41,12 @@ enum QuoteStatus {
   DECLINED
 }
 
+enum InvoiceStatus {
+  ISSUED
+  PAID
+  VOID
+}
+
 model User {
   id               String   @id @default(cuid())
   email            String   @unique
@@ -107,7 +113,9 @@ model Order {
   buyerName     String
   shipTo        String
   subtotalCents Int
+  freightCents  Int         @default(0)
   feeCents      Int
+  taxCents      Int         @default(0)
   totalCents    Int
   feeRateBps    Int         @default(400)
   paymentMethod String      @default("paypal")
@@ -116,8 +124,26 @@ model Order {
   carrier       String?
   trackingCode  String?
   items         OrderItem[]
+  invoice       Invoice?
   createdAt     DateTime    @default(now())
   paidAt        DateTime?
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  number        String        @unique
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId       String        @unique
+  status        InvoiceStatus @default(ISSUED)
+  issuedAt      DateTime      @default(now())
+  subtotalCents Int
+  freightCents  Int
+  feeCents      Int
+  taxCents      Int
+  totalCents    Int
+  buyerName     String
+  buyerEmail    String
+  shipTo        String
 }
 
 model OrderItem {

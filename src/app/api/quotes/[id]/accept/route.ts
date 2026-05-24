@@ -26,7 +26,10 @@ export async function POST(
   }
 
   const subtotal = quote.quotedUnitCents * quote.qty;
+  const freight = 0;
   const fee = feeFor(subtotal);
+  const tax = 0;
+  const total = subtotal + freight + fee + tax;
 
   const order = await prisma.order.create({
     data: {
@@ -37,8 +40,10 @@ export async function POST(
       buyerEmail: quote.buyerEmail,
       shipTo: quote.company || "To be confirmed",
       subtotalCents: subtotal,
+      freightCents: freight,
       feeCents: fee,
-      totalCents: subtotal + fee,
+      taxCents: tax,
+      totalCents: total,
       feeRateBps: FEE_RATE_BPS,
       items: {
         create: [

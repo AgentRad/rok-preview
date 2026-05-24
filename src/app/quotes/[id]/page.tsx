@@ -31,7 +31,10 @@ export default async function QuotePage({
   const p = quote.product;
   const quoted = quote.quotedUnitCents != null;
   const subtotal = quoted ? quote.quotedUnitCents! * quote.qty : 0;
+  const freight = 0;
   const fee = feeFor(subtotal);
+  const tax = 0;
+  const total = subtotal + freight + fee + tax;
 
   return (
     <>
@@ -115,12 +118,20 @@ export default async function QuotePage({
                   <span>{formatCents(subtotal)}</span>
                 </div>
                 <div className="summary-line">
-                  <span>PartsPort fee &amp; delivery (4%)</span>
+                  <span>Freight</span>
+                  <span>{formatCents(freight)}</span>
+                </div>
+                <div className="summary-line">
+                  <span>Platform fee (4%)</span>
                   <span style={{ color: "var(--amber-deep)" }}>{formatCents(fee)}</span>
+                </div>
+                <div className="summary-line">
+                  <span>Sales tax</span>
+                  <span>{formatCents(tax)}</span>
                 </div>
                 <div className="summary-line total">
                   <span>Order total</span>
-                  <span>{formatCents(subtotal + fee)}</span>
+                  <span>{formatCents(total)}</span>
                 </div>
                 {quote.quoteNote && (
                   <p className="muted-text" style={{ fontSize: 13, margin: "10px 0 16px" }}>

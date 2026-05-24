@@ -141,14 +141,22 @@ export default async function OrderPage({
               </table>
             </div>
 
-            <div style={{ maxWidth: 280, marginLeft: "auto", marginTop: 18 }}>
+            <div style={{ maxWidth: 300, marginLeft: "auto", marginTop: 18 }}>
               <div className="summary-line">
                 <span>Subtotal</span>
                 <span>{formatCents(order.subtotalCents)}</span>
               </div>
               <div className="summary-line">
-                <span>PartsPort fee &amp; delivery (4%)</span>
+                <span>Freight</span>
+                <span>{formatCents(order.freightCents)}</span>
+              </div>
+              <div className="summary-line">
+                <span>Platform fee</span>
                 <span>{formatCents(order.feeCents)}</span>
+              </div>
+              <div className="summary-line">
+                <span>Sales tax</span>
+                <span>{formatCents(order.taxCents)}</span>
               </div>
               <div className="summary-line total">
                 <span>Total</span>
@@ -158,8 +166,8 @@ export default async function OrderPage({
 
             <p className="muted-text" style={{ fontSize: 12.5, marginTop: 20 }}>
               Payment method: {order.paymentMethod}. PartsPort holds payment and
-              releases the part price to the supplier on dispatch, retaining the
-              service fee.
+              releases the part price to the supplier on dispatch, retaining
+              the platform fee.
             </p>
           </div>
 
@@ -172,7 +180,12 @@ export default async function OrderPage({
           )}
 
           <div style={{ marginTop: 24 }} className="row-gap">
-            <Link className="btn btn-dark" href="/catalog">
+            {paid && (
+              <Link className="btn btn-dark" href={`/orders/${order.id}/invoice`}>
+                View invoice
+              </Link>
+            )}
+            <Link className="btn btn-ghost" href="/catalog">
               Continue shopping
             </Link>
             <Link className="btn btn-ghost" href="/account">

@@ -68,8 +68,10 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
     (s, l) => s + products[l.sku].priceCents * l.qty,
     0
   );
+  const freight = 0;
   const fee = feeFor(subtotal);
-  const total = subtotal + fee;
+  const tax = 0;
+  const total = subtotal + freight + fee + tax;
   const maxEta = valid.reduce(
     (m, l) => Math.max(m, products[l.sku].etaDays),
     0
@@ -172,8 +174,16 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
           <span>{formatCents(subtotal)}</span>
         </div>
         <div className="summary-line">
-          <span>PartsPort fee &amp; delivery (4%)</span>
-          <span style={{ color: "var(--amber-dark)" }}>{formatCents(fee)}</span>
+          <span>Freight</span>
+          <span>{formatCents(freight)}</span>
+        </div>
+        <div className="summary-line">
+          <span>Platform fee (4%)</span>
+          <span style={{ color: "var(--amber-deep)" }}>{formatCents(fee)}</span>
+        </div>
+        <div className="summary-line">
+          <span>Sales tax</span>
+          <span>{formatCents(tax)}</span>
         </div>
         <div className="summary-line total">
           <span>Total</span>
@@ -181,6 +191,8 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
         </div>
         <p className="muted-text" style={{ fontSize: 12.5, marginTop: 8 }}>
           Estimated delivery in {maxEta} business day{maxEta > 1 ? "s" : ""}.
+          Freight and sales tax are calculated at fulfillment based on the
+          shipping address and exemption status.
         </p>
       </div>
     </div>

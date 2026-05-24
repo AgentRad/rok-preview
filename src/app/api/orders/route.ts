@@ -52,7 +52,10 @@ export async function POST(req: Request) {
     );
   }
 
+  const freight = 0;
   const fee = feeFor(subtotal);
+  const tax = 0;
+  const total = subtotal + freight + fee + tax;
   const user = await getCurrentUser();
 
   const order = await prisma.order.create({
@@ -64,8 +67,10 @@ export async function POST(req: Request) {
       buyerEmail,
       shipTo,
       subtotalCents: subtotal,
+      freightCents: freight,
       feeCents: fee,
-      totalCents: subtotal + fee,
+      taxCents: tax,
+      totalCents: total,
       feeRateBps: FEE_RATE_BPS,
       items: { create: orderItems },
     },
@@ -76,7 +81,9 @@ export async function POST(req: Request) {
     orderId: order.id,
     reference: order.reference,
     subtotalCents: subtotal,
+    freightCents: freight,
     feeCents: fee,
-    totalCents: subtotal + fee,
+    taxCents: tax,
+    totalCents: total,
   });
 }

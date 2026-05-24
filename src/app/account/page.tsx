@@ -58,30 +58,45 @@ export default async function AccountPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((o) => (
-                      <tr key={o.id}>
-                        <td style={{ fontWeight: 700 }}>{o.reference}</td>
-                        <td>{o.createdAt.toLocaleDateString()}</td>
-                        <td>
-                          {o.items.reduce((n, i) => n + i.qty, 0)} item
-                          {o.items.length === 1 ? "" : "s"}
-                        </td>
-                        <td>
-                          <span className={"badge " + (STATUS_CLASS[o.status] || "")}>
-                            {o.status}
-                          </span>
-                        </td>
-                        <td className="num">{formatCents(o.totalCents)}</td>
-                        <td className="num">
-                          <Link
-                            href={`/orders/${o.id}`}
-                            style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
-                          >
-                            View
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
+                    {orders.map((o) => {
+                      const isPaid =
+                        o.status === "PAID" || o.status === "FULFILLED";
+                      return (
+                        <tr key={o.id}>
+                          <td style={{ fontWeight: 700 }}>{o.reference}</td>
+                          <td>{o.createdAt.toLocaleDateString()}</td>
+                          <td>
+                            {o.items.reduce((n, i) => n + i.qty, 0)} item
+                            {o.items.length === 1 ? "" : "s"}
+                          </td>
+                          <td>
+                            <span className={"badge " + (STATUS_CLASS[o.status] || "")}>
+                              {o.status}
+                            </span>
+                          </td>
+                          <td className="num">{formatCents(o.totalCents)}</td>
+                          <td className="num">
+                            <Link
+                              href={`/orders/${o.id}`}
+                              style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                            >
+                              View
+                            </Link>
+                            {isPaid && (
+                              <>
+                                {" · "}
+                                <Link
+                                  href={`/orders/${o.id}/invoice`}
+                                  style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                                >
+                                  Invoice
+                                </Link>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
