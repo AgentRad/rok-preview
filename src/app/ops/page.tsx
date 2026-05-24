@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import OpsBoard, { type OpsOrder } from "@/components/OpsBoard";
+import MarkPayoutPaid from "@/components/MarkPayoutPaid";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -11,11 +12,26 @@ export const dynamic = "force-dynamic";
 export default async function OpsConsole() {
   await requireRole("ADMIN");
 
-  const orders = await prisma.order.findMany({
-    where: { status: { in: ["PAID", "FULFILLED"] } },
-    include: { items: true },
-    orderBy: { paidAt: "asc" },
-  });
+  const [orders, payoutsDue] = await Promise.all([
+    prisma.order.findMany({
+      where: { status: { in: ["PAID", "FULFILLED"] } },
+      include: { items: true },
+      orderBy: { paidAt: "asc" },
+    }),
+    prisma.payout.findMany({
+      where: { status: "DUE" },
+      include: {
+        supplier: { select: { name: true, contactEmail: true } },
+        order: { select: { reference: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  const payoutsDueTotal = payoutsDue.reduce(
+    (s, p) => s + p.amountCents,
+    0
+  );
 
   const board: OpsOrder[] = orders.map((o) => ({
     id: o.id,
@@ -85,6 +101,55 @@ export default async function OpsConsole() {
           ) : (
             <OpsBoard orders={board} />
           )}
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Payouts owed</h2>
+              <span className="muted-text" style={{ fontSize: 13 }}>
+                Outstanding to suppliers: <strong style={{ color: "var(--ink)" }}>{formatCents(payoutsDueTotal)}</strong>
+              </span>
+            </div>
+            {payoutsDue.length === 0 ? (
+              <div className="empty-block">
+                <h3>No payouts due</h3>
+                <p>Payouts are created when an order is marked Shipped.</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Payout</th>
+                      <th>Supplier</th>
+                      <th>Order</th>
+                      <th>Created</th>
+                      <th className="num">Amount</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payoutsDue.map((p) => (
+                      <tr key={p.id}>
+                        <td style={{ fontWeight: 700 }}>{p.reference}</td>
+                        <td>
+                          <div>{p.supplier.name}</div>
+                          <div className="muted-text" style={{ fontSize: 12 }}>
+                            {p.supplier.contactEmail}
+                          </div>
+                        </td>
+                        <td>{p.order.reference}</td>
+                        <td>{p.createdAt.toLocaleDateString()}</td>
+                        <td className="num">{formatCents(p.amountCents)}</td>
+                        <td className="num">
+                          <MarkPayoutPaid payoutId={p.id} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </main>
       <SiteFooter />

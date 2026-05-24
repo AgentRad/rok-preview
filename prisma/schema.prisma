@@ -54,6 +54,11 @@ enum ReturnStatus {
   RESOLVED
 }
 
+enum PayoutStatus {
+  DUE
+  PAID
+}
+
 model User {
   id               String   @id @default(cuid())
   email            String   @unique
@@ -137,6 +142,7 @@ model Supplier {
   userId         String?        @unique
   products       Product[]
   productReviews Review[]
+  payouts        Payout[]
   createdAt      DateTime       @default(now())
 }
 
@@ -174,6 +180,23 @@ model ProductImage {
   createdAt DateTime @default(now())
 
   @@index([productId])
+}
+
+model Payout {
+  id          String       @id @default(cuid())
+  reference   String       @unique
+  supplier    Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId  String
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String
+  amountCents Int
+  status      PayoutStatus @default(DUE)
+  note        String       @default("")
+  createdAt   DateTime     @default(now())
+  paidAt      DateTime?
+
+  @@unique([supplierId, orderId])
+  @@index([status])
 }
 
 model ReturnRequest {
@@ -216,6 +239,7 @@ model Order {
   items         OrderItem[]
   invoice       Invoice?
   returns       ReturnRequest[]
+  payouts       Payout[]
   createdAt     DateTime    @default(now())
   paidAt        DateTime?
   cancelledAt   DateTime?

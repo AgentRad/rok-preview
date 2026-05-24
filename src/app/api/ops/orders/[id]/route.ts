@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { sendOrderDelivered, sendOrderShipped } from "@/lib/email";
+import { ensurePayoutsForOrder } from "@/lib/payouts";
 
 const STAGES = ["Processing", "Shipped", "Delivered"] as const;
 type Stage = (typeof STAGES)[number];
@@ -53,6 +54,9 @@ export async function POST(
     });
     sendOrderShipped(updated).catch((err) =>
       console.error("[email] order-shipped failed:", err)
+    );
+    ensurePayoutsForOrder(id).catch((err) =>
+      console.error("[payouts] create-on-dispatch failed:", err)
     );
   } else if (stage === "Delivered") {
     const updated = await prisma.order.update({

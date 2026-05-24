@@ -43,23 +43,36 @@ export default async function SupplierDashboard() {
     );
   }
 
-  const orders = await prisma.order.findMany({
-    where: {
-      items: { some: { product: { supplierId: supplier.id } } },
-      status: { in: ["PAID", "FULFILLED"] },
-    },
-    include: { items: { include: { product: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [orders, quotes, payouts] = await Promise.all([
+    prisma.order.findMany({
+      where: {
+        items: { some: { product: { supplierId: supplier.id } } },
+        status: { in: ["PAID", "FULFILLED"] },
+      },
+      include: { items: { include: { product: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.quoteRequest.findMany({
+      where: {
+        product: { supplierId: supplier.id },
+        status: { in: ["OPEN", "QUOTED"] },
+      },
+      include: { product: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.payout.findMany({
+      where: { supplierId: supplier.id },
+      include: { order: { select: { reference: true } } },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    }),
+  ]);
 
-  const quotes = await prisma.quoteRequest.findMany({
-    where: {
-      product: { supplierId: supplier.id },
-      status: { in: ["OPEN", "QUOTED"] },
-    },
-    include: { product: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const payoutsDue = payouts
+    .filter((p) => p.status === "DUE")
+    .reduce((s, p) => s + p.amountCents, 0);
+  const payoutsPaid = payouts
+    .filter((p) => p.status === "PAID")
+    .reduce((s, p) => s + p.amountCents, 0);
 
   let revenue = 0;
   for (const o of orders) {
@@ -137,6 +150,64 @@ export default async function SupplierDashboard() {
             <div className="card-body">
               <CatalogCsvImport />
             </div>
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Payouts</h2>
+              <div style={{ display: "flex", gap: 18, fontSize: 13 }}>
+                <span className="muted-text">
+                  Due <strong style={{ color: "var(--ink)" }}>{formatCents(payoutsDue)}</strong>
+                </span>
+                <span className="muted-text">
+                  Paid <strong style={{ color: "var(--ink)" }}>{formatCents(payoutsPaid)}</strong>
+                </span>
+              </div>
+            </div>
+            {payouts.length === 0 ? (
+              <div className="empty-block">
+                <h3>No payouts yet</h3>
+                <p>Payouts are created when an order is dispatched.</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Order</th>
+                      <th>Created</th>
+                      <th>Status</th>
+                      <th className="num">Amount</th>
+                      <th>Paid</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payouts.map((p) => (
+                      <tr key={p.id}>
+                        <td style={{ fontWeight: 700 }}>{p.reference}</td>
+                        <td>{p.order.reference}</td>
+                        <td>{p.createdAt.toLocaleDateString()}</td>
+                        <td>
+                          <span
+                            className={
+                              "badge " +
+                              (p.status === "PAID" ? "badge-fulfilled" : "badge-pending")
+                            }
+                          >
+                            {p.status}
+                          </span>
+                        </td>
+                        <td className="num">{formatCents(p.amountCents)}</td>
+                        <td>
+                          {p.paidAt ? p.paidAt.toLocaleDateString() : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="card">
