@@ -318,6 +318,52 @@ export async function sendThreadMessage(args: {
   });
 }
 
+export async function sendSupplierWelcome(args: {
+  to: string;
+  contactName: string;
+  companyName: string;
+  tempPassword: string | null;
+}): Promise<void> {
+  const url = siteUrl("/login");
+  const credsBlock = args.tempPassword
+    ? `<p>A temporary sign-in has been created. Please change your password after the first sign-in (use the Forgot password link if needed).</p>
+       <p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:13px;">
+         <strong>Email:</strong> ${args.to}<br><strong>Temporary password:</strong> ${args.tempPassword}
+       </p>`
+    : "<p>Use your existing PartsPort account to sign in. Your supplier dashboard is ready.</p>";
+  const body = `
+    <p>Hi ${args.contactName},</p>
+    <p>${args.companyName} has been set up on PartsPort as a verified supplier. Welcome aboard.</p>
+    ${credsBlock}
+    <p>Once you sign in, you can list parts, manage stock and pricing, respond to RFQs, see incoming orders, and invite your team to specific roles.</p>
+    <p style="margin-top:22px;">${btn(url, "Sign in to PartsPort")}</p>`;
+  await send({
+    to: args.to,
+    subject: `${args.companyName} is live on PartsPort`,
+    html: wrap("You're set up on PartsPort", body),
+  });
+}
+
+export async function sendSupplierInvite(args: {
+  to: string;
+  inviterName: string;
+  companyName: string;
+  acceptUrl: string;
+  expiresDays: number;
+}): Promise<void> {
+  const body = `
+    <p>${args.inviterName} invited you to join ${args.companyName}'s PartsPort account.</p>
+    <p>PartsPort is the marketplace where you sell parts, respond to quote requests, manage orders, and get paid on dispatch. The link below adds you to ${args.companyName}'s team within the next ${args.expiresDays} days.</p>
+    <p style="margin-top:22px;">${btn(args.acceptUrl, "Accept invitation")}</p>
+    <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">If you don't have an account yet, you'll be asked to create one in the same step.</p>`;
+  await send({
+    to: args.to,
+    subject: `${args.inviterName} invited you to ${args.companyName} on PartsPort`,
+    html: wrap("Team invitation", body),
+    from: FROM_AUTH,
+  });
+}
+
 export async function sendPasswordReset(args: {
   to: string;
   name: string;

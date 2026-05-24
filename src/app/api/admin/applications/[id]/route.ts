@@ -67,7 +67,7 @@ export async function POST(
         });
 
     if (!isOem) {
-      await prisma.supplier.create({
+      const supplier = await prisma.supplier.create({
         data: {
           name: app.companyName,
           contactEmail: app.email,
@@ -76,6 +76,13 @@ export async function POST(
           rating: 4.7,
           reviews: 0,
           userId: account.id,
+        },
+      });
+      await prisma.supplierMember.create({
+        data: {
+          supplierId: supplier.id,
+          userId: account.id,
+          role: "OWNER",
         },
       });
     }

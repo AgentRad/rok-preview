@@ -36,9 +36,14 @@ export default async function QuotePage({
   const viewer = await getCurrentUser();
   const isBuyer = !!viewer && !!quote.buyerId && viewer.id === quote.buyerId;
   const isAdmin = viewer?.role === "ADMIN";
-  const isQuoteSupplier =
-    viewer?.role === "SUPPLIER" &&
-    quote.product.supplier.userId === viewer.id;
+  let isQuoteSupplier = false;
+  if (viewer?.role === "SUPPLIER") {
+    const { userHasAccessToSupplier } = await import("@/lib/supplier-access");
+    isQuoteSupplier = (await userHasAccessToSupplier(
+      viewer.id,
+      quote.product.supplierId
+    )).ok;
+  }
   const canMessage = !!viewer && (isBuyer || isAdmin || isQuoteSupplier);
 
   const p = quote.product;

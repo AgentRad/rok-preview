@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { sendThreadMessage } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
+import { userHasAccessToSupplier } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 
@@ -41,11 +42,16 @@ export async function POST(req: Request) {
     }
     const isBuyer = !!order.buyerId && user.id === order.buyerId;
     const isAdmin = user.role === "ADMIN";
-    const isOrderSupplier =
-      user.role === "SUPPLIER" &&
-      order.items.some(
-        (it) => it.product.supplier.userId === user.id
+    let isOrderSupplier = false;
+    if (user.role === "SUPPLIER") {
+      const supplierIds = Array.from(
+        new Set(order.items.map((it) => it.product.supplierId))
       );
+      const checks = await Promise.all(
+        supplierIds.map((id) => userHasAccessToSupplier(user.id, id))
+      );
+      isOrderSupplier = checks.some((c) => c.ok);
+    }
     if (!isBuyer && !isAdmin && !isOrderSupplier) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }
@@ -69,7 +75,8 @@ export async function POST(req: Request) {
     const isBuyer = !!quote.buyerId && user.id === quote.buyerId;
     const isAdmin = user.role === "ADMIN";
     const isQuoteSupplier =
-      user.role === "SUPPLIER" && quote.product.supplier.userId === user.id;
+      user.role === "SUPPLIER" &&
+      (await userHasAccessToSupplier(user.id, quote.product.supplierId)).ok;
     if (!isBuyer && !isAdmin && !isQuoteSupplier) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }

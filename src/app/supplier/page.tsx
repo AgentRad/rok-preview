@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { getSupplierContextForUser } from "@/lib/supplier-access";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import Link from "next/link";
 import SupplierProductManager from "@/components/SupplierProductManager";
 import CatalogCsvImport from "@/components/CatalogCsvImport";
+import SupplierTeam from "@/components/SupplierTeam";
 import FulfillButton from "@/components/FulfillButton";
 import QuoteResponder from "@/components/QuoteResponder";
 import { formatCents } from "@/lib/money";
@@ -20,10 +22,13 @@ const STATUS_CLASS: Record<string, string> = {
 
 export default async function SupplierDashboard() {
   const user = await requireRole("SUPPLIER");
-  const supplier = await prisma.supplier.findUnique({
-    where: { userId: user.id },
-    include: { products: { orderBy: { createdAt: "asc" } } },
-  });
+  const ctx = await getSupplierContextForUser(user.id);
+  const supplier = ctx
+    ? await prisma.supplier.findUnique({
+        where: { id: ctx.supplier.id },
+        include: { products: { orderBy: { createdAt: "asc" } } },
+      })
+    : null;
 
   if (!supplier) {
     return (
@@ -135,6 +140,15 @@ export default async function SupplierDashboard() {
               imageUrl: p.imageUrl,
             }))}
           />
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Team</h2>
+            </div>
+            <div className="card-body">
+              <SupplierTeam />
+            </div>
+          </div>
 
           <div className="card">
             <div className="card-head">

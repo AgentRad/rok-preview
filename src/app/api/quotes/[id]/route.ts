@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { sendQuoteReady } from "@/lib/email";
+import { userHasAccessToSupplier } from "@/lib/supplier-access";
 
 export async function PATCH(
   req: Request,
@@ -38,10 +39,11 @@ export async function PATCH(
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }
     if (user.role === "SUPPLIER") {
-      const supplier = await prisma.supplier.findUnique({
-        where: { userId: user.id },
-      });
-      if (!supplier || supplier.id !== quote.product.supplierId) {
+      const access = await userHasAccessToSupplier(
+        user.id,
+        quote.product.supplierId
+      );
+      if (!access.ok) {
         return NextResponse.json(
           { error: "Not your product." },
           { status: 403 }

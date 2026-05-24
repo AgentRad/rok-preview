@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { parseCsvWithHeader } from "@/lib/csv";
 import { ICON_KEYS } from "@/components/PartIcon";
+import { getSupplierContextForUser } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 
@@ -90,15 +91,14 @@ export async function POST(req: Request) {
   if (!user || user.role !== "SUPPLIER") {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
-  const supplier = await prisma.supplier.findUnique({
-    where: { userId: user.id },
-  });
-  if (!supplier) {
+  const ctx = await getSupplierContextForUser(user.id);
+  if (!ctx) {
     return NextResponse.json(
       { error: "No supplier profile linked to this account." },
       { status: 400 }
     );
   }
+  const supplier = ctx.supplier;
 
   const body = await req.json().catch(() => ({}));
   const csv = String(body.csv || "");

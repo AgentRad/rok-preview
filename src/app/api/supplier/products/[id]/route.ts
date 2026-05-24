@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
+import { userHasAccessToSupplier } from "@/lib/supplier-access";
 
 export async function PATCH(
   req: Request,
@@ -17,10 +18,8 @@ export async function PATCH(
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
   if (user.role === "SUPPLIER") {
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    });
-    if (!supplier || supplier.id !== product.supplierId) {
+    const access = await userHasAccessToSupplier(user.id, product.supplierId);
+    if (!access.ok) {
       return NextResponse.json({ error: "Not your product." }, { status: 403 });
     }
   }

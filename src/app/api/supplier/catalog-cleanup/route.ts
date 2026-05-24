@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/db";
 import {
   cleanupCatalog,
   isCatalogAIEnabled,
   rowsToCsv,
 } from "@/lib/catalog-import-ai";
+import { getSupplierContextForUser } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +16,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
   if (user.role === "SUPPLIER") {
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    });
-    if (!supplier) {
+    const ctx = await getSupplierContextForUser(user.id);
+    if (!ctx) {
       return NextResponse.json(
         { error: "No supplier profile linked to this account." },
         { status: 400 }

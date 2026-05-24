@@ -5,6 +5,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ApplicationReview from "@/components/ApplicationReview";
 import ReturnActions from "@/components/ReturnActions";
+import AddSupplierForm from "@/components/AddSupplierForm";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +108,8 @@ export default async function AdminConsole() {
               <div className="k-foot">awaiting review</div>
             </div>
           </div>
+
+          <AddSupplierForm />
 
           <div className="card">
             <div className="card-head">

@@ -3,21 +3,21 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { ICON_KEYS } from "@/components/PartIcon";
+import { getSupplierContextForUser } from "@/lib/supplier-access";
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user || user.role !== "SUPPLIER") {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
-  const supplier = await prisma.supplier.findUnique({
-    where: { userId: user.id },
-  });
-  if (!supplier) {
+  const ctx = await getSupplierContextForUser(user.id);
+  if (!ctx) {
     return NextResponse.json(
       { error: "No supplier profile is linked to this account." },
       { status: 400 }
     );
   }
+  const supplier = ctx.supplier;
 
   const b = await req.json().catch(() => ({}));
   const sku = String(b.sku || "").trim().toUpperCase();

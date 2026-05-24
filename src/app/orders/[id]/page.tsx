@@ -40,11 +40,17 @@ export default async function OrderPage({
   const viewer = await getCurrentUser();
   const isBuyer = !!viewer && !!order.buyerId && viewer.id === order.buyerId;
   const isAdmin = viewer?.role === "ADMIN";
-  const isOrderSupplier =
-    viewer?.role === "SUPPLIER" &&
-    order.items.some(
-      (it) => it.product.supplier.userId === viewer.id
+  let isOrderSupplier = false;
+  if (viewer?.role === "SUPPLIER") {
+    const { userHasAccessToSupplier } = await import("@/lib/supplier-access");
+    const supplierIds = Array.from(
+      new Set(order.items.map((it) => it.product.supplierId))
     );
+    const checks = await Promise.all(
+      supplierIds.map((id) => userHasAccessToSupplier(viewer.id, id))
+    );
+    isOrderSupplier = checks.some((c) => c.ok);
+  }
   const canMessage = !!viewer && (isBuyer || isAdmin || isOrderSupplier);
 
   const paid = order.status !== "PENDING" && order.status !== "CANCELLED";

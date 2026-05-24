@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { getSupplierContextForUser } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,16 +26,17 @@ export async function GET() {
   if (!user || (user.role !== "SUPPLIER" && user.role !== "ADMIN")) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
-  const supplier =
+  const ctx =
     user.role === "SUPPLIER"
-      ? await prisma.supplier.findUnique({ where: { userId: user.id } })
+      ? await getSupplierContextForUser(user.id)
       : null;
-  if (user.role === "SUPPLIER" && !supplier) {
+  if (user.role === "SUPPLIER" && !ctx) {
     return NextResponse.json(
       { error: "No supplier profile linked to this account." },
       { status: 400 }
     );
   }
+  const supplier = ctx?.supplier ?? null;
 
   const orders = await prisma.order.findMany({
     where: {

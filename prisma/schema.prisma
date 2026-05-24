@@ -59,20 +59,26 @@ enum PayoutStatus {
   PAID
 }
 
+enum SupplierMemberRole {
+  OWNER
+  MEMBER
+}
+
 model User {
-  id               String   @id @default(cuid())
-  email            String   @unique
-  passwordHash     String
-  name             String
-  role             Role     @default(BUYER)
-  manufacturerName String?
-  supplier         Supplier?
-  orders           Order[]
-  resetTokens      PasswordResetToken[]
-  reviews          Review[]
-  addresses        Address[]
-  messages         Message[]
-  createdAt        DateTime @default(now())
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  passwordHash        String
+  name                String
+  role                Role     @default(BUYER)
+  manufacturerName    String?
+  supplier            Supplier?
+  orders              Order[]
+  resetTokens         PasswordResetToken[]
+  reviews             Review[]
+  addresses           Address[]
+  messages            Message[]
+  supplierMemberships SupplierMember[]
+  createdAt           DateTime @default(now())
 }
 
 model PasswordResetToken {
@@ -144,7 +150,38 @@ model Supplier {
   products       Product[]
   productReviews Review[]
   payouts        Payout[]
+  members        SupplierMember[]
+  invites        SupplierInvite[]
   createdAt      DateTime       @default(now())
+}
+
+model SupplierMember {
+  id         String             @id @default(cuid())
+  supplier   Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  role       SupplierMemberRole @default(MEMBER)
+  createdAt  DateTime           @default(now())
+
+  @@unique([supplierId, userId])
+  @@index([userId])
+}
+
+model SupplierInvite {
+  id          String             @id @default(cuid())
+  supplier    Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId  String
+  email       String
+  role        SupplierMemberRole @default(MEMBER)
+  tokenHash   String             @unique
+  invitedById String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime           @default(now())
+
+  @@index([supplierId])
+  @@index([email])
 }
 
 model Product {
