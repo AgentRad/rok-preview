@@ -5,6 +5,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PayOrder from "@/components/PayOrder";
 import { formatCents } from "@/lib/money";
+import { trackingLink } from "@/lib/tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,15 @@ export default async function OrderPage({
   const paid = order.status !== "PENDING" && order.status !== "CANCELLED";
   const fulfilled = order.status === "FULFILLED";
 
+  const stageIndex = (() => {
+    if (order.status === "PENDING" || order.status === "CANCELLED") return -1;
+    if (fulfilled || order.shipmentStage === "Delivered") return 3;
+    if (order.shipmentStage === "Shipped") return 2;
+    if (order.shipmentStage === "Processing") return 1;
+    return 0; // PAID, not yet picked up by supplier
+  })();
+  const trackingUrl = trackingLink(order.carrier, order.trackingCode);
+
   return (
     <>
       <SiteHeader />
@@ -48,26 +58,74 @@ export default async function OrderPage({
             </div>
           )}
 
-          <div className="order-steps">
-            <div className="order-step done">
-              <div className="os-label">Order placed</div>
-              <div className="os-sub">{order.createdAt.toLocaleDateString()}</div>
-            </div>
-            <div className={"order-step" + (paid ? " done" : "")}>
-              <div className="os-label">Payment {paid ? "received" : "pending"}</div>
-              <div className="os-sub">
-                {order.paidAt ? order.paidAt.toLocaleDateString() : "Pending"}
+          {paid && (
+            <div className="order-steps">
+              <div className={"order-step" + (stageIndex >= 0 ? " done" : "")}>
+                <div className="os-label">Paid</div>
+                <div className="os-sub">
+                  {order.paidAt ? order.paidAt.toLocaleDateString() : "Confirmed"}
+                </div>
+              </div>
+              <div className={"order-step" + (stageIndex >= 1 ? " done" : "")}>
+                <div className="os-label">Processing</div>
+                <div className="os-sub">
+                  {stageIndex >= 1 ? "Supplier preparing order" : "Up next"}
+                </div>
+              </div>
+              <div className={"order-step" + (stageIndex >= 2 ? " done" : "")}>
+                <div className="os-label">Shipped</div>
+                <div className="os-sub">
+                  {stageIndex >= 2 && order.carrier
+                    ? `${order.carrier} on the way`
+                    : "Awaiting dispatch"}
+                </div>
+              </div>
+              <div className={"order-step" + (stageIndex >= 3 ? " done" : "")}>
+                <div className="os-label">Delivered</div>
+                <div className="os-sub">
+                  {stageIndex >= 3 ? "Order complete" : "Pending"}
+                </div>
               </div>
             </div>
-            <div className={"order-step" + (fulfilled ? " done" : "")}>
-              <div className="os-label">
-                {fulfilled ? "Dispatched" : "Awaiting dispatch"}
+          )}
+
+          {paid && stageIndex >= 2 && order.carrier && order.trackingCode && (
+            <div className="tracking-card">
+              <div className="tracking-head">
+                <div>
+                  <div className="invoice-meta-label">Tracking</div>
+                  <div style={{ fontWeight: 700, fontSize: 16, marginTop: 4 }}>
+                    {order.carrier}
+                  </div>
+                  <div
+                    className="muted-text"
+                    style={{
+                      fontFamily: "var(--mono)",
+                      fontSize: 13,
+                      marginTop: 2,
+                    }}
+                  >
+                    {order.trackingCode}
+                  </div>
+                </div>
+                {trackingUrl && (
+                  <a
+                    className="btn btn-dark btn-sm"
+                    href={trackingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Track shipment
+                  </a>
+                )}
               </div>
-              <div className="os-sub">
-                {fulfilled ? "On the way to you" : "Supplier preparing order"}
-              </div>
+              <p className="muted-text" style={{ fontSize: 12.5, marginTop: 12 }}>
+                For LTL freight deliveries, inspect the shipment on arrival and
+                note any damage on the carrier delivery receipt before signing.
+                Report claims within the window in the supplier agreement.
+              </p>
             </div>
-          </div>
+          )}
 
           <div className="invoice">
             <div className="invoice-head">

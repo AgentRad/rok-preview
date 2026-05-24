@@ -517,6 +517,17 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .order-step .os-label { font-weight: 600; }
 .order-step .os-sub { color: var(--steel); font-size: 12px; margin-top: 2px; }
 
+.tracking-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--ink);
+  border-radius: var(--radius); padding: 22px 26px;
+  margin: 8px 0 24px;
+}
+.tracking-head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 18px; flex-wrap: wrap;
+}
+
 /* ---------- Auth ---------- */
 .auth-wrap { max-width: 440px; margin: 0 auto; padding: 72px 24px 100px; }
 .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 38px; }
