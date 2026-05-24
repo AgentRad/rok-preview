@@ -44,14 +44,16 @@ export async function POST(req: Request) {
 
   const icon = ICON_KEYS.includes(String(b.icon)) ? String(b.icon) : "gear";
 
-  await prisma.product.create({
+  const imageUrl = String(b.imageUrl || "").trim() || null;
+
+  const product = await prisma.product.create({
     data: {
       sku,
       name,
       category,
       manufacturer,
       icon,
-      imageUrl: String(b.imageUrl || "").trim() || null,
+      imageUrl,
       priceCents: dollarsToCents(price),
       unit: String(b.unit || "each"),
       etaDays,
@@ -62,5 +64,10 @@ export async function POST(req: Request) {
       active: true,
     },
   });
+  if (imageUrl) {
+    await prisma.productImage.create({
+      data: { productId: product.id, url: imageUrl, position: 0 },
+    });
+  }
   return NextResponse.json({ ok: true });
 }

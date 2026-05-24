@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ICON_KEYS } from "./PartIcon";
+import ImageManager from "./ImageManager";
 import { formatCents } from "@/lib/money";
 
 export type SupplierProduct = {
@@ -29,9 +30,9 @@ function Row({ p }: { p: SupplierProduct }) {
   const router = useRouter();
   const [price, setPrice] = useState((p.priceCents / 100).toFixed(2));
   const [stock, setStock] = useState(String(p.stock));
-  const [image, setImage] = useState(p.imageUrl || "");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [showImages, setShowImages] = useState(false);
 
   async function save() {
     setBusy(true);
@@ -42,7 +43,6 @@ function Row({ p }: { p: SupplierProduct }) {
       body: JSON.stringify({
         price: Number(price),
         stock: Number(stock),
-        imageUrl: image,
       }),
     });
     setBusy(false);
@@ -64,57 +64,66 @@ function Row({ p }: { p: SupplierProduct }) {
   }
 
   return (
-    <tr>
-      <td>
-        <div style={{ fontWeight: 600 }}>{p.name}</div>
-        <div className="muted-text" style={{ fontSize: 12 }}>
-          {p.sku} · {p.category}
-        </div>
-      </td>
-      <td>
-        <input
-          className="input-sm"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-        />
-      </td>
-      <td>
-        <input
-          className="input-sm"
-          style={{ width: 70 }}
-          value={stock}
-          onChange={(e) => setStock(e.target.value)}
-        />
-      </td>
-      <td>
-        <input
-          className="input-sm"
-          style={{ width: 160 }}
-          placeholder="https://… photo"
-          value={image}
-          onChange={(e) => setImage(e.target.value)}
-        />
-      </td>
-      <td>
-        <button
-          className={"badge " + (p.active ? "badge-approved" : "badge-rejected")}
-          style={{ border: 0, cursor: "pointer" }}
-          onClick={toggleActive}
-        >
-          {p.active ? "Listed" : "Hidden"}
-        </button>
-      </td>
-      <td className="num">
-        <button className="btn btn-dark btn-sm" onClick={save} disabled={busy}>
-          {busy ? "…" : "Save"}
-        </button>
-        {msg && (
-          <span className="muted-text" style={{ marginLeft: 8, fontSize: 12 }}>
-            {msg}
-          </span>
-        )}
-      </td>
-    </tr>
+    <>
+      <tr>
+        <td>
+          <div style={{ fontWeight: 600 }}>{p.name}</div>
+          <div className="muted-text" style={{ fontSize: 12 }}>
+            {p.sku} · {p.category}
+          </div>
+        </td>
+        <td>
+          <input
+            className="input-sm"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+          />
+        </td>
+        <td>
+          <input
+            className="input-sm"
+            style={{ width: 70 }}
+            value={stock}
+            onChange={(e) => setStock(e.target.value)}
+          />
+        </td>
+        <td>
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => setShowImages((s) => !s)}
+          >
+            {showImages ? "Hide" : "Manage"}
+          </button>
+        </td>
+        <td>
+          <button
+            className={"badge " + (p.active ? "badge-approved" : "badge-rejected")}
+            style={{ border: 0, cursor: "pointer" }}
+            onClick={toggleActive}
+          >
+            {p.active ? "Listed" : "Hidden"}
+          </button>
+        </td>
+        <td className="num">
+          <button className="btn btn-dark btn-sm" onClick={save} disabled={busy}>
+            {busy ? "…" : "Save"}
+          </button>
+          {msg && (
+            <span className="muted-text" style={{ marginLeft: 8, fontSize: 12 }}>
+              {msg}
+            </span>
+          )}
+        </td>
+      </tr>
+      {showImages && (
+        <tr>
+          <td colSpan={6} style={{ background: "var(--bg)", padding: "16px 18px" }}>
+            <ImageManager productId={p.id} />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -292,7 +301,7 @@ export default function SupplierProductManager({
                 <th>Part</th>
                 <th>Price (USD)</th>
                 <th>Stock</th>
-                <th>Photo URL</th>
+                <th>Photos</th>
                 <th>Status</th>
                 <th></th>
               </tr>

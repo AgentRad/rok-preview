@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductImage from "@/components/ProductImage";
+import ProductGallery from "@/components/ProductGallery";
 import AddToCart from "@/components/AddToCart";
 import RequestQuote from "@/components/RequestQuote";
 import Stars from "@/components/Stars";
@@ -21,7 +22,10 @@ export default async function ProductPage({
   const { sku } = await params;
   const product = await prisma.product.findUnique({
     where: { sku },
-    include: { supplier: true },
+    include: {
+      supplier: true,
+      images: { orderBy: { position: "asc" } },
+    },
   });
   if (!product || !product.active) notFound();
 
@@ -77,11 +81,18 @@ export default async function ProductPage({
           </div>
           <div className="detail-grid">
             <div className="detail-gallery">
-              <ProductImage
-                imageUrl={product.imageUrl}
-                icon={product.icon}
-                name={product.name}
-              />
+              {product.images.length > 0 ? (
+                <ProductGallery
+                  images={product.images.map((i) => ({ id: i.id, url: i.url }))}
+                  name={product.name}
+                />
+              ) : (
+                <ProductImage
+                  imageUrl={product.imageUrl}
+                  icon={product.icon}
+                  name={product.name}
+                />
+              )}
             </div>
             <div>
               <div className="detail-mfr">{product.manufacturer}</div>

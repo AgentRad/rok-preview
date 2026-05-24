@@ -604,6 +604,47 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   border-top: 1px solid var(--line);
 }
 
+/* ---------- Product gallery ---------- */
+.gallery { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+.gallery-main {
+  flex: 1; min-height: 320px;
+  background: var(--surface-2); border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.gallery-main .pi-photo {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.gallery-thumbs {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.gallery-thumb {
+  width: 64px; height: 64px; padding: 0; border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong); overflow: hidden; cursor: pointer;
+  background: var(--surface-2);
+}
+.gallery-thumb.on { border-color: var(--ink); }
+.gallery-thumb:hover { border-color: var(--ink-soft); }
+.gallery-thumb img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+
+.image-manager { display: flex; flex-direction: column; gap: 12px; }
+.image-manager .img-row {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 6px 12px;
+}
+.image-manager .img-thumb {
+  width: 44px; height: 44px; border-radius: 3px; overflow: hidden;
+  background: var(--surface-2); flex-shrink: 0;
+}
+.image-manager .img-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.image-manager .img-url {
+  flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px;
+  color: var(--ink-soft); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---------- Auth ---------- */
 .auth-wrap { max-width: 440px; margin: 0 auto; padding: 72px 24px 100px; }
 .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 38px; }
