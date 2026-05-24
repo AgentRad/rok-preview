@@ -528,6 +528,41 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   gap: 18px; flex-wrap: wrap;
 }
 
+/* ---------- Reviews ---------- */
+.reviews-section {
+  margin-top: 56px; padding-top: 32px; border-top: 1px solid var(--line);
+}
+.reviews-head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 22px;
+}
+.reviews-head h3 { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.reviews-summary {
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.review-card-write {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 22px 24px; margin-bottom: 24px;
+}
+.review-form .review-stars {
+  display: inline-flex; align-items: center; gap: 2px;
+}
+.review-form .star-btn {
+  background: none; border: 0; padding: 4px 2px; cursor: pointer;
+  font-size: 26px; line-height: 1; color: var(--line-strong);
+  font-family: inherit;
+}
+.review-form .star-btn.on { color: var(--amber-deep); }
+.review-form .star-btn:hover { color: var(--amber); }
+.review-list { list-style: none; padding: 0; margin: 0; }
+.review-item {
+  padding: 18px 0; border-bottom: 1px solid var(--line);
+}
+.review-item:last-child { border-bottom: none; }
+.review-meta {
+  display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+
 /* ---------- Auth ---------- */
 .auth-wrap { max-width: 440px; margin: 0 auto; padding: 72px 24px 100px; }
 .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 38px; }

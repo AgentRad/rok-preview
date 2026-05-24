@@ -7,6 +7,8 @@ import SiteFooter from "@/components/SiteFooter";
 import ProductImage from "@/components/ProductImage";
 import AddToCart from "@/components/AddToCart";
 import RequestQuote from "@/components/RequestQuote";
+import Stars from "@/components/Stars";
+import WriteReview from "@/components/WriteReview";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,39 @@ export default async function ProductPage({
   const specs = product.specs as Record<string, string>;
   const inStock = product.stock > 0;
   const user = await getCurrentUser();
+
+  const [reviews, ratingAgg, ownReview, eligibleOrder] = await Promise.all([
+    prisma.review.findMany({
+      where: { productId: product.id },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+      include: { buyer: { select: { name: true } } },
+    }),
+    prisma.review.aggregate({
+      where: { productId: product.id },
+      _avg: { rating: true },
+      _count: { _all: true },
+    }),
+    user
+      ? prisma.review.findUnique({
+          where: { buyerId_productId: { buyerId: user.id, productId: product.id } },
+        })
+      : Promise.resolve(null),
+    user
+      ? prisma.order.findFirst({
+          where: {
+            buyerId: user.id,
+            status: "FULFILLED",
+            items: { some: { productId: product.id } },
+          },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const reviewCount = ratingAgg._count._all;
+  const reviewAverage = ratingAgg._avg.rating ?? 0;
+  const canReview = !!user && !!eligibleOrder;
 
   return (
     <>
@@ -52,10 +87,23 @@ export default async function ProductPage({
               <div className="detail-mfr">{product.manufacturer}</div>
               <h1>{product.name}</h1>
               <div className="detail-rating">
-                <span className="rating">★ {product.supplier.rating.toFixed(1)}</span>
-                <span>{product.supplier.reviews} verified reviews</span>
-                <span>·</span>
-                <span>SKU {product.sku}</span>
+                {reviewCount > 0 ? (
+                  <>
+                    <Stars value={reviewAverage} />
+                    <span>
+                      {reviewAverage.toFixed(1)} ({reviewCount} verified review
+                      {reviewCount === 1 ? "" : "s"})
+                    </span>
+                    <span>·</span>
+                    <span>SKU {product.sku}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="muted-text">No reviews yet</span>
+                    <span>·</span>
+                    <span>SKU {product.sku}</span>
+                  </>
+                )}
               </div>
               <div className="detail-price">
                 {product.quoteOnly ? (
@@ -137,6 +185,85 @@ export default async function ProductPage({
               </tbody>
             </table>
             <div className="detail-desc">{product.description}</div>
+          </div>
+
+          <div className="reviews-section">
+            <div className="reviews-head">
+              <h3>Reviews</h3>
+              {reviewCount > 0 && (
+                <div className="reviews-summary">
+                  <Stars value={reviewAverage} size={16} />
+                  <span style={{ fontWeight: 700 }}>
+                    {reviewAverage.toFixed(1)}
+                  </span>
+                  <span className="muted-text" style={{ fontSize: 13 }}>
+                    {reviewCount} verified review
+                    {reviewCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {canReview && (
+              <div className="review-card-write">
+                <div
+                  className="invoice-meta-label"
+                  style={{ marginBottom: 8 }}
+                >
+                  {ownReview ? "Update your review" : "Write a review"}
+                </div>
+                <WriteReview
+                  productId={product.id}
+                  initialRating={ownReview?.rating ?? 0}
+                  initialBody={ownReview?.body ?? ""}
+                />
+              </div>
+            )}
+
+            {!canReview && user && (
+              <p className="muted-text" style={{ fontSize: 13.5 }}>
+                Reviews are open to buyers with a delivered order for this
+                part. Once your order is marked Delivered, you will see the
+                review form here.
+              </p>
+            )}
+            {!user && (
+              <p className="muted-text" style={{ fontSize: 13.5 }}>
+                <Link
+                  href="/login"
+                  style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                >
+                  Sign in
+                </Link>{" "}
+                to write a review after a delivered order.
+              </p>
+            )}
+
+            {reviews.length === 0 ? (
+              <div className="empty-block" style={{ marginTop: 18 }}>
+                <h3>No reviews yet</h3>
+                <p>Verified reviews appear here after delivered orders.</p>
+              </div>
+            ) : (
+              <ul className="review-list">
+                {reviews.map((r) => (
+                  <li key={r.id} className="review-item">
+                    <div className="review-meta">
+                      <Stars value={r.rating} />
+                      <strong style={{ fontSize: 14 }}>{r.buyer.name}</strong>
+                      <span className="muted-text" style={{ fontSize: 12.5 }}>
+                        {r.createdAt.toLocaleDateString()}
+                      </span>
+                    </div>
+                    {r.body && (
+                      <p style={{ marginTop: 6, fontSize: 14, lineHeight: 1.55 }}>
+                        {r.body}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div style={{ marginTop: 28 }}>

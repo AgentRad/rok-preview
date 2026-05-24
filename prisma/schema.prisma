@@ -57,6 +57,7 @@ model User {
   supplier         Supplier?
   orders           Order[]
   resetTokens      PasswordResetToken[]
+  reviews          Review[]
   createdAt        DateTime @default(now())
 }
 
@@ -70,6 +71,23 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  buyer      User     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  buyerId    String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId  String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId String
+  rating     Int
+  body       String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@unique([buyerId, productId])
+  @@index([productId])
+  @@index([supplierId])
 }
 
 model SearchEvent {
@@ -90,6 +108,7 @@ model Supplier {
   user           User?          @relation(fields: [userId], references: [id])
   userId         String?        @unique
   products       Product[]
+  productReviews Review[]
   createdAt      DateTime       @default(now())
 }
 
@@ -113,6 +132,7 @@ model Product {
   active        Boolean        @default(true)
   orderItems    OrderItem[]
   quoteRequests QuoteRequest[]
+  reviews       Review[]
   createdAt     DateTime       @default(now())
 }
 
