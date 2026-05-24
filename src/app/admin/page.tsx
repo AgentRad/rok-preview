@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ApplicationReview from "@/components/ApplicationReview";
+import ReturnActions from "@/components/ReturnActions";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -19,12 +20,18 @@ const STATUS_CLASS: Record<string, string> = {
   DECLINED: "badge-cancelled",
   ISSUED: "badge-pending",
   VOID: "badge-cancelled",
+  OPEN_RMA: "badge-pending",
+  APPROVED_RMA: "badge-approved",
+  REJECTED_RMA: "badge-cancelled",
+  RESOLVED: "badge-fulfilled",
+  APPROVED: "badge-approved",
+  REJECTED: "badge-cancelled",
 };
 
 export default async function AdminConsole() {
   await requireRole("ADMIN");
 
-  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices] =
+  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns] =
     await Promise.all([
       prisma.order.findMany({
         include: { items: true },
@@ -53,6 +60,11 @@ export default async function AdminConsole() {
       prisma.invoice.findMany({
         include: { order: { select: { reference: true } } },
         orderBy: { issuedAt: "desc" },
+        take: 12,
+      }),
+      prisma.returnRequest.findMany({
+        include: { order: { select: { reference: true, buyerName: true } } },
+        orderBy: [{ status: "asc" }, { createdAt: "desc" }],
         take: 12,
       }),
     ]);
@@ -238,6 +250,59 @@ export default async function AdminConsole() {
               </div>
             )}
           </div>
+
+          {returns.length > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <h2>Return requests</h2>
+              </div>
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>RMA</th>
+                      <th>Order</th>
+                      <th>Buyer</th>
+                      <th>Reason</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {returns.map((r) => (
+                      <tr key={r.id}>
+                        <td style={{ fontWeight: 700 }}>{r.reference}</td>
+                        <td>{r.order.reference}</td>
+                        <td>{r.order.buyerName}</td>
+                        <td>
+                          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{r.reason}</div>
+                          {r.details && (
+                            <div className="muted-text" style={{ fontSize: 12 }}>
+                              {r.details}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span className={"badge " + (STATUS_CLASS[r.status] || "")}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td>
+                          {r.status !== "RESOLVED" && r.status !== "REJECTED" ? (
+                            <ReturnActions returnId={r.id} />
+                          ) : r.adminNote ? (
+                            <span className="muted-text" style={{ fontSize: 12 }}>
+                              {r.adminNote}
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="card">
             <div className="card-head">

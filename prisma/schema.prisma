@@ -47,6 +47,13 @@ enum InvoiceStatus {
   VOID
 }
 
+enum ReturnStatus {
+  OPEN
+  APPROVED
+  REJECTED
+  RESOLVED
+}
+
 model User {
   id               String   @id @default(cuid())
   email            String   @unique
@@ -169,6 +176,23 @@ model ProductImage {
   @@index([productId])
 }
 
+model ReturnRequest {
+  id           String       @id @default(cuid())
+  reference    String       @unique
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId      String
+  buyerId      String?
+  reason       String
+  details      String       @default("")
+  status       ReturnStatus @default(OPEN)
+  adminNote    String       @default("")
+  createdAt    DateTime     @default(now())
+  resolvedAt   DateTime?
+
+  @@index([orderId])
+  @@index([status])
+}
+
 model Order {
   id            String      @id @default(cuid())
   reference     String      @unique
@@ -191,8 +215,10 @@ model Order {
   trackingCode  String?
   items         OrderItem[]
   invoice       Invoice?
+  returns       ReturnRequest[]
   createdAt     DateTime    @default(now())
   paidAt        DateTime?
+  cancelledAt   DateTime?
 }
 
 model Invoice {

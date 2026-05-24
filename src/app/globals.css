@@ -645,6 +645,16 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   text-overflow: ellipsis;
 }
 
+.return-list { list-style: none; padding: 0; margin: 0; }
+.return-item {
+  padding: 12px 0; border-bottom: 1px solid var(--line);
+}
+.return-item:last-child { border-bottom: none; }
+.return-actions {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.return-actions input { width: 220px; }
+
 /* ---------- Auth ---------- */
 .auth-wrap { max-width: 440px; margin: 0 auto; padding: 72px 24px 100px; }
 .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 38px; }

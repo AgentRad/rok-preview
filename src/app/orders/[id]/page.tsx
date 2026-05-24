@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PayOrder from "@/components/PayOrder";
+import CancelOrderButton from "@/components/CancelOrderButton";
+import ReturnRequestForm from "@/components/ReturnRequestForm";
 import { formatCents } from "@/lib/money";
 import { trackingLink } from "@/lib/tracking";
 
@@ -24,12 +26,16 @@ export default async function OrderPage({
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id },
-    include: { items: true },
+    include: { items: true, returns: { orderBy: { createdAt: "desc" } } },
   });
   if (!order) notFound();
 
   const paid = order.status !== "PENDING" && order.status !== "CANCELLED";
   const fulfilled = order.status === "FULFILLED";
+  const cancellable =
+    order.status === "PENDING" ||
+    (order.status === "PAID" && order.shipmentStage !== "Shipped" && order.shipmentStage !== "Delivered");
+  const canOpenReturn = order.status === "FULFILLED" || order.shipmentStage === "Delivered";
 
   const stageIndex = (() => {
     if (order.status === "PENDING" || order.status === "CANCELLED") return -1;
@@ -249,7 +255,69 @@ export default async function OrderPage({
             <Link className="btn btn-ghost" href="/account">
               View my orders
             </Link>
+            {cancellable && <CancelOrderButton orderId={order.id} />}
           </div>
+
+          {order.status === "CANCELLED" && (
+            <div className="alert alert-error" style={{ marginTop: 24 }}>
+              This order has been cancelled
+              {order.cancelledAt
+                ? ` on ${order.cancelledAt.toLocaleDateString()}`
+                : ""}
+              . The invoice has been voided.
+            </div>
+          )}
+
+          {canOpenReturn && (
+            <div className="card" style={{ marginTop: 28 }}>
+              <div className="card-head">
+                <h2>Issues with this order</h2>
+              </div>
+              <div className="card-body">
+                {order.returns.length > 0 ? (
+                  <ul className="return-list">
+                    {order.returns.map((r) => (
+                      <li key={r.id} className="return-item">
+                        <div className="invoice-meta-label">
+                          {r.reference} · {r.status}
+                        </div>
+                        <div style={{ fontWeight: 600, marginTop: 4 }}>
+                          {r.reason}
+                        </div>
+                        {r.details && (
+                          <p className="muted-text" style={{ fontSize: 13, marginTop: 4 }}>
+                            {r.details}
+                          </p>
+                        )}
+                        {r.adminNote && (
+                          <p className="muted-text" style={{ fontSize: 13, marginTop: 4 }}>
+                            <strong style={{ color: "var(--ink)" }}>PartsPort:</strong>{" "}
+                            {r.adminNote}
+                          </p>
+                        )}
+                        <div className="muted-text" style={{ fontSize: 12, marginTop: 4 }}>
+                          Opened {r.createdAt.toLocaleDateString()}
+                          {r.resolvedAt
+                            ? ` · resolved ${r.resolvedAt.toLocaleDateString()}`
+                            : ""}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted-text" style={{ fontSize: 13.5, marginBottom: 14 }}>
+                    Inspect the shipment on arrival and note any damage on the
+                    carrier delivery receipt. If something is wrong, file a
+                    return request below within the claim window in the
+                    supplier agreement.
+                  </p>
+                )}
+                <div style={{ marginTop: 12 }}>
+                  <ReturnRequestForm orderId={order.id} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
       <SiteFooter />
