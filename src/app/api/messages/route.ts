@@ -3,7 +3,10 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { sendThreadMessage } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
-import { userHasAccessToSupplier } from "@/lib/supplier-access";
+import {
+  canSendMessages,
+  userHasAccessToSupplier,
+} from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 
@@ -50,7 +53,7 @@ export async function POST(req: Request) {
       const checks = await Promise.all(
         supplierIds.map((id) => userHasAccessToSupplier(user.id, id))
       );
-      isOrderSupplier = checks.some((c) => c.ok);
+      isOrderSupplier = checks.some((c) => c.ok && canSendMessages(c.role));
     }
     if (!isBuyer && !isAdmin && !isOrderSupplier) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
@@ -74,9 +77,14 @@ export async function POST(req: Request) {
     }
     const isBuyer = !!quote.buyerId && user.id === quote.buyerId;
     const isAdmin = user.role === "ADMIN";
-    const isQuoteSupplier =
-      user.role === "SUPPLIER" &&
-      (await userHasAccessToSupplier(user.id, quote.product.supplierId)).ok;
+    let isQuoteSupplier = false;
+    if (user.role === "SUPPLIER") {
+      const access = await userHasAccessToSupplier(
+        user.id,
+        quote.product.supplierId
+      );
+      isQuoteSupplier = access.ok && canSendMessages(access.role);
+    }
     if (!isBuyer && !isAdmin && !isQuoteSupplier) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }

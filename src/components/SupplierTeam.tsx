@@ -3,9 +3,18 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+type SupplierRole =
+  | "OWNER"
+  | "ADMIN"
+  | "SALES"
+  | "FULFILLMENT"
+  | "CATALOG"
+  | "FINANCE"
+  | "VIEWER";
+
 type Member = {
   id: string;
-  role: "OWNER" | "MEMBER";
+  role: SupplierRole;
   createdAt: string;
   user: { id: string; name: string; email: string };
 };
@@ -13,22 +22,52 @@ type Member = {
 type Invite = {
   id: string;
   email: string;
-  role: "OWNER" | "MEMBER";
+  role: SupplierRole;
   expiresAt: string;
 };
 
 type TeamState = {
-  role: "OWNER" | "MEMBER";
+  role: SupplierRole;
   canManageTeam: boolean;
   members: Member[];
   invites: Invite[];
 };
 
+const ROLE_LABEL: Record<SupplierRole, string> = {
+  OWNER: "Owner",
+  ADMIN: "Admin",
+  SALES: "Sales",
+  FULFILLMENT: "Fulfillment",
+  CATALOG: "Catalog",
+  FINANCE: "Finance",
+  VIEWER: "Viewer",
+};
+
+const ROLE_DESCRIPTION: Record<SupplierRole, string> = {
+  OWNER: "Full access plus team management.",
+  ADMIN: "Full operational access. Cannot manage the team.",
+  SALES: "RFQs, view orders, invoices and messaging. No catalog edits.",
+  FULFILLMENT: "Orders, stages, carrier and tracking, messaging.",
+  CATALOG: "Products, prices, stock, images, bulk import.",
+  FINANCE: "Payouts, invoices, CSV exports.",
+  VIEWER: "Read-only across everything.",
+};
+
+const SELECTABLE: SupplierRole[] = [
+  "OWNER",
+  "ADMIN",
+  "SALES",
+  "FULFILLMENT",
+  "CATALOG",
+  "FINANCE",
+  "VIEWER",
+];
+
 export default function SupplierTeam() {
   const router = useRouter();
   const [state, setState] = useState<TeamState | null>(null);
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"OWNER" | "MEMBER">("MEMBER");
+  const [role, setRole] = useState<SupplierRole>("ADMIN");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -61,8 +100,8 @@ export default function SupplierTeam() {
       }
       setNotice(
         data.added === "existing-user"
-          ? `${email} was already on PartsPort and has been added to the team.`
-          : `Invite sent to ${email}. It expires in 14 days.`
+          ? `${email} was already on PartsPort and has been added as ${ROLE_LABEL[role]}.`
+          : `Invite sent to ${email} (${ROLE_LABEL[role]}). It expires in 14 days.`
       );
       setEmail("");
       await reload();
@@ -84,7 +123,7 @@ export default function SupplierTeam() {
     }
   }
 
-  async function changeRole(id: string, next: "OWNER" | "MEMBER") {
+  async function changeRole(id: string, next: SupplierRole) {
     const res = await fetch(`/api/supplier/team/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -132,44 +171,39 @@ export default function SupplierTeam() {
                   <td>{m.user.name}</td>
                   <td className="muted-text" style={{ fontSize: 13 }}>{m.user.email}</td>
                   <td>
-                    <span
-                      className={
-                        "badge " +
-                        (m.role === "OWNER" ? "badge-fulfilled" : "badge-paid")
-                      }
-                    >
-                      {m.role}
-                    </span>
+                    {state.canManageTeam ? (
+                      <select
+                        value={m.role}
+                        onChange={(e) => changeRole(m.id, e.target.value as SupplierRole)}
+                        className="input-sm"
+                      >
+                        {SELECTABLE.map((r) => (
+                          <option key={r} value={r}>
+                            {ROLE_LABEL[r]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span
+                        className={
+                          "badge " +
+                          (m.role === "OWNER" ? "badge-fulfilled" : "badge-paid")
+                        }
+                      >
+                        {ROLE_LABEL[m.role]}
+                      </span>
+                    )}
                   </td>
                   <td>{new Date(m.createdAt).toLocaleDateString()}</td>
                   <td>
                     {state.canManageTeam && (
-                      <div className="row-gap">
-                        {m.role === "MEMBER" ? (
-                          <button
-                            type="button"
-                            className="link-btn"
-                            onClick={() => changeRole(m.id, "OWNER")}
-                          >
-                            Promote to owner
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="link-btn"
-                            onClick={() => changeRole(m.id, "MEMBER")}
-                          >
-                            Demote to member
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="link-btn link-btn-danger"
-                          onClick={() => removeMember(m.id)}
-                        >
-                          Remove
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className="link-btn link-btn-danger"
+                        onClick={() => removeMember(m.id)}
+                      >
+                        Remove
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -181,10 +215,7 @@ export default function SupplierTeam() {
 
       {state.invites.length > 0 && (
         <div style={{ marginBottom: 18 }}>
-          <div
-            className="invoice-meta-label"
-            style={{ marginBottom: 8 }}
-          >
+          <div className="invoice-meta-label" style={{ marginBottom: 8 }}>
             Pending invites
           </div>
           <ul className="return-list">
@@ -194,7 +225,8 @@ export default function SupplierTeam() {
                   <div>
                     <strong>{inv.email}</strong>{" "}
                     <span className="muted-text" style={{ fontSize: 12.5 }}>
-                      ({inv.role.toLowerCase()}, expires {new Date(inv.expiresAt).toLocaleDateString()})
+                      ({ROLE_LABEL[inv.role]}, expires{" "}
+                      {new Date(inv.expiresAt).toLocaleDateString()})
                     </span>
                   </div>
                   {state.canManageTeam && (
@@ -233,10 +265,13 @@ export default function SupplierTeam() {
               <select
                 id="ti-role"
                 value={role}
-                onChange={(e) => setRole(e.target.value as "OWNER" | "MEMBER")}
+                onChange={(e) => setRole(e.target.value as SupplierRole)}
               >
-                <option value="MEMBER">Member (catalog, orders, RFQs, payouts)</option>
-                <option value="OWNER">Owner (also can manage team)</option>
+                {SELECTABLE.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABEL[r]} — {ROLE_DESCRIPTION[r]}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -246,7 +281,8 @@ export default function SupplierTeam() {
         </form>
       ) : (
         <p className="muted-text" style={{ fontSize: 13 }}>
-          Only the supplier owner can invite or remove team members.
+          Only the supplier owner can invite or remove team members. Your role:{" "}
+          <strong>{ROLE_LABEL[state.role]}</strong>.
         </p>
       )}
     </div>

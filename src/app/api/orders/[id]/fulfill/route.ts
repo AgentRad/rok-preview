@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  canFulfillOrders,
+  userHasAccessToSupplier,
+} from "@/lib/supplier-access";
 
 export async function POST(
   _req: Request,
@@ -25,14 +29,18 @@ export async function POST(
     );
   }
   if (user.role === "SUPPLIER") {
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    });
-    const involved =
-      supplier &&
-      order.items.some((i) => i.product.supplierId === supplier.id);
-    if (!involved) {
-      return NextResponse.json({ error: "Not your order." }, { status: 403 });
+    const supplierIds = Array.from(
+      new Set(order.items.map((i) => i.product.supplierId))
+    );
+    const checks = await Promise.all(
+      supplierIds.map((sid) => userHasAccessToSupplier(user.id, sid))
+    );
+    const allowed = checks.some((c) => c.ok && canFulfillOrders(c.role));
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Your role on this order doesn't allow fulfillment." },
+        { status: 403 }
+      );
     }
   }
   await prisma.order.update({

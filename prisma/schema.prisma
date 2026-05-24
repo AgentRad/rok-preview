@@ -61,7 +61,12 @@ enum PayoutStatus {
 
 enum SupplierMemberRole {
   OWNER
-  MEMBER
+  ADMIN
+  SALES
+  FULFILLMENT
+  CATALOG
+  FINANCE
+  VIEWER
 }
 
 model User {
@@ -161,7 +166,7 @@ model SupplierMember {
   supplierId String
   user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId     String
-  role       SupplierMemberRole @default(MEMBER)
+  role       SupplierMemberRole @default(ADMIN)
   createdAt  DateTime           @default(now())
 
   @@unique([supplierId, userId])
@@ -173,7 +178,7 @@ model SupplierInvite {
   supplier    Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   supplierId  String
   email       String
-  role        SupplierMemberRole @default(MEMBER)
+  role        SupplierMemberRole @default(ADMIN)
   tokenHash   String             @unique
   invitedById String?
   expiresAt   DateTime

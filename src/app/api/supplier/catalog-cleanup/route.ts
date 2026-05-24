@@ -5,7 +5,7 @@ import {
   isCatalogAIEnabled,
   rowsToCsv,
 } from "@/lib/catalog-import-ai";
-import { getSupplierContextForUser } from "@/lib/supplier-access";
+import { canEditCatalog, getSupplierContextForUser } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +21,12 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "No supplier profile linked to this account." },
         { status: 400 }
+      );
+    }
+    if (!canEditCatalog(ctx.role)) {
+      return NextResponse.json(
+        { error: "Your role doesn't allow editing the catalog." },
+        { status: 403 }
       );
     }
   }

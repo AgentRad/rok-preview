@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { getSupplierContextForUser } from "@/lib/supplier-access";
+import { canRunExports, getSupplierContextForUser } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,11 +30,19 @@ export async function GET() {
     user.role === "SUPPLIER"
       ? await getSupplierContextForUser(user.id)
       : null;
-  if (user.role === "SUPPLIER" && !ctx) {
-    return NextResponse.json(
-      { error: "No supplier profile linked to this account." },
-      { status: 400 }
-    );
+  if (user.role === "SUPPLIER") {
+    if (!ctx) {
+      return NextResponse.json(
+        { error: "No supplier profile linked to this account." },
+        { status: 400 }
+      );
+    }
+    if (!canRunExports(ctx.role)) {
+      return NextResponse.json(
+        { error: "Your role doesn't allow running exports." },
+        { status: 403 }
+      );
+    }
   }
   const supplier = ctx?.supplier ?? null;
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { SupplierMemberRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -7,6 +8,22 @@ import {
 } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
+
+const VALID_ROLES: SupplierMemberRole[] = [
+  "OWNER",
+  "ADMIN",
+  "SALES",
+  "FULFILLMENT",
+  "CATALOG",
+  "FINANCE",
+  "VIEWER",
+];
+
+function parseRole(input: unknown): SupplierMemberRole | null {
+  if (typeof input !== "string") return null;
+  const upper = input.toUpperCase() as SupplierMemberRole;
+  return VALID_ROLES.includes(upper) ? upper : null;
+}
 
 export async function PATCH(
   req: Request,
@@ -20,7 +37,10 @@ export async function PATCH(
   }
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
-  const role = body.role === "OWNER" ? "OWNER" : "MEMBER";
+  const role = parseRole(body.role);
+  if (!role) {
+    return NextResponse.json({ error: "Unknown role." }, { status: 400 });
+  }
 
   const member = await prisma.supplierMember.findUnique({ where: { id } });
   if (!member || member.supplierId !== ctx.supplier.id) {
@@ -33,7 +53,7 @@ export async function PATCH(
     });
     if (ownerCount <= 1) {
       return NextResponse.json(
-        { error: "Promote another member to owner before demoting yourself." },
+        { error: "Promote another member to owner before demoting." },
         { status: 400 }
       );
     }

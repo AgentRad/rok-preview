@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
-import { userHasAccessToSupplier } from "@/lib/supplier-access";
+import { canEditCatalog, userHasAccessToSupplier } from "@/lib/supplier-access";
 
 export async function PATCH(
   req: Request,
@@ -21,6 +21,12 @@ export async function PATCH(
     const access = await userHasAccessToSupplier(user.id, product.supplierId);
     if (!access.ok) {
       return NextResponse.json({ error: "Not your product." }, { status: 403 });
+    }
+    if (!canEditCatalog(access.role)) {
+      return NextResponse.json(
+        { error: "Your role doesn't allow editing the catalog." },
+        { status: 403 }
+      );
     }
   }
 

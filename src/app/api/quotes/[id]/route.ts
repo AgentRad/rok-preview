@@ -3,7 +3,10 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { sendQuoteReady } from "@/lib/email";
-import { userHasAccessToSupplier } from "@/lib/supplier-access";
+import {
+  canRespondToQuotes,
+  userHasAccessToSupplier,
+} from "@/lib/supplier-access";
 
 export async function PATCH(
   req: Request,
@@ -46,6 +49,14 @@ export async function PATCH(
       if (!access.ok) {
         return NextResponse.json(
           { error: "Not your product." },
+          { status: 403 }
+        );
+      }
+      if (!canRespondToQuotes(access.role)) {
+        return NextResponse.json(
+          {
+            error: "Your role doesn't allow responding to RFQs.",
+          },
           { status: 403 }
         );
       }

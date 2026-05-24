@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { userHasAccessToSupplier } from "@/lib/supplier-access";
+import { canEditCatalog, userHasAccessToSupplier } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 
@@ -12,7 +12,7 @@ async function ownedProduct(userId: string, productId: string) {
   });
   if (!product) return null;
   const access = await userHasAccessToSupplier(userId, product.supplierId);
-  if (!access.ok) return null;
+  if (!access.ok || !canEditCatalog(access.role)) return null;
   return product;
 }
 

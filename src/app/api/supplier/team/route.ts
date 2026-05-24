@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
+import type { SupplierMemberRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -12,6 +13,22 @@ import { siteUrl } from "@/lib/site-url";
 export const runtime = "nodejs";
 
 const INVITE_DAYS = 14;
+
+const VALID_ROLES: SupplierMemberRole[] = [
+  "OWNER",
+  "ADMIN",
+  "SALES",
+  "FULFILLMENT",
+  "CATALOG",
+  "FINANCE",
+  "VIEWER",
+];
+
+function parseRole(input: unknown): SupplierMemberRole {
+  if (typeof input !== "string") return "ADMIN";
+  const upper = input.toUpperCase() as SupplierMemberRole;
+  return VALID_ROLES.includes(upper) ? upper : "ADMIN";
+}
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -68,7 +85,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const email = String(body.email || "").toLowerCase().trim();
-  const role = body.role === "OWNER" ? "OWNER" : "MEMBER";
+  const role = parseRole(body.role);
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: "A valid email is required." }, { status: 400 });
   }

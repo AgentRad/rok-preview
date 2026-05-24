@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { parseCsvWithHeader } from "@/lib/csv";
 import { ICON_KEYS } from "@/components/PartIcon";
-import { getSupplierContextForUser } from "@/lib/supplier-access";
+import { canEditCatalog, getSupplierContextForUser } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 
@@ -96,6 +96,12 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "No supplier profile linked to this account." },
       { status: 400 }
+    );
+  }
+  if (!canEditCatalog(ctx.role)) {
+    return NextResponse.json(
+      { error: "Your role doesn't allow editing the catalog." },
+      { status: 403 }
     );
   }
   const supplier = ctx.supplier;

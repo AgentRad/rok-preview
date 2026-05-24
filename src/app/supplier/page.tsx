@@ -1,6 +1,16 @@
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import { getSupplierContextForUser } from "@/lib/supplier-access";
+import {
+  ROLE_LABEL,
+  canEditCatalog,
+  canFulfillOrders,
+  canRespondToQuotes,
+  canRunExports,
+  canViewOrders,
+  canViewPayouts,
+  canViewQuotes,
+  getSupplierContextForUser,
+} from "@/lib/supplier-access";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import Link from "next/link";
@@ -23,12 +33,21 @@ const STATUS_CLASS: Record<string, string> = {
 export default async function SupplierDashboard() {
   const user = await requireRole("SUPPLIER");
   const ctx = await getSupplierContextForUser(user.id);
+  const role = ctx?.role ?? null;
   const supplier = ctx
     ? await prisma.supplier.findUnique({
         where: { id: ctx.supplier.id },
         include: { products: { orderBy: { createdAt: "asc" } } },
       })
     : null;
+
+  const showCatalog = canEditCatalog(role);
+  const showQuotes = canViewQuotes(role);
+  const canRespond = canRespondToQuotes(role);
+  const showOrders = canViewOrders(role);
+  const canFulfill = canFulfillOrders(role);
+  const showPayouts = canViewPayouts(role);
+  const showExports = canRunExports(role);
 
   if (!supplier) {
     return (
@@ -98,6 +117,7 @@ export default async function SupplierDashboard() {
           <p className="page-sub">
             Supplier dashboard · ★ {supplier.rating.toFixed(1)} ·{" "}
             {supplier.onTimeRate.toFixed(1)}% on-time
+            {role ? ` · You are signed in as ${ROLE_LABEL[role]}` : ""}
           </p>
 
           <div className="kpi-grid">
@@ -125,21 +145,23 @@ export default async function SupplierDashboard() {
             </div>
           </div>
 
-          <SupplierProductManager
-            products={supplier.products.map((p) => ({
-              id: p.id,
-              sku: p.sku,
-              name: p.name,
-              category: p.category,
-              manufacturer: p.manufacturer,
-              priceCents: p.priceCents,
-              unit: p.unit,
-              etaDays: p.etaDays,
-              stock: p.stock,
-              active: p.active,
-              imageUrl: p.imageUrl,
-            }))}
-          />
+          {showCatalog && (
+            <SupplierProductManager
+              products={supplier.products.map((p) => ({
+                id: p.id,
+                sku: p.sku,
+                name: p.name,
+                category: p.category,
+                manufacturer: p.manufacturer,
+                priceCents: p.priceCents,
+                unit: p.unit,
+                etaDays: p.etaDays,
+                stock: p.stock,
+                active: p.active,
+                imageUrl: p.imageUrl,
+              }))}
+            />
+          )}
 
           <div className="card">
             <div className="card-head">
@@ -150,25 +172,30 @@ export default async function SupplierDashboard() {
             </div>
           </div>
 
-          <div className="card">
-            <div className="card-head">
-              <h2>Bulk catalog import (CSV)</h2>
-              <a
-                href="/api/supplier/orders.csv"
-                className="btn btn-ghost btn-sm"
-                download
-              >
-                Export your orders (CSV)
-              </a>
+          {showCatalog && (
+            <div className="card">
+              <div className="card-head">
+                <h2>Bulk catalog import (CSV)</h2>
+                {showExports && (
+                  <a
+                    href="/api/supplier/orders.csv"
+                    className="btn btn-ghost btn-sm"
+                    download
+                  >
+                    Export your orders (CSV)
+                  </a>
+                )}
+              </div>
+              <div className="card-body">
+                <CatalogCsvImport />
+              </div>
             </div>
-            <div className="card-body">
-              <CatalogCsvImport />
-            </div>
-          </div>
+          )}
 
-          <div className="card">
-            <div className="card-head">
-              <h2>Payouts</h2>
+          {showPayouts && (
+            <div className="card">
+              <div className="card-head">
+                <h2>Payouts</h2>
               <div style={{ display: "flex", gap: 18, fontSize: 13 }}>
                 <span className="muted-text">
                   Due <strong style={{ color: "var(--ink)" }}>{formatCents(payoutsDue)}</strong>
@@ -223,7 +250,9 @@ export default async function SupplierDashboard() {
               </div>
             )}
           </div>
+          )}
 
+          {showQuotes && (
           <div className="card">
             <div className="card-head">
               <h2>Quote requests{openQuotes > 0 ? ` · ${openQuotes} open` : ""}</h2>
@@ -271,12 +300,14 @@ export default async function SupplierDashboard() {
                           </span>
                         </td>
                         <td className="num">
-                          {q.status === "OPEN" ? (
+                          {q.status === "OPEN" && canRespond ? (
                             <QuoteResponder quoteId={q.id} />
                           ) : q.quotedUnitCents != null ? (
                             `${formatCents(q.quotedUnitCents)} / unit`
                           ) : (
-                            "Sent"
+                            <span className="muted-text" style={{ fontSize: 12 }}>
+                              {canRespond ? "Sent" : "Awaiting response"}
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -286,7 +317,9 @@ export default async function SupplierDashboard() {
               </div>
             )}
           </div>
+          )}
 
+          {showOrders && (
           <div className="card">
             <div className="card-head">
               <h2>Incoming orders</h2>
@@ -336,7 +369,7 @@ export default async function SupplierDashboard() {
                           </td>
                           <td className="num">{formatCents(mineTotal)}</td>
                           <td className="num">
-                            {o.status === "PAID" && (
+                            {o.status === "PAID" && canFulfill && (
                               <FulfillButton orderId={o.id} />
                             )}
                           </td>
@@ -348,6 +381,7 @@ export default async function SupplierDashboard() {
               </div>
             )}
           </div>
+          )}
         </div>
       </main>
       <SiteFooter />
