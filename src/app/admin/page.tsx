@@ -129,6 +129,13 @@ export default async function AdminConsole() {
           <div className="card">
             <div className="card-head">
               <h2>Recent orders</h2>
+              <a
+                href="/api/admin/orders.csv"
+                className="btn btn-ghost btn-sm"
+                download
+              >
+                Export all orders (CSV)
+              </a>
             </div>
             {orders.length === 0 ? (
               <div className="empty-block">

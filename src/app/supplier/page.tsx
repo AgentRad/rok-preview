@@ -4,6 +4,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import Link from "next/link";
 import SupplierProductManager from "@/components/SupplierProductManager";
+import CatalogCsvImport from "@/components/CatalogCsvImport";
 import FulfillButton from "@/components/FulfillButton";
 import QuoteResponder from "@/components/QuoteResponder";
 import { formatCents } from "@/lib/money";
@@ -121,6 +122,22 @@ export default async function SupplierDashboard() {
               imageUrl: p.imageUrl,
             }))}
           />
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Bulk catalog import (CSV)</h2>
+              <a
+                href="/api/supplier/orders.csv"
+                className="btn btn-ghost btn-sm"
+                download
+              >
+                Export your orders (CSV)
+              </a>
+            </div>
+            <div className="card-body">
+              <CatalogCsvImport />
+            </div>
+          </div>
 
           <div className="card">
             <div className="card-head">

@@ -1,0 +1,228 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { dollarsToCents } from "@/lib/money";
+import { parseCsvWithHeader } from "@/lib/csv";
+import { ICON_KEYS } from "@/components/PartIcon";
+
+export const runtime = "nodejs";
+
+type ParsedRow = {
+  rowNumber: number;
+  sku: string;
+  name: string;
+  category: string;
+  manufacturer: string;
+  icon: string;
+  price: number;
+  unit: string;
+  etaDays: number;
+  stock: number;
+  description: string;
+  imageUrl: string;
+  error: string | null;
+  exists: boolean;
+};
+
+function normalizeRow(
+  raw: Record<string, string>,
+  rowNumber: number
+): ParsedRow {
+  const sku = String(raw.sku || raw.SKU || raw["Part Number"] || "")
+    .trim()
+    .toUpperCase();
+  const name = (raw.name || raw.Name || raw["Part Name"] || "").trim();
+  const category = (raw.category || raw.Category || "").trim();
+  const manufacturer = (raw.manufacturer || raw.Manufacturer || raw.brand || "").trim();
+  const iconRaw = (raw.icon || raw.Icon || "").trim().toLowerCase();
+  const icon = ICON_KEYS.includes(iconRaw) ? iconRaw : "gear";
+  const priceStr = (raw.price || raw.Price || raw.priceUSD || "")
+    .replace(/[$,\s]/g, "");
+  const price = Number(priceStr);
+  const unit = (raw.unit || raw.Unit || "each").trim() || "each";
+  const etaDays = Math.max(
+    1,
+    Math.floor(Number(raw.etaDays || raw["Lead Time"] || raw["ETA Days"] || "3") || 3)
+  );
+  const stock = Math.max(
+    0,
+    Math.floor(Number(raw.stock || raw.Stock || "0") || 0)
+  );
+  const description = (raw.description || raw.Description || "").trim();
+  const imageUrl = (raw.imageUrl || raw.image || raw.photo || "").trim();
+
+  let error: string | null = null;
+  if (!sku) error = "Missing SKU";
+  else if (!name) error = "Missing Name";
+  else if (!category) error = "Missing Category";
+  else if (!manufacturer) error = "Missing Manufacturer";
+  else if (!(price > 0)) error = "Price must be > 0";
+
+  return {
+    rowNumber,
+    sku,
+    name,
+    category,
+    manufacturer,
+    icon,
+    price,
+    unit,
+    etaDays,
+    stock,
+    description,
+    imageUrl,
+    error,
+    exists: false,
+  };
+}
+
+export async function POST(req: Request) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "SUPPLIER") {
+    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+  }
+  const supplier = await prisma.supplier.findUnique({
+    where: { userId: user.id },
+  });
+  if (!supplier) {
+    return NextResponse.json(
+      { error: "No supplier profile linked to this account." },
+      { status: 400 }
+    );
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const csv = String(body.csv || "");
+  const commit = Boolean(body.commit);
+
+  if (!csv.trim()) {
+    return NextResponse.json(
+      { error: "Paste CSV content with a header row." },
+      { status: 400 }
+    );
+  }
+
+  const raw = parseCsvWithHeader(csv);
+  if (raw.length === 0) {
+    return NextResponse.json(
+      { error: "No data rows found below the header." },
+      { status: 400 }
+    );
+  }
+
+  const rows = raw.map((r, i) => normalizeRow(r, i + 2));
+
+  // Detect in-file duplicates: same SKU twice.
+  const seen = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.sku || r.error) continue;
+    if (seen.has(r.sku)) {
+      r.error = `Duplicate SKU in this file (also row ${seen.get(r.sku)})`;
+    } else {
+      seen.set(r.sku, r.rowNumber);
+    }
+  }
+
+  // Mark rows whose SKU already exists; those owned by another supplier are
+  // a hard error to keep one supplier from overwriting another's listing.
+  const skus = rows.map((r) => r.sku).filter(Boolean);
+  if (skus.length > 0) {
+    const existing = await prisma.product.findMany({
+      where: { sku: { in: skus } },
+      select: { sku: true, supplierId: true },
+    });
+    const map = new Map(existing.map((p) => [p.sku, p.supplierId]));
+    for (const r of rows) {
+      if (!r.sku || r.error) continue;
+      const owner = map.get(r.sku);
+      if (owner) {
+        if (owner !== supplier.id) {
+          r.error = "SKU already listed by another supplier";
+        } else {
+          r.exists = true;
+        }
+      }
+    }
+  }
+
+  const valid = rows.filter((r) => !r.error);
+  const invalid = rows.filter((r) => r.error);
+  const created = valid.filter((r) => !r.exists).length;
+  const updated = valid.filter((r) => r.exists).length;
+
+  if (!commit) {
+    return NextResponse.json({
+      ok: true,
+      preview: true,
+      counts: {
+        total: rows.length,
+        valid: valid.length,
+        invalid: invalid.length,
+        created,
+        updated,
+      },
+      rows,
+    });
+  }
+
+  let createdCount = 0;
+  let updatedCount = 0;
+  for (const r of valid) {
+    const priceCents = dollarsToCents(r.price);
+    if (r.exists) {
+      await prisma.product.update({
+        where: { sku: r.sku },
+        data: {
+          name: r.name,
+          category: r.category,
+          manufacturer: r.manufacturer,
+          icon: r.icon,
+          imageUrl: r.imageUrl || null,
+          priceCents,
+          unit: r.unit,
+          etaDays: r.etaDays,
+          stock: r.stock,
+          description: r.description || undefined,
+        },
+      });
+      updatedCount++;
+    } else {
+      const product = await prisma.product.create({
+        data: {
+          sku: r.sku,
+          name: r.name,
+          category: r.category,
+          manufacturer: r.manufacturer,
+          icon: r.icon,
+          imageUrl: r.imageUrl || null,
+          priceCents,
+          unit: r.unit,
+          etaDays: r.etaDays,
+          stock: r.stock,
+          description: r.description || `${r.name} supplied by ${supplier.name}.`,
+          specs: {},
+          supplierId: supplier.id,
+          active: true,
+        },
+      });
+      if (r.imageUrl) {
+        await prisma.productImage.create({
+          data: { productId: product.id, url: r.imageUrl, position: 0 },
+        });
+      }
+      createdCount++;
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    preview: false,
+    counts: {
+      total: rows.length,
+      created: createdCount,
+      updated: updatedCount,
+      invalid: invalid.length,
+    },
+    rows,
+  });
+}
