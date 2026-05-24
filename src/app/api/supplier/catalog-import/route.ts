@@ -20,9 +20,15 @@ type ParsedRow = {
   stock: number;
   description: string;
   imageUrl: string;
+  quoteOnly: boolean;
   error: string | null;
   exists: boolean;
 };
+
+function parseBool(s: string): boolean {
+  const t = s.trim().toLowerCase();
+  return t === "true" || t === "1" || t === "yes" || t === "y" || t === "quote" || t === "quote only" || t === "quote-only";
+}
 
 function normalizeRow(
   raw: Record<string, string>,
@@ -50,6 +56,8 @@ function normalizeRow(
   );
   const description = (raw.description || raw.Description || "").trim();
   const imageUrl = (raw.imageUrl || raw.image || raw.photo || "").trim();
+  const quoteOnlyRaw = (raw.quoteOnly || raw["Quote Only"] || raw.quote || "").trim();
+  const quoteOnly = quoteOnlyRaw ? parseBool(quoteOnlyRaw) : price >= 3000;
 
   let error: string | null = null;
   if (!sku) error = "Missing SKU";
@@ -71,6 +79,7 @@ function normalizeRow(
     stock,
     description,
     imageUrl,
+    quoteOnly,
     error,
     exists: false,
   };
@@ -182,6 +191,7 @@ export async function POST(req: Request) {
           unit: r.unit,
           etaDays: r.etaDays,
           stock: r.stock,
+          quoteOnly: r.quoteOnly,
           description: r.description || undefined,
         },
       });
@@ -199,6 +209,7 @@ export async function POST(req: Request) {
           unit: r.unit,
           etaDays: r.etaDays,
           stock: r.stock,
+          quoteOnly: r.quoteOnly,
           description: r.description || `${r.name} supplied by ${supplier.name}.`,
           specs: {},
           supplierId: supplier.id,

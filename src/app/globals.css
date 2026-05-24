@@ -676,6 +676,12 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   background: var(--surface); color: var(--ink); resize: vertical;
 }
 
+.ai-cleanup-block {
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--amber-deep);
+  border-radius: var(--radius-sm); padding: 16px 18px; margin-bottom: 4px;
+}
+
 /* ---------- Auth ---------- */
 .auth-wrap { max-width: 440px; margin: 0 auto; padding: 72px 24px 100px; }
 .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 38px; }

@@ -24,8 +24,15 @@ type Preview = {
   rows: Row[];
 };
 
-const SAMPLE = `sku,name,category,manufacturer,icon,price,unit,etaDays,stock,description
-EX-001,Sample 100A breaker,Switchgear & Breakers,Eaton,breaker,420,each,5,12,Sample product line.
+type CleanupRow = {
+  sku: string;
+  name: string;
+  confidence: "high" | "medium" | "low";
+  notes: string;
+};
+
+const SAMPLE = `sku,name,category,manufacturer,price,unit,etaDays,stock,quoteOnly,description
+EX-001,Sample 100A breaker,Switchgear & Breakers,Eaton,420,each,5,12,false,Sample product line.
 `;
 
 export default function CatalogCsvImport() {
@@ -35,6 +42,39 @@ export default function CatalogCsvImport() {
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [done, setDone] = useState<Preview | null>(null);
+
+  const [messy, setMessy] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiFlags, setAiFlags] = useState<CleanupRow[] | null>(null);
+
+  async function cleanupWithAI() {
+    if (!messy.trim()) return;
+    setAiBusy(true);
+    setAiError("");
+    setAiFlags(null);
+    try {
+      const res = await fetch("/api/supplier/catalog-cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: messy }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAiError(data.error || "AI cleanup failed.");
+        return;
+      }
+      setCsv(data.csv || "");
+      setPreview(null);
+      setAiFlags(
+        ((data.rows || []) as CleanupRow[]).filter(
+          (r) => r.confidence === "low" || (r.notes && r.notes.trim())
+        )
+      );
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   async function send(commit: boolean) {
     setBusy(true);
@@ -73,12 +113,79 @@ export default function CatalogCsvImport() {
         </div>
       )}
 
+      <div className="ai-cleanup-block">
+        <div className="invoice-meta-label" style={{ marginBottom: 6 }}>
+          Smart import (AI)
+        </div>
+        <p className="muted-text" style={{ fontSize: 13, marginBottom: 8 }}>
+          Paste anything: a messy price sheet, an Excel copy-paste, an email
+          body, a CSV with the wrong headers. The AI converts it into the
+          PartsPort catalog format below. Nothing goes live until you preview
+          and import.
+        </p>
+        <textarea
+          value={messy}
+          onChange={(e) => setMessy(e.target.value)}
+          placeholder="Paste any catalog text or table here..."
+          spellCheck={false}
+          style={{
+            width: "100%",
+            minHeight: 130,
+            fontFamily: "var(--mono)",
+            fontSize: 12.5,
+            padding: 12,
+            border: "1px solid var(--line-strong)",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--surface)",
+          }}
+        />
+        <div className="row-gap" style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            className="btn btn-dark btn-sm"
+            onClick={cleanupWithAI}
+            disabled={aiBusy || !messy.trim()}
+          >
+            {aiBusy ? "Cleaning up…" : "Clean up with AI"}
+          </button>
+          <span className="muted-text" style={{ fontSize: 12 }}>
+            The cleaned CSV lands in the box below for you to review.
+          </span>
+        </div>
+        {aiError && (
+          <div className="alert alert-error" style={{ marginTop: 8 }}>
+            {aiError}
+          </div>
+        )}
+        {aiFlags && aiFlags.length > 0 && (
+          <div className="alert alert-info" style={{ marginTop: 8 }}>
+            <strong>{aiFlags.length} row{aiFlags.length === 1 ? "" : "s"}</strong>{" "}
+            need a human look before import:
+            <ul style={{ margin: "8px 0 0 18px", fontSize: 13 }}>
+              {aiFlags.slice(0, 8).map((r, i) => (
+                <li key={r.sku || i}>
+                  <strong>{r.sku || "(no SKU)"}</strong>
+                  {r.name ? ` ${r.name}` : ""}
+                  {r.notes ? `: ${r.notes}` : ""}
+                  {r.confidence === "low" ? " (low confidence)" : ""}
+                </li>
+              ))}
+              {aiFlags.length > 8 && (
+                <li>…and {aiFlags.length - 8} more</li>
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div style={{ height: 1, background: "var(--line)", margin: "20px 0" }} />
+
       <p className="muted-text" style={{ fontSize: 13.5, marginBottom: 10 }}>
-        Paste CSV with a header row. Required columns:{" "}
+        Or paste CSV directly. Required columns:{" "}
         <code style={{ fontFamily: "var(--mono)" }}>
           sku, name, category, manufacturer, price
         </code>
-        . Optional: <code style={{ fontFamily: "var(--mono)" }}>icon, unit, etaDays, stock, description, imageUrl</code>.
+        . Optional: <code style={{ fontFamily: "var(--mono)" }}>unit, etaDays, stock, quoteOnly, description, imageUrl</code>.
       </p>
       <textarea
         value={csv}
