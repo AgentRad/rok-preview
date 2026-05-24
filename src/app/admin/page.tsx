@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import SiteHeader from "@/components/SiteHeader";
-import SiteFooter from "@/components/SiteFooter";
 import ApplicationReview from "@/components/ApplicationReview";
 import ReturnActions from "@/components/ReturnActions";
 import AddSupplierForm from "@/components/AddSupplierForm";
@@ -75,11 +73,9 @@ export default async function AdminConsole() {
   const revenue = paidAgg._sum.feeCents || 0;
 
   return (
-    <>
-      <SiteHeader />
-      <main id="main">
-        <div className="page-pad">
-          <h1 className="page-title">Admin console</h1>
+    <main id="main">
+      <div className="page-pad">
+        <h1 className="page-title">Admin console</h1>
           <p className="page-sub">
             Marketplace operations: suppliers, applications, and orders.{" "}
             <Link href="/ops" style={{ color: "var(--blue)", fontWeight: 600 }}>
@@ -413,8 +409,6 @@ export default async function AdminConsole() {
             </div>
           </div>
         </div>
-      </main>
-      <SiteFooter />
-    </>
+    </main>
   );
 }

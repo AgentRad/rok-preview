@@ -3,9 +3,6 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
-import AddressBook from "@/components/AddressBook";
-import ChangePasswordForm from "@/components/ChangePasswordForm";
-import TwoFactorSetup from "@/components/TwoFactorSetup";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -19,59 +16,27 @@ const STATUS_CLASS: Record<string, string> = {
 
 export default async function AccountPage() {
   const user = await requireUser();
-  const [orders, addresses] = await Promise.all([
-    prisma.order.findMany({
-      where: { buyerId: user.id },
-      include: { items: true },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.address.findMany({
-      where: { userId: user.id },
-      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
-    }),
-  ]);
+  const orders = await prisma.order.findMany({
+    where: { buyerId: user.id },
+    include: { items: true },
+    orderBy: { createdAt: "desc" },
+  });
 
   return (
     <>
       <SiteHeader />
       <main id="main">
         <div className="page-pad narrow">
-          <h1 className="page-title">My account</h1>
+          <h1 className="page-title">My orders</h1>
           <p className="page-sub">
-            Signed in as {user.name} · {user.email} · {user.role.toLowerCase()}
+            Signed in as {user.name} · {user.email} ·{" "}
+            <Link
+              href="/settings"
+              style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+            >
+              Account settings &rarr;
+            </Link>
           </p>
-
-          <div className="card" style={{ marginTop: 24 }}>
-            <div className="card-head">
-              <h2>Change password</h2>
-            </div>
-            <div className="card-body">
-              <ChangePasswordForm />
-            </div>
-          </div>
-
-          <div className="card" style={{ marginTop: 24 }}>
-            <div className="card-head">
-              <h2>Two-factor authentication</h2>
-            </div>
-            <div className="card-body">
-              <TwoFactorSetup
-                enabled={!!user.totpEnabledAt}
-                enabledAt={
-                  user.totpEnabledAt ? user.totpEnabledAt.toISOString() : null
-                }
-              />
-            </div>
-          </div>
-
-          <div className="card" style={{ marginTop: 24 }}>
-            <div className="card-head">
-              <h2>Delivery addresses</h2>
-            </div>
-            <div className="card-body">
-              <AddressBook initial={addresses} />
-            </div>
-          </div>
 
           <div className="card" style={{ marginTop: 24 }}>
             <div className="card-head">

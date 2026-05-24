@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import SiteHeader from "@/components/SiteHeader";
-import SiteFooter from "@/components/SiteFooter";
 import OpsBoard, { type OpsOrder } from "@/components/OpsBoard";
 import MarkPayoutPaid from "@/components/MarkPayoutPaid";
 import { formatCents } from "@/lib/money";
@@ -54,11 +52,9 @@ export default async function OpsConsole() {
   const delivered = orders.filter((o) => o.status === "FULFILLED").length;
 
   return (
-    <>
-      <SiteHeader />
-      <main id="main">
-        <div className="page-pad">
-          <h1 className="page-title">Fulfillment ops</h1>
+    <main id="main">
+      <div className="page-pad">
+        <h1 className="page-title">Fulfillment ops</h1>
           <p className="page-sub">
             Every paid order, tracked from the warehouse to the buyer. Move an
             order along as you pick, ship, and confirm delivery.
@@ -150,9 +146,7 @@ export default async function OpsConsole() {
               </div>
             )}
           </div>
-        </div>
-      </main>
-      <SiteFooter />
-    </>
+      </div>
+    </main>
   );
 }
