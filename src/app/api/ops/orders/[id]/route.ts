@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { sendOrderDelivered, sendOrderShipped } from "@/lib/email";
 
 const STAGES = ["Processing", "Shipped", "Delivered"] as const;
 type Stage = (typeof STAGES)[number];
@@ -45,15 +46,23 @@ export async function POST(
         { status: 400 }
       );
     }
-    await prisma.order.update({
+    const updated = await prisma.order.update({
       where: { id },
       data: { shipmentStage: "Shipped", carrier, trackingCode },
+      include: { items: true },
     });
+    sendOrderShipped(updated).catch((err) =>
+      console.error("[email] order-shipped failed:", err)
+    );
   } else if (stage === "Delivered") {
-    await prisma.order.update({
+    const updated = await prisma.order.update({
       where: { id },
       data: { shipmentStage: "Delivered", status: "FULFILLED" },
+      include: { items: true },
     });
+    sendOrderDelivered(updated).catch((err) =>
+      console.error("[email] order-delivered failed:", err)
+    );
   } else {
     await prisma.order.update({
       where: { id },

@@ -68,6 +68,9 @@ export default function LoginForm() {
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
+        <div className="auth-alt" style={{ marginTop: 14 }}>
+          <Link href="/forgot-password">Forgot password?</Link>
+        </div>
         <div className="auth-alt">
           New to PartsPort? <Link href="/register">Create an account</Link>
         </div>

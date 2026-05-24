@@ -56,7 +56,20 @@ model User {
   manufacturerName String?
   supplier         Supplier?
   orders           Order[]
+  resetTokens      PasswordResetToken[]
   createdAt        DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model SearchEvent {

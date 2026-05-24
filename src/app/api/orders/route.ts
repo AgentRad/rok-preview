@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
 import { feeFor, FEE_RATE_BPS } from "@/lib/money";
+import { sendOrderConfirmation } from "@/lib/email";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -74,7 +75,12 @@ export async function POST(req: Request) {
       feeRateBps: FEE_RATE_BPS,
       items: { create: orderItems },
     },
+    include: { items: true },
   });
+
+  sendOrderConfirmation(order).catch((err) =>
+    console.error("[email] order confirmation failed:", err)
+  );
 
   return NextResponse.json({
     ok: true,

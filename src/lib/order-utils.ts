@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { sendPaymentReceived } from "./email";
 
 export function generateReference(prefix = "PP"): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -48,6 +49,18 @@ export async function markOrderPaid(
 
   if (wasPending === false) return false;
   await ensureInvoiceForOrder(orderId);
+
+  if (wasPending === true) {
+    const paidOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (paidOrder) {
+      sendPaymentReceived(paidOrder).catch((err) =>
+        console.error("[email] payment-received failed:", err)
+      );
+    }
+  }
   return true;
 }
 

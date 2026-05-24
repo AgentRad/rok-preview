@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
+import { sendApplicationStatus } from "@/lib/email";
 
 const TEMP_PASSWORD = "demo1234";
 
@@ -30,6 +31,14 @@ export async function POST(
       where: { id },
       data: { status: "REJECTED" },
     });
+    sendApplicationStatus({
+      to: app.email,
+      contactName: app.contactName,
+      companyName: app.companyName,
+      approved: false,
+    }).catch((err) =>
+      console.error("[email] application-rejected failed:", err)
+    );
     return NextResponse.json({ ok: true });
   }
 
@@ -74,6 +83,15 @@ export async function POST(
       where: { id },
       data: { status: "APPROVED" },
     });
+    sendApplicationStatus({
+      to: app.email,
+      contactName: app.contactName,
+      companyName: app.companyName,
+      approved: true,
+      tempPassword: existingUser ? null : TEMP_PASSWORD,
+    }).catch((err) =>
+      console.error("[email] application-approved failed:", err)
+    );
     return NextResponse.json({
       ok: true,
       loginEmail: app.email,

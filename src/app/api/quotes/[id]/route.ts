@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
+import { sendQuoteReady } from "@/lib/email";
 
 export async function PATCH(
   req: Request,
@@ -54,7 +55,7 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    await prisma.quoteRequest.update({
+    const updated = await prisma.quoteRequest.update({
       where: { id },
       data: {
         quotedUnitCents: dollarsToCents(price),
@@ -62,7 +63,21 @@ export async function PATCH(
         status: "QUOTED",
         quotedAt: new Date(),
       },
+      include: { product: { include: { supplier: true } } },
     });
+    sendQuoteReady({
+      id: updated.id,
+      reference: updated.reference,
+      buyerName: updated.buyerName,
+      buyerEmail: updated.buyerEmail,
+      qty: updated.qty,
+      message: updated.message,
+      productName: updated.product.name,
+      productSku: updated.product.sku,
+      supplierName: updated.product.supplier.name,
+      quotedUnitCents: updated.quotedUnitCents,
+      quoteNote: updated.quoteNote,
+    }).catch((err) => console.error("[email] quote-ready failed:", err));
     return NextResponse.json({ ok: true });
   }
 
