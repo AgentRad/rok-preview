@@ -18,6 +18,9 @@ import Link from "next/link";
 import SupplierProductManager from "@/components/SupplierProductManager";
 import CatalogCsvImport from "@/components/CatalogCsvImport";
 import SupplierTeam from "@/components/SupplierTeam";
+import SupplierChecklist, {
+  type SupplierChecklistItem,
+} from "@/components/SupplierChecklist";
 import FulfillButton from "@/components/FulfillButton";
 import QuoteResponder from "@/components/QuoteResponder";
 import ActingAsBanner from "@/components/ActingAsBanner";
@@ -114,6 +117,39 @@ export default async function SupplierDashboard() {
   const unitsInStock = supplier.products.reduce((s, p) => s + p.stock, 0);
   const openQuotes = quotes.filter((q) => q.status === "OPEN").length;
 
+  const checklist: SupplierChecklistItem[] = [
+    {
+      key: "logo",
+      label: "Add a company logo",
+      done: !!supplier.logoUrl,
+      note: "Shows next to your name on product cards and listings.",
+    },
+    {
+      key: "website",
+      label: "Add your website",
+      done: !!supplier.website,
+      note: "Buyers tap through for credibility before placing big orders.",
+    },
+    {
+      key: "description",
+      label: "Write a one-sentence description",
+      done: !!supplier.description,
+      note: "Appears on your supplier profile.",
+    },
+    {
+      key: "certs",
+      label: "List certifications",
+      done: !!supplier.certifications,
+      note: "ISO 9001, IEEE C57, authorized-distributor proofs, etc.",
+    },
+    {
+      key: "products",
+      label: "Add at least one product",
+      done: supplier.products.length > 0,
+      note: "Paste a CSV below or hand-enter your first part.",
+    },
+  ];
+
   return (
     <>
       <SiteHeader />
@@ -153,6 +189,8 @@ export default async function SupplierDashboard() {
               <div className="k-foot">your share, fees excluded</div>
             </div>
           </div>
+
+          <SupplierChecklist items={checklist} />
 
           {showCatalog && (
             <SupplierProductManager
