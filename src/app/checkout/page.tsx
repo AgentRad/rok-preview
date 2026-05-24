@@ -2,6 +2,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import CheckoutClient from "@/components/CheckoutClient";
 import { getCurrentUser } from "@/lib/auth";
+import { isPaymentsConfigured } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function CheckoutPage() {
             <CheckoutClient
               user={user ? { name: user.name, email: user.email } : null}
               paypalClientId={process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || ""}
+              paymentsConfigured={isPaymentsConfigured()}
             />
           </div>
         </div>

@@ -10,6 +10,7 @@ import ReturnRequestForm from "@/components/ReturnRequestForm";
 import MessageThread from "@/components/MessageThread";
 import { formatCents } from "@/lib/money";
 import { trackingLink } from "@/lib/tracking";
+import { isPaymentsConfigured } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -256,6 +257,7 @@ export default async function OrderPage({
               orderId={order.id}
               totalCents={order.totalCents}
               paypalClientId={process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || ""}
+              paymentsConfigured={isPaymentsConfigured()}
             />
           )}
 

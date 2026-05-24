@@ -5,9 +5,19 @@ import { useRouter } from "next/navigation";
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import { formatCents } from "@/lib/money";
 
-type Props = { orderId: string; totalCents: number; paypalClientId: string };
+type Props = {
+  orderId: string;
+  totalCents: number;
+  paypalClientId: string;
+  paymentsConfigured: boolean;
+};
 
-export default function PayOrder({ orderId, totalCents, paypalClientId }: Props) {
+export default function PayOrder({
+  orderId,
+  totalCents,
+  paypalClientId,
+  paymentsConfigured,
+}: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -24,6 +34,28 @@ export default function PayOrder({ orderId, totalCents, paypalClientId }: Props)
     router.refresh();
   }
 
+  async function payHosted() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/payments/create-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        setError(data.error || "Could not start checkout.");
+        setBusy(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      setError("Could not start checkout.");
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="card" style={{ marginTop: 24 }}>
       <div className="card-head">
@@ -35,7 +67,21 @@ export default function PayOrder({ orderId, totalCents, paypalClientId }: Props)
           PartsPort collects payment, then releases funds to the supplier on
           dispatch. The 4% service fee is included in the total.
         </div>
-        {paypalClientId ? (
+        {paymentsConfigured ? (
+          <>
+            <button
+              className="btn btn-primary btn-block"
+              onClick={payHosted}
+              disabled={busy}
+            >
+              {busy ? "Starting checkout…" : `Pay by bank transfer or card · ${formatCents(totalCents)}`}
+            </button>
+            <p className="muted-text" style={{ fontSize: 12.5, marginTop: 8 }}>
+              Continues to a secure hosted checkout. ACH bank transfer is the
+              default; card is available as a fallback.
+            </p>
+          </>
+        ) : paypalClientId ? (
           <PayPalScriptProvider options={{ clientId: paypalClientId, currency: "USD" }}>
             <PayPalButtons
               style={{ layout: "vertical", color: "gold", shape: "rect" }}
@@ -68,7 +114,7 @@ export default function PayOrder({ orderId, totalCents, paypalClientId }: Props)
           <>
             <div className="alert alert-info">
               Instant settlement is enabled for this environment. Connect a
-              PayPal account to accept live payments.
+              real payment processor to accept live payments.
             </div>
             <button
               className="btn btn-primary btn-block"

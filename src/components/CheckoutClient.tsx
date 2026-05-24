@@ -40,9 +40,10 @@ type LookupProduct = {
 type Props = {
   user: { name: string; email: string } | null;
   paypalClientId: string;
+  paymentsConfigured: boolean;
 };
 
-export default function CheckoutClient({ user, paypalClientId }: Props) {
+export default function CheckoutClient({ user, paypalClientId, paymentsConfigured }: Props) {
   const router = useRouter();
   const [lines, setLines] = useState<CartLine[]>([]);
   const [products, setProducts] = useState<Record<string, LookupProduct>>({});
@@ -175,6 +176,28 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
       return;
     }
     finishOrder();
+  }
+
+  async function payHosted() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/payments/create-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        setError(data.error || "Could not start checkout.");
+        setBusy(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      setError("Could not start checkout.");
+      setBusy(false);
+    }
   }
 
   if (loading) return <p className="muted-text">Loading checkout…</p>;
@@ -332,7 +355,21 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
                 PartsPort collects payment, then releases funds to the supplier
                 on dispatch. The 4% service fee is included in the total below.
               </div>
-              {paypalClientId ? (
+              {paymentsConfigured ? (
+                <>
+                  <button
+                    className="btn btn-primary btn-block"
+                    onClick={payHosted}
+                    disabled={busy}
+                  >
+                    {busy ? "Starting checkout…" : `Pay by bank transfer or card · ${formatCents(total)}`}
+                  </button>
+                  <p className="muted-text" style={{ fontSize: 12.5, marginTop: 8 }}>
+                    Continues to a secure hosted checkout. ACH bank transfer is
+                    the default; card is available as a fallback.
+                  </p>
+                </>
+              ) : paypalClientId ? (
                 <PayPalScriptProvider
                   options={{ clientId: paypalClientId, currency: "USD" }}
                 >
