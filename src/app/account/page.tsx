@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
+import AddressBook from "@/components/AddressBook";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,17 @@ const STATUS_CLASS: Record<string, string> = {
 
 export default async function AccountPage() {
   const user = await requireUser();
-  const orders = await prisma.order.findMany({
-    where: { buyerId: user.id },
-    include: { items: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const [orders, addresses] = await Promise.all([
+    prisma.order.findMany({
+      where: { buyerId: user.id },
+      include: { items: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.address.findMany({
+      where: { userId: user.id },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+    }),
+  ]);
 
   return (
     <>
@@ -31,6 +38,15 @@ export default async function AccountPage() {
           <p className="page-sub">
             Signed in as {user.name} · {user.email}
           </p>
+
+          <div className="card" style={{ marginTop: 24 }}>
+            <div className="card-head">
+              <h2>Delivery addresses</h2>
+            </div>
+            <div className="card-body">
+              <AddressBook initial={addresses} />
+            </div>
+          </div>
 
           <div className="card" style={{ marginTop: 24 }}>
             <div className="card-head">

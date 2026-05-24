@@ -7,6 +7,22 @@ import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import ProductImage from "./ProductImage";
 import { getCart, clearCart, type CartLine } from "@/lib/cart";
 import { formatCents, feeFor } from "@/lib/money";
+import { formatAddressBlock } from "@/lib/address";
+
+type SavedAddress = {
+  id: string;
+  label: string;
+  recipient: string;
+  company: string;
+  line1: string;
+  line2: string;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+  phone: string;
+  isDefault: boolean;
+};
 
 type LookupProduct = {
   sku: string;
@@ -35,6 +51,8 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [shipTo, setShipTo] = useState("");
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
 
   const [step, setStep] = useState<"form" | "pay">("form");
   const [orderId, setOrderId] = useState("");
@@ -62,6 +80,37 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
         setLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch("/api/addresses")
+      .then((r) => r.json())
+      .then((data) => {
+        const list = (data.addresses || []) as SavedAddress[];
+        setSavedAddresses(list);
+        const def = list.find((a) => a.isDefault);
+        if (def && !shipTo) {
+          setSelectedAddressId(def.id);
+          setShipTo(formatAddressBlock(def));
+          if (!name) setName(def.recipient);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  function pickAddress(id: string) {
+    if (id === "") {
+      setSelectedAddressId("");
+      setShipTo("");
+      return;
+    }
+    const a = savedAddresses.find((x) => x.id === id);
+    if (!a) return;
+    setSelectedAddressId(id);
+    setShipTo(formatAddressBlock(a));
+    if (!name) setName(a.recipient);
+  }
 
   const valid = lines.filter((l) => products[l.sku]);
   const subtotal = valid.reduce(
@@ -232,12 +281,35 @@ export default function CheckoutClient({ user, paypalClientId }: Props) {
                     />
                   </div>
                 </div>
+                {savedAddresses.length > 0 && (
+                  <div className="form-row">
+                    <label htmlFor="csaved">Saved addresses</label>
+                    <select
+                      id="csaved"
+                      value={selectedAddressId}
+                      onChange={(e) => pickAddress(e.target.value)}
+                    >
+                      <option value="">Enter a new address</option>
+                      {savedAddresses.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.label || a.recipient}
+                          {a.label ? ` (${a.recipient})` : ""}, {a.city},{" "}
+                          {a.region}
+                          {a.isDefault ? " (default)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="form-row">
                   <label htmlFor="cship">Delivery address</label>
                   <textarea
                     id="cship"
                     value={shipTo}
-                    onChange={(e) => setShipTo(e.target.value)}
+                    onChange={(e) => {
+                      setShipTo(e.target.value);
+                      setSelectedAddressId("");
+                    }}
                     placeholder="Company, street, city, state, ZIP"
                     required
                   />

@@ -58,6 +58,7 @@ model User {
   orders           Order[]
   resetTokens      PasswordResetToken[]
   reviews          Review[]
+  addresses        Address[]
   createdAt        DateTime @default(now())
 }
 
@@ -88,6 +89,26 @@ model Review {
   @@unique([buyerId, productId])
   @@index([productId])
   @@index([supplierId])
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  label      String   @default("")
+  recipient  String
+  company    String   @default("")
+  line1      String
+  line2      String   @default("")
+  city       String
+  region     String
+  postalCode String
+  country    String   @default("US")
+  phone      String   @default("")
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
 }
 
 model SearchEvent {
