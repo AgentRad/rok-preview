@@ -11,6 +11,7 @@ import RequestQuote from "@/components/RequestQuote";
 import Stars from "@/components/Stars";
 import WriteReview from "@/components/WriteReview";
 import { formatCents, FEE_RATE_LABEL } from "@/lib/money";
+import { displayBuyerName, supplierRatingSummary } from "@/lib/reviews";
 
 export const dynamic = "force-dynamic";
 
@@ -33,38 +34,50 @@ export default async function ProductPage({
   const inStock = product.stock > 0;
   const user = await getCurrentUser();
 
-  const [reviews, ratingAgg, ownReview, eligibleOrder] = await Promise.all([
-    prisma.review.findMany({
-      where: { productId: product.id },
-      orderBy: { createdAt: "desc" },
-      take: 12,
-      include: { buyer: { select: { name: true } } },
-    }),
-    prisma.review.aggregate({
-      where: { productId: product.id },
-      _avg: { rating: true },
-      _count: { _all: true },
-    }),
-    user
-      ? prisma.review.findUnique({
-          where: { buyerId_productId: { buyerId: user.id, productId: product.id } },
-        })
-      : Promise.resolve(null),
-    user
-      ? prisma.order.findFirst({
-          where: {
-            buyerId: user.id,
-            status: "FULFILLED",
-            items: { some: { productId: product.id } },
-          },
-          select: { id: true },
-        })
-      : Promise.resolve(null),
-  ]);
+  const [reviews, ratingAgg, eligibleOrders, supplierRating] =
+    await Promise.all([
+      prisma.review.findMany({
+        where: { productId: product.id, hiddenAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+        include: { buyer: { select: { name: true } } },
+      }),
+      prisma.review.aggregate({
+        where: { productId: product.id, hiddenAt: null },
+        _avg: { rating: true },
+        _count: { _all: true },
+      }),
+      user
+        ? prisma.order.findMany({
+            where: {
+              buyerId: user.id,
+              status: "FULFILLED",
+              items: { some: { productId: product.id } },
+            },
+            select: { id: true, reference: true, paidAt: true },
+            orderBy: { paidAt: "desc" },
+          })
+        : Promise.resolve([]),
+      supplierRatingSummary(product.supplierId),
+    ]);
 
   const reviewCount = ratingAgg._count._all;
   const reviewAverage = ratingAgg._avg.rating ?? 0;
-  const canReview = !!user && !!eligibleOrder;
+  // Find any eligible order without an existing review yet.
+  const reviewedOrderIds = user
+    ? new Set(
+        (
+          await prisma.review.findMany({
+            where: { buyerId: user.id, productId: product.id },
+            select: { orderId: true },
+          })
+        ).map((r) => r.orderId)
+      )
+    : new Set<string>();
+  const reviewableOrders = eligibleOrders.filter(
+    (o) => !reviewedOrderIds.has(o.id)
+  );
+  const canReview = reviewableOrders.length > 0;
 
   return (
     <>
@@ -159,7 +172,14 @@ export default async function ProductPage({
                 <div className="buybox-row">
                   <span>Sold &amp; fulfilled by</span>
                   <span className="v">
-                    {product.supplier.name} ★ {product.supplier.rating.toFixed(1)}
+                    {product.supplier.name}{" "}
+                    {supplierRating.kind === "computed" ? (
+                      <>★ {supplierRating.average.toFixed(1)} ({supplierRating.count})</>
+                    ) : (
+                      <span className="muted-text" style={{ fontSize: 12 }}>
+                        · New supplier
+                      </span>
+                    )}
                   </span>
                 </div>
 
@@ -215,27 +235,32 @@ export default async function ProductPage({
               )}
             </div>
 
-            {canReview && (
+            {canReview && reviewableOrders[0] && (
               <div className="review-card-write">
                 <div
                   className="invoice-meta-label"
                   style={{ marginBottom: 8 }}
                 >
-                  {ownReview ? "Update your review" : "Write a review"}
+                  Write a review for order {reviewableOrders[0].reference}
                 </div>
                 <WriteReview
                   productId={product.id}
-                  initialRating={ownReview?.rating ?? 0}
-                  initialBody={ownReview?.body ?? ""}
+                  orderId={reviewableOrders[0].id}
                 />
               </div>
             )}
 
-            {!canReview && user && (
+            {!canReview && user && eligibleOrders.length === 0 && (
               <p className="muted-text" style={{ fontSize: 13.5 }}>
                 Reviews are open to buyers with a delivered order for this
                 part. Once your order is marked Delivered, you will see the
                 review form here.
+              </p>
+            )}
+            {!canReview && user && eligibleOrders.length > 0 && (
+              <p className="muted-text" style={{ fontSize: 13.5 }}>
+                Thanks for your review. You can review this part again on a
+                future delivered order.
               </p>
             )}
             {!user && (
@@ -261,11 +286,19 @@ export default async function ProductPage({
                   <li key={r.id} className="review-item">
                     <div className="review-meta">
                       <Stars value={r.rating} />
-                      <strong style={{ fontSize: 14 }}>{r.buyer.name}</strong>
+                      <strong style={{ fontSize: 14 }}>
+                        {displayBuyerName(r.buyer.name)}
+                      </strong>
+                      <span className="verified-badge">Verified buyer</span>
                       <span className="muted-text" style={{ fontSize: 12.5 }}>
                         {r.createdAt.toLocaleDateString()}
                       </span>
                     </div>
+                    {r.title && (
+                      <div style={{ marginTop: 6, fontWeight: 600, fontSize: 14.5 }}>
+                        {r.title}
+                      </div>
+                    )}
                     {r.body && (
                       <p style={{ marginTop: 6, fontSize: 14, lineHeight: 1.55 }}>
                         {r.body}

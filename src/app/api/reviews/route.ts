@@ -12,12 +12,14 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const productId = String(body.productId || "").trim();
+  const orderId = String(body.orderId || "").trim();
   const rating = Math.max(1, Math.min(5, Math.floor(Number(body.rating) || 0)));
-  const text = String(body.body || "").trim().slice(0, 2000);
+  const title = String(body.title || "").trim().slice(0, 140);
+  const text = String(body.body || "").trim().slice(0, 4000);
 
-  if (!productId || !rating) {
+  if (!productId || !orderId || !rating) {
     return NextResponse.json(
-      { error: "A product and a rating between 1 and 5 are required." },
+      { error: "Product, order, and a rating from 1 to 5 are required." },
       { status: 400 }
     );
   }
@@ -27,32 +29,42 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
 
-  // Eligibility: buyer must have at least one FULFILLED order containing this product.
-  const eligible = await prisma.order.findFirst({
+  // The order must belong to this buyer, be FULFILLED, and contain the
+  // product. This is the verified-delivered-order gate.
+  const order = await prisma.order.findFirst({
     where: {
+      id: orderId,
       buyerId: user.id,
       status: "FULFILLED",
       items: { some: { productId } },
     },
     select: { id: true },
   });
-  if (!eligible) {
+  if (!order) {
     return NextResponse.json(
-      { error: "You can only review a part after a delivered order for it." },
+      { error: "You can only review a part on an order of yours that has been delivered." },
       { status: 403 }
     );
   }
 
   await prisma.review.upsert({
-    where: { buyerId_productId: { buyerId: user.id, productId } },
+    where: {
+      buyerId_productId_orderId: {
+        buyerId: user.id,
+        productId,
+        orderId,
+      },
+    },
     create: {
       buyerId: user.id,
       productId,
       supplierId: product.supplierId,
+      orderId,
       rating,
+      title,
       body: text,
     },
-    update: { rating, body: text },
+    update: { rating, title, body: text },
   });
 
   return NextResponse.json({ ok: true });

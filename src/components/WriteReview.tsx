@@ -5,15 +5,22 @@ import { useRouter } from "next/navigation";
 
 export default function WriteReview({
   productId,
+  orderId,
   initialRating = 0,
+  initialTitle = "",
   initialBody = "",
+  compact = false,
 }: {
   productId: string;
+  orderId: string;
   initialRating?: number;
+  initialTitle?: string;
   initialBody?: string;
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [rating, setRating] = useState(initialRating);
+  const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState(initialBody);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -31,7 +38,7 @@ export default function WriteReview({
       const res = await fetch("/api/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, rating, body }),
+        body: JSON.stringify({ productId, orderId, rating, title, body }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -48,7 +55,7 @@ export default function WriteReview({
   if (done) {
     return (
       <div className="alert alert-ok">
-        Thank you for the review. It is now visible on the product.
+        Thank you. Your review is live on this part.
       </div>
     );
   }
@@ -72,14 +79,30 @@ export default function WriteReview({
           {rating ? `${rating} / 5` : "Pick a rating"}
         </span>
       </div>
-      <div className="form-row" style={{ marginTop: 14 }}>
-        <label htmlFor="rv-body">Your review (optional)</label>
+      <div className="form-row" style={{ marginTop: 12 }}>
+        <label htmlFor={`rv-title-${productId}-${orderId}`}>
+          Title (optional)
+        </label>
+        <input
+          id={`rv-title-${productId}-${orderId}`}
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="One line summary"
+          maxLength={140}
+        />
+      </div>
+      <div className="form-row" style={{ marginTop: 8 }}>
+        <label htmlFor={`rv-body-${productId}-${orderId}`}>
+          Your review (optional)
+        </label>
         <textarea
-          id="rv-body"
+          id={`rv-body-${productId}-${orderId}`}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="How did the part perform? Was it as described? Any install notes for other buyers?"
-          maxLength={2000}
+          maxLength={4000}
+          rows={compact ? 3 : 5}
         />
       </div>
       {error && <div className="alert alert-error">{error}</div>}

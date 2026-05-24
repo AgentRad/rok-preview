@@ -11,6 +11,7 @@ import MessageThread from "@/components/MessageThread";
 import { formatCents } from "@/lib/money";
 import { trackingLink } from "@/lib/tracking";
 import { isPaymentsConfigured } from "@/lib/payments";
+import WriteReview from "@/components/WriteReview";
 
 function rateLabelForOrder(order: { feeRateBps: number }): string {
   return `${(order.feeRateBps / 100).toFixed(order.feeRateBps % 100 === 0 ? 0 : 1)}%`;
@@ -37,6 +38,7 @@ export default async function OrderPage({
       items: { include: { product: { include: { supplier: true } } } },
       returns: { orderBy: { createdAt: "desc" } },
       messages: { orderBy: { createdAt: "asc" } },
+      reviews: { select: { productId: true, rating: true, createdAt: true } },
     },
   });
   if (!order) notFound();
@@ -362,6 +364,73 @@ export default async function OrderPage({
                 <div style={{ marginTop: 12 }}>
                   <ReturnRequestForm orderId={order.id} />
                 </div>
+              </div>
+            </div>
+          )}
+
+          {isBuyer && order.status === "FULFILLED" && (
+            <div className="card" style={{ marginTop: 28 }}>
+              <div className="card-head">
+                <h2>Leave reviews</h2>
+                <span className="muted-text" style={{ fontSize: 12.5 }}>
+                  Help other buyers. Your name shows as &ldquo;Firstname L.&rdquo;
+                </span>
+              </div>
+              <div className="card-body">
+                {(() => {
+                  const seen = new Set<string>();
+                  const reviewedSet = new Set(
+                    order.reviews.map((r) => r.productId)
+                  );
+                  const uniqueItems = order.items.filter((it) => {
+                    if (seen.has(it.productId)) return false;
+                    seen.add(it.productId);
+                    return true;
+                  });
+                  return uniqueItems.map((it) => {
+                    const alreadyReviewed = reviewedSet.has(it.productId);
+                    return (
+                      <div key={it.productId} className="review-on-order">
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 12,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 14.5 }}>
+                              {it.nameSnapshot}
+                            </div>
+                            <div
+                              className="muted-text"
+                              style={{ fontSize: 12 }}
+                            >
+                              {it.skuSnapshot} &middot;{" "}
+                              {it.product.supplier.name}
+                            </div>
+                          </div>
+                          {alreadyReviewed && (
+                            <span className="verified-badge">
+                              Reviewed
+                            </span>
+                          )}
+                        </div>
+                        {!alreadyReviewed && (
+                          <div style={{ marginTop: 12 }}>
+                            <WriteReview
+                              productId={it.productId}
+                              orderId={order.id}
+                              compact
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           )}
