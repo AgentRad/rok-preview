@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ReorderButton from "@/components/ReorderButton";
+import AttentionFeed from "@/components/AttentionFeed";
+import { getBuyerAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +19,14 @@ const STATUS_CLASS: Record<string, string> = {
 
 export default async function AccountPage() {
   const user = await requireUser();
-  const orders = await prisma.order.findMany({
-    where: { buyerId: user.id },
-    include: { items: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const [orders, attention] = await Promise.all([
+    prisma.order.findMany({
+      where: { buyerId: user.id },
+      include: { items: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    getBuyerAttention(user.id),
+  ]);
 
   return (
     <>
@@ -38,6 +43,13 @@ export default async function AccountPage() {
               Account settings &rarr;
             </Link>
           </p>
+
+          <AttentionFeed
+            items={attention}
+            emptyTitle="You are caught up."
+            emptyBody="No payments due, no quotes waiting, no shipments arriving today. Browse the catalog to find your next part."
+            emptyAction={{ label: "Browse the catalog", href: "/catalog" }}
+          />
 
           <div className="card" style={{ marginTop: 24 }}>
             <div className="card-head">

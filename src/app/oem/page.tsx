@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
+import AttentionFeed from "@/components/AttentionFeed";
+import { getManufacturerAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +30,8 @@ export default async function OemDashboard() {
       </>
     );
   }
+
+  const attention = await getManufacturerAttention(brand);
 
   const [products, orderItems, quotes, searches] = await Promise.all([
     prisma.product.findMany({
@@ -89,6 +93,13 @@ export default async function OemDashboard() {
             PartsPort. Every order routes to an authorized distributor, with
             zero channel conflict.
           </p>
+
+          <AttentionFeed
+            items={attention}
+            emptyTitle="No new demand signals."
+            emptyBody="Buyer searches mentioning your brand will surface here as soon as they hit the platform."
+            emptyAction={{ label: "View demand details", href: "/oem#demand" }}
+          />
 
           <div className="kpi-grid">
             <div className="kpi">

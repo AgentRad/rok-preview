@@ -5,6 +5,8 @@ import ApplicationReview from "@/components/ApplicationReview";
 import ReturnActions from "@/components/ReturnActions";
 import AddSupplierForm from "@/components/AddSupplierForm";
 import SupplierAdminRow from "@/components/SupplierAdminRow";
+import AttentionFeed from "@/components/AttentionFeed";
+import { getAdminAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +33,7 @@ const STATUS_CLASS: Record<string, string> = {
 export default async function AdminConsole() {
   await requireRole("ADMIN");
 
-  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns] =
+  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns, attention] =
     await Promise.all([
       prisma.order.findMany({
         include: { items: true },
@@ -67,6 +69,7 @@ export default async function AdminConsole() {
         orderBy: [{ status: "asc" }, { createdAt: "desc" }],
         take: 12,
       }),
+      getAdminAttention(),
     ]);
 
   const gmv = paidAgg._sum.totalCents || 0;
@@ -82,6 +85,13 @@ export default async function AdminConsole() {
               Open fulfillment ops →
             </Link>
           </p>
+
+          <AttentionFeed
+            items={attention}
+            emptyTitle="Marketplace is calm."
+            emptyBody="No pending applications, no open disputes, no overdue shipments. Good day to onboard a new supplier."
+            emptyAction={{ label: "Add a supplier", href: "/admin" }}
+          />
 
           <div className="kpi-grid">
             <div className="kpi">

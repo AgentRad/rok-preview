@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import OpsBoard, { type OpsOrder } from "@/components/OpsBoard";
 import MarkPayoutPaid from "@/components/MarkPayoutPaid";
+import AttentionFeed from "@/components/AttentionFeed";
+import { getAdminAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function OpsConsole() {
   await requireRole("ADMIN");
 
-  const [orders, payoutsDue] = await Promise.all([
+  const [orders, payoutsDue, attention] = await Promise.all([
     prisma.order.findMany({
       where: { status: { in: ["PAID", "FULFILLED"] } },
       include: { items: true },
@@ -24,6 +26,7 @@ export default async function OpsConsole() {
       },
       orderBy: { createdAt: "asc" },
     }),
+    getAdminAttention(),
   ]);
 
   const payoutsDueTotal = payoutsDue.reduce(
@@ -59,6 +62,14 @@ export default async function OpsConsole() {
             Every paid order, tracked from the warehouse to the buyer. Move an
             order along as you pick, ship, and confirm delivery.
           </p>
+
+          <AttentionFeed
+            items={attention.filter((a) =>
+              ["payouts", "late-shipment", "returns"].includes(a.kind)
+            )}
+            emptyTitle="Nothing critical in ops right now."
+            emptyBody="No overdue shipments, no payouts queued, no open returns. Use the board below to track in-flight orders."
+          />
 
           <div className="kpi-grid">
             <div className="kpi">

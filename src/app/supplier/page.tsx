@@ -24,6 +24,8 @@ import SupplierChecklist, {
 import FulfillButton from "@/components/FulfillButton";
 import QuoteResponder from "@/components/QuoteResponder";
 import ActingAsBanner from "@/components/ActingAsBanner";
+import AttentionFeed from "@/components/AttentionFeed";
+import { getSupplierAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -76,7 +78,7 @@ export default async function SupplierDashboard() {
     );
   }
 
-  const [orders, quotes, payouts] = await Promise.all([
+  const [orders, quotes, payouts, attention] = await Promise.all([
     prisma.order.findMany({
       where: {
         items: { some: { product: { supplierId: supplier.id } } },
@@ -98,6 +100,7 @@ export default async function SupplierDashboard() {
       include: { order: { select: { reference: true } } },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     }),
+    getSupplierAttention(supplier.id),
   ]);
 
   const payoutsDue = payouts
@@ -189,6 +192,13 @@ export default async function SupplierDashboard() {
               <div className="k-foot">your share, fees excluded</div>
             </div>
           </div>
+
+          <AttentionFeed
+            items={attention}
+            emptyTitle="Caught up."
+            emptyBody="No RFQs waiting, no orders to ship, no low stock right now. Use this calm moment to add a new SKU or tidy up your catalog."
+            emptyAction={{ label: "Manage listings", href: "/supplier#listings" }}
+          />
 
           <SupplierChecklist items={checklist} />
 
