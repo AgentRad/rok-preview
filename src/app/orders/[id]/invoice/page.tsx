@@ -195,7 +195,9 @@ export default async function OrderInvoicePage({
               <span>{formatCents(invoice.freightCents)}</span>
             </div>
             <div className="summary-line">
-              <span>Platform fee</span>
+              <span>
+                Platform fee ({(order.feeRateBps / 100).toFixed(order.feeRateBps % 100 === 0 ? 0 : 1)}%)
+              </span>
               <span>{formatCents(invoice.feeCents)}</span>
             </div>
             <div className="summary-line">

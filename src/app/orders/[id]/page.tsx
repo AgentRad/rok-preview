@@ -12,6 +12,10 @@ import { formatCents } from "@/lib/money";
 import { trackingLink } from "@/lib/tracking";
 import { isPaymentsConfigured } from "@/lib/payments";
 
+function rateLabelForOrder(order: { feeRateBps: number }): string {
+  return `${(order.feeRateBps / 100).toFixed(order.feeRateBps % 100 === 0 ? 0 : 1)}%`;
+}
+
 export const dynamic = "force-dynamic";
 
 const STATUS_CLASS: Record<string, string> = {
@@ -238,7 +242,7 @@ export default async function OrderPage({
                 <span>{formatCents(order.freightCents)}</span>
               </div>
               <div className="summary-line">
-                <span>Platform fee</span>
+                <span>Platform fee ({rateLabelForOrder(order)})</span>
                 <span>{formatCents(order.feeCents)}</span>
               </div>
               <div className="summary-line">

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import ProductImage from "./ProductImage";
 import { getCart, clearCart, type CartLine } from "@/lib/cart";
-import { formatCents, feeFor } from "@/lib/money";
+import { formatCents, feeFor, FEE_RATE_LABEL } from "@/lib/money";
 import { formatAddressBlock } from "@/lib/address";
 
 type SavedAddress = {
@@ -250,7 +250,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
           <span>{formatCents(freight)}</span>
         </div>
         <div className="summary-line">
-          <span>Platform fee</span>
+          <span>Platform fee ({FEE_RATE_LABEL})</span>
           <span style={{ color: "var(--amber-deep)" }}>{formatCents(fee)}</span>
         </div>
         <div className="summary-line">

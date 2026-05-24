@@ -7,7 +7,7 @@ import SiteFooter from "@/components/SiteFooter";
 import ProductImage from "@/components/ProductImage";
 import QuoteActions from "@/components/QuoteActions";
 import MessageThread from "@/components/MessageThread";
-import { formatCents, feeFor } from "@/lib/money";
+import { formatCents, feeFor, FEE_RATE_LABEL } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -140,7 +140,7 @@ export default async function QuotePage({
                   <span>{formatCents(freight)}</span>
                 </div>
                 <div className="summary-line">
-                  <span>Platform fee</span>
+                  <span>Platform fee ({FEE_RATE_LABEL})</span>
                   <span style={{ color: "var(--amber-deep)" }}>{formatCents(fee)}</span>
                 </div>
                 <div className="summary-line">

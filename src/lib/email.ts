@@ -97,11 +97,16 @@ type OrderLite = {
   freightCents: number;
   feeCents: number;
   taxCents: number;
+  feeRateBps: number;
   shipTo: string;
   carrier?: string | null;
   trackingCode?: string | null;
   items: { nameSnapshot: string; skuSnapshot: string; qty: number; supplierName: string }[];
 };
+
+function feeLabel(bps: number): string {
+  return `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`;
+}
 
 function lineRows(order: OrderLite): string {
   return order.items
@@ -117,7 +122,7 @@ function totals(order: OrderLite): string {
     <table cellpadding="0" cellspacing="0" width="100%" style="margin-top:12px;border-top:1px solid #e2e0d9;">
       <tr><td style="padding:6px 0;font-size:13px;">Subtotal</td><td style="padding:6px 0;font-size:13px;text-align:right;">${formatCents(order.subtotalCents)}</td></tr>
       <tr><td style="padding:6px 0;font-size:13px;">Freight</td><td style="padding:6px 0;font-size:13px;text-align:right;">${formatCents(order.freightCents)}</td></tr>
-      <tr><td style="padding:6px 0;font-size:13px;">Platform fee</td><td style="padding:6px 0;font-size:13px;text-align:right;">${formatCents(order.feeCents)}</td></tr>
+      <tr><td style="padding:6px 0;font-size:13px;">Platform fee (${feeLabel(order.feeRateBps)})</td><td style="padding:6px 0;font-size:13px;text-align:right;">${formatCents(order.feeCents)}</td></tr>
       <tr><td style="padding:6px 0;font-size:13px;">Sales tax</td><td style="padding:6px 0;font-size:13px;text-align:right;">${formatCents(order.taxCents)}</td></tr>
       <tr><td style="padding:8px 0 0;font-size:14px;font-weight:700;border-top:1px solid #1a1916;">Total</td><td style="padding:8px 0 0;font-size:14px;font-weight:700;text-align:right;border-top:1px solid #1a1916;">${formatCents(order.totalCents)}</td></tr>
     </table>`;

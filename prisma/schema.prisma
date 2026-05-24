@@ -279,7 +279,7 @@ model Order {
   feeCents      Int
   taxCents      Int         @default(0)
   totalCents    Int
-  feeRateBps    Int         @default(400)
+  feeRateBps    Int         @default(600)
   paymentMethod String      @default("paypal")
   paypalOrderId String?
   shipmentStage String      @default("")

@@ -5,6 +5,7 @@ import SiteFooter from "@/components/SiteFooter";
 import PartIcon from "@/components/PartIcon";
 import ProductCard from "@/components/ProductCard";
 import HeroSearch from "@/components/HeroSearch";
+import { FEE_RATE_BPS, FEE_RATE_LABEL, formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -206,29 +207,25 @@ export default async function HomePage() {
           <div className="wrap">
             <div className="section-head center">
               <span className="eyebrow">Pricing</span>
-              <h2>One marketplace fee. Cheaper per dollar as orders get bigger.</h2>
-              <p>You see the supplier price; the fee is added on top on a tiered schedule.</p>
+              <h2>One marketplace fee.</h2>
+              <p>You see the supplier price; the fee is added on top.</p>
             </div>
-            <div className="fee-tiers">
-              <div className="fee-tier-row">
-                <div>First $1,000</div>
-                <div className="num">6.0%</div>
+            <div className="panel light" style={{ maxWidth: 560, margin: "0 auto" }}>
+              <div className="fee-row">
+                <span>Equipment price (set by supplier)</span>
+                <span>{formatCents(845000)}</span>
               </div>
-              <div className="fee-tier-row">
-                <div>$1,000 to $10,000</div>
-                <div className="num">5.0%</div>
+              <div className="fee-row">
+                <span>Marketplace fee ({FEE_RATE_LABEL})</span>
+                <span className="amber">+ {formatCents(Math.round((845000 * FEE_RATE_BPS) / 10000))}</span>
               </div>
-              <div className="fee-tier-row">
-                <div>$10,000 to $50,000</div>
-                <div className="num">4.0%</div>
-              </div>
-              <div className="fee-tier-row">
-                <div>Over $50,000</div>
-                <div className="num">3.0%</div>
+              <div className="fee-row total">
+                <span>Buyer pays</span>
+                <span>{formatCents(845000 + Math.round((845000 * FEE_RATE_BPS) / 10000))}</span>
               </div>
             </div>
             <p className="center muted-text" style={{ marginTop: 18, fontSize: 13.5 }}>
-              Marginal schedule. An $8,450 order pays 6% on the first $1,000 and 5% on the next $7,450, blended to roughly 5.1%. Bigger orders pay a lower blended rate. Freight and sales tax are separate line items, never absorbed into the fee.
+              Freight and sales tax are separate line items at checkout, never absorbed into the fee.
             </p>
           </div>
         </section>

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import ProductImage from "./ProductImage";
 import { getCart, setQty, onCartChange, type CartLine } from "@/lib/cart";
-import { formatCents, feeFor } from "@/lib/money";
+import { formatCents, feeFor, FEE_RATE_LABEL } from "@/lib/money";
 
 type LookupProduct = {
   sku: string;
@@ -128,13 +128,25 @@ export default function CartClient() {
             <span>{formatCents(subtotal)}</span>
           </div>
           <div className="summary-line">
-            <span>Marketplace fee</span>
+            <span>Freight</span>
+            <span>{formatCents(0)}</span>
+          </div>
+          <div className="summary-line">
+            <span>Marketplace fee ({FEE_RATE_LABEL})</span>
             <span style={{ color: "var(--amber-dark)" }}>{formatCents(fee)}</span>
+          </div>
+          <div className="summary-line">
+            <span>Sales tax</span>
+            <span>{formatCents(0)}</span>
           </div>
           <div className="summary-line total">
             <span>Order total</span>
             <span>{formatCents(subtotal + fee)}</span>
           </div>
+          <p className="muted-text" style={{ fontSize: 11.5, marginTop: 6 }}>
+            Freight and sales tax are calculated at checkout based on the
+            ship-to address and exemption status.
+          </p>
           <Link
             className="btn btn-primary btn-block"
             href="/checkout"

@@ -13,7 +13,11 @@ const HOME: Record<string, string> = {
 
 type Step = "password" | "twofa";
 
-export default function LoginForm() {
+export default function LoginForm({
+  showDemoCreds = false,
+}: {
+  showDemoCreds?: boolean;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -111,15 +115,17 @@ export default function LoginForm() {
             <div className="auth-alt">
               New to PartsPort? <Link href="/register">Create an account</Link>
             </div>
-            <div className="demo-creds">
-              <strong>Demo accounts</strong> (password <code>demo1234</code>):
-              <br />
-              Buyer <code>buyer@partsport.example</code>
-              <br />
-              Supplier <code>supplier@partsport.example</code>
-              <br />
-              Admin <code>admin@partsport.example</code>
-            </div>
+            {showDemoCreds && (
+              <div className="demo-creds">
+                <strong>Demo accounts</strong> (password <code>demo1234</code>):
+                <br />
+                Buyer <code>buyer@partsport.example</code>
+                <br />
+                Supplier <code>supplier@partsport.example</code>
+                <br />
+                Admin <code>admin@partsport.example</code>
+              </div>
+            )}
           </>
         ) : (
           <form onSubmit={submit2fa}>

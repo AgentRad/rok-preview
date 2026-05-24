@@ -43,7 +43,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
-        <DemoGuide />
+        {process.env.VERCEL_ENV !== "production" && <DemoGuide />}
       </body>
     </html>
   );
