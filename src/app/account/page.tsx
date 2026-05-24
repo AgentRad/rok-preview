@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import AddressBook from "@/components/AddressBook";
+import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +35,19 @@ export default async function AccountPage() {
       <SiteHeader />
       <main id="main">
         <div className="page-pad narrow">
-          <h1 className="page-title">My orders</h1>
+          <h1 className="page-title">My account</h1>
           <p className="page-sub">
-            Signed in as {user.name} · {user.email}
+            Signed in as {user.name} · {user.email} · {user.role.toLowerCase()}
           </p>
+
+          <div className="card" style={{ marginTop: 24 }}>
+            <div className="card-head">
+              <h2>Change password</h2>
+            </div>
+            <div className="card-body">
+              <ChangePasswordForm />
+            </div>
+          </div>
 
           <div className="card" style={{ marginTop: 24 }}>
             <div className="card-head">

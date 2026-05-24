@@ -78,6 +78,9 @@ async function main() {
     { email: "admin@partsport.example", name: "Avery Ops", role: "ADMIN" },
     { email: "buyer@partsport.example", name: "Jordan Buyer", role: "BUYER" },
     { email: "oem@partsport.example", name: "Morgan Reed", role: "MANUFACTURER", manufacturerName: "Siemens" },
+    // Real platform admin. Created on first deploy with the temp password
+    // demo1234; rotate immediately via /account or /forgot-password.
+    { email: "ethompson@thradd.com", name: "E. Thompson", role: "ADMIN" },
   ];
   for (const u of demoUsers) {
     await prisma.user.upsert({
