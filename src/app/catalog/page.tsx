@@ -9,7 +9,16 @@ import CatalogSort from "@/components/CatalogSort";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = { q?: string; cat?: string; sort?: string; instock?: string };
+type SearchParams = {
+  q?: string;
+  cat?: string;
+  mfr?: string;
+  sort?: string;
+  instock?: string;
+  page?: string;
+};
+
+const PAGE_SIZE = 24;
 
 const ORDER: Record<string, Prisma.ProductOrderByWithRelationInput> = {
   "price-asc": { priceCents: "asc" },
@@ -39,17 +48,28 @@ export default async function CatalogPage({
   const sp = await searchParams;
   const q = (sp.q || "").trim();
   const cat = sp.cat || "";
+  const mfr = sp.mfr || "";
   const sort = sp.sort || "featured";
   const inStock = sp.instock === "1";
+  const requestedPage = Math.max(1, parseInt(sp.page || "1", 10) || 1);
 
-  const grouped = await prisma.product.groupBy({
-    by: ["category"],
-    where: { active: true },
-    _count: true,
-    orderBy: { category: "asc" },
-  });
+  const [grouped, manufacturers] = await Promise.all([
+    prisma.product.groupBy({
+      by: ["category"],
+      where: { active: true },
+      _count: true,
+      orderBy: { category: "asc" },
+    }),
+    prisma.product.groupBy({
+      by: ["manufacturer"],
+      where: { active: true, ...(cat ? { category: cat } : {}) },
+      _count: true,
+      orderBy: { manufacturer: "asc" },
+    }),
+  ]);
 
-  let products: SearchProduct[];
+  let allProducts: SearchProduct[];
+  let totalCount: number;
   let interpretation = "";
   let aiSearch = false;
 
@@ -57,30 +77,52 @@ export default async function CatalogPage({
     const result = await runSearch(q);
     interpretation = result.interpretation;
     aiSearch = result.ai;
-    products = result.products.filter((p) => {
+    allProducts = result.products.filter((p) => {
       if (cat && p.category !== cat) return false;
+      if (mfr && p.manufacturer !== mfr) return false;
       if (inStock && p.stock <= 0) return false;
       return true;
     });
-    products = sortInMemory(products, sort);
+    allProducts = sortInMemory(allProducts, sort);
+    totalCount = allProducts.length;
   } else {
     const where: Prisma.ProductWhereInput = { active: true };
     if (cat) where.category = cat;
+    if (mfr) where.manufacturer = mfr;
     if (inStock) where.stock = { gt: 0 };
-    products = await prisma.product.findMany({
-      where,
-      include: { supplier: true },
-      orderBy: ORDER[sort] || ORDER.featured,
-    });
+    const [list, count] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: { supplier: true },
+        orderBy: ORDER[sort] || ORDER.featured,
+      }),
+      prisma.product.count({ where }),
+    ]);
+    allProducts = list;
+    totalCount = count;
   }
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const page = Math.min(requestedPage, totalPages);
+  const products = allProducts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function hrefWith(patch: Partial<SearchParams>) {
     const next = new URLSearchParams();
-    const merged: SearchParams = { q, cat, sort, instock: inStock ? "1" : "", ...patch };
+    const merged: SearchParams = {
+      q,
+      cat,
+      mfr,
+      sort,
+      instock: inStock ? "1" : "",
+      page: String(page),
+      ...patch,
+    };
     if (merged.q) next.set("q", merged.q);
     if (merged.cat) next.set("cat", merged.cat);
+    if (merged.mfr) next.set("mfr", merged.mfr);
     if (merged.sort && merged.sort !== "featured") next.set("sort", merged.sort);
     if (merged.instock === "1") next.set("instock", "1");
+    if (merged.page && merged.page !== "1") next.set("page", merged.page);
     const s = next.toString();
     return s ? `/catalog?${s}` : "/catalog";
   }
@@ -108,7 +150,7 @@ export default async function CatalogPage({
             <div className="filter-group">
               <h3>Category</h3>
               <Link
-                href={hrefWith({ cat: "" })}
+                href={hrefWith({ cat: "", mfr: "", page: "1" })}
                 className="filter-opt"
                 style={{ fontWeight: cat ? 400 : 700, textDecoration: "none", color: "inherit" }}
               >
@@ -120,7 +162,7 @@ export default async function CatalogPage({
               {grouped.map((g) => (
                 <Link
                   key={g.category}
-                  href={hrefWith({ cat: g.category })}
+                  href={hrefWith({ cat: g.category, mfr: "", page: "1" })}
                   className="filter-opt"
                   style={{
                     fontWeight: cat === g.category ? 700 : 400,
@@ -133,10 +175,46 @@ export default async function CatalogPage({
                 </Link>
               ))}
             </div>
+
+            {manufacturers.length > 1 && (
+              <div className="filter-group">
+                <h3>Manufacturer</h3>
+                <Link
+                  href={hrefWith({ mfr: "", page: "1" })}
+                  className="filter-opt"
+                  style={{
+                    fontWeight: mfr ? 400 : 700,
+                    textDecoration: "none",
+                    color: "inherit",
+                  }}
+                >
+                  All manufacturers
+                  <span className="count">
+                    {manufacturers.reduce((n, m) => n + m._count, 0)}
+                  </span>
+                </Link>
+                {manufacturers.map((m) => (
+                  <Link
+                    key={m.manufacturer}
+                    href={hrefWith({ mfr: m.manufacturer, page: "1" })}
+                    className="filter-opt"
+                    style={{
+                      fontWeight: mfr === m.manufacturer ? 700 : 400,
+                      textDecoration: "none",
+                      color: mfr === m.manufacturer ? "var(--amber-deep)" : "inherit",
+                    }}
+                  >
+                    {m.manufacturer}
+                    <span className="count">{m._count}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+
             <div className="filter-group">
               <h3>Availability</h3>
               <Link
-                href={hrefWith({ instock: inStock ? "" : "1" })}
+                href={hrefWith({ instock: inStock ? "" : "1", page: "1" })}
                 className="filter-opt"
                 style={{ textDecoration: "none", color: "inherit" }}
               >
@@ -144,7 +222,7 @@ export default async function CatalogPage({
                 In stock now
               </Link>
             </div>
-            {(q || cat || inStock) && (
+            {(q || cat || mfr || inStock) && (
               <Link href="/catalog" className="filter-clear" style={{ display: "inline-block" }}>
                 Clear all filters
               </Link>
@@ -166,7 +244,6 @@ export default async function CatalogPage({
                   </div>
                   <div className="ai-banner-text">
                     {interpretation}
-                    {aiSearch ? "" : ""}
                   </div>
                 </div>
               </div>
@@ -174,26 +251,64 @@ export default async function CatalogPage({
 
             <div className="results-bar">
               <span className="results-count">
-                <strong>{products.length}</strong> part
-                {products.length === 1 ? "" : "s"}
+                <strong>{totalCount}</strong> part
+                {totalCount === 1 ? "" : "s"}
+                {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
               </span>
               <CatalogSort value={sort} />
             </div>
 
             {products.length === 0 ? (
               <div className="empty-block">
-                <h3>No parts match your search</h3>
+                <h3>No parts match your filters</h3>
                 <p>
-                  Try describing the part differently, or{" "}
+                  Try a different category, manufacturer, or{" "}
                   <Link href="/suppliers">request a part we don&rsquo;t list</Link>.
                 </p>
               </div>
             ) : (
-              <div className="product-grid">
-                {products.map((p) => (
-                  <ProductCard key={p.sku} product={p} />
-                ))}
-              </div>
+              <>
+                <div className="product-grid">
+                  {products.map((p) => (
+                    <ProductCard key={p.sku} product={p} />
+                  ))}
+                </div>
+
+                {totalPages > 1 && (
+                  <nav
+                    className="catalog-pager"
+                    aria-label="Catalog pagination"
+                  >
+                    {page > 1 ? (
+                      <Link
+                        className="btn btn-ghost btn-sm"
+                        href={hrefWith({ page: String(page - 1) })}
+                      >
+                        ← Previous
+                      </Link>
+                    ) : (
+                      <span className="btn btn-ghost btn-sm" style={{ opacity: 0.4 }}>
+                        ← Previous
+                      </span>
+                    )}
+                    <span className="muted-text" style={{ fontSize: 13 }}>
+                      Page {page} of {totalPages}
+                    </span>
+                    {page < totalPages ? (
+                      <Link
+                        className="btn btn-ghost btn-sm"
+                        href={hrefWith({ page: String(page + 1) })}
+                      >
+                        Next →
+                      </Link>
+                    ) : (
+                      <span className="btn btn-ghost btn-sm" style={{ opacity: 0.4 }}>
+                        Next →
+                      </span>
+                    )}
+                  </nav>
+                )}
+              </>
             )}
           </div>
         </div>
