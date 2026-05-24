@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
+import ReorderButton from "@/components/ReorderButton";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -82,23 +83,31 @@ export default async function AccountPage() {
                           </td>
                           <td className="num">{formatCents(o.totalCents)}</td>
                           <td className="num">
-                            <Link
-                              href={`/orders/${o.id}`}
-                              style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                            <div
+                              style={{
+                                display: "inline-flex",
+                                gap: 10,
+                                alignItems: "center",
+                                flexWrap: "wrap",
+                                justifyContent: "flex-end",
+                              }}
                             >
-                              View
-                            </Link>
-                            {isPaid && (
-                              <>
-                                {" · "}
+                              <Link
+                                href={`/orders/${o.id}`}
+                                style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                              >
+                                View
+                              </Link>
+                              {isPaid && (
                                 <Link
                                   href={`/orders/${o.id}/invoice`}
                                   style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
                                 >
                                   Invoice
                                 </Link>
-                              </>
-                            )}
+                              )}
+                              <ReorderButton orderId={o.id} />
+                            </div>
                           </td>
                         </tr>
                       );
