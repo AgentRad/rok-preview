@@ -71,6 +71,7 @@ model User {
   resetTokens      PasswordResetToken[]
   reviews          Review[]
   addresses        Address[]
+  messages         Message[]
   createdAt        DateTime @default(now())
 }
 
@@ -240,6 +241,7 @@ model Order {
   invoice       Invoice?
   returns       ReturnRequest[]
   payouts       Payout[]
+  messages      Message[]
   createdAt     DateTime    @default(now())
   paidAt        DateTime?
   cancelledAt   DateTime?
@@ -290,8 +292,27 @@ model QuoteRequest {
   quotedUnitCents Int?
   quoteNote       String      @default("")
   orderId         String?
+  messages        Message[]
   createdAt       DateTime    @default(now())
   quotedAt        DateTime?
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  order       Order?        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String?
+  quote       QuoteRequest? @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId     String?
+  sender      User?         @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  senderId    String?
+  senderName  String
+  senderEmail String
+  senderRole  String
+  body        String
+  createdAt   DateTime      @default(now())
+
+  @@index([orderId])
+  @@index([quoteId])
 }
 
 model SupplierApplication {

@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductImage from "@/components/ProductImage";
 import QuoteActions from "@/components/QuoteActions";
+import MessageThread from "@/components/MessageThread";
 import { formatCents, feeFor } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +26,20 @@ export default async function QuotePage({
   const { id } = await params;
   const quote = await prisma.quoteRequest.findUnique({
     where: { id },
-    include: { product: { include: { supplier: true } } },
+    include: {
+      product: { include: { supplier: true } },
+      messages: { orderBy: { createdAt: "asc" } },
+    },
   });
   if (!quote) notFound();
+
+  const viewer = await getCurrentUser();
+  const isBuyer = !!viewer && !!quote.buyerId && viewer.id === quote.buyerId;
+  const isAdmin = viewer?.role === "ADMIN";
+  const isQuoteSupplier =
+    viewer?.role === "SUPPLIER" &&
+    quote.product.supplier.userId === viewer.id;
+  const canMessage = !!viewer && (isBuyer || isAdmin || isQuoteSupplier);
 
   const p = quote.product;
   const quoted = quote.quotedUnitCents != null;
@@ -145,6 +158,25 @@ export default async function QuotePage({
               </div>
             </div>
           )}
+
+          <div className="card" style={{ marginTop: 22 }}>
+            <div className="card-head">
+              <h2>Messages{quote.messages.length > 0 ? ` · ${quote.messages.length}` : ""}</h2>
+            </div>
+            <div className="card-body">
+              <MessageThread
+                quoteId={quote.id}
+                canPost={canMessage}
+                messages={quote.messages.map((m) => ({
+                  id: m.id,
+                  senderName: m.senderName,
+                  senderRole: m.senderRole,
+                  body: m.body,
+                  createdAt: m.createdAt.toISOString(),
+                }))}
+              />
+            </div>
+          </div>
 
           <div style={{ marginTop: 24 }} className="row-gap">
             <Link className="btn btn-ghost" href="/catalog">

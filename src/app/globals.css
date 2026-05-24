@@ -655,6 +655,27 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 }
 .return-actions input { width: 220px; }
 
+/* ---------- Message threads ---------- */
+.thread { display: flex; flex-direction: column; gap: 14px; }
+.thread-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.thread-message {
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius-sm); padding: 12px 14px;
+}
+.thread-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 6px;
+}
+.thread-body {
+  white-space: pre-wrap; font-size: 14px; line-height: 1.55;
+}
+.thread-form textarea {
+  width: 100%; font-family: var(--sans); font-size: 14px; padding: 10px 12px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink); resize: vertical;
+}
+
 /* ---------- Auth ---------- */
 .auth-wrap { max-width: 440px; margin: 0 auto; padding: 72px 24px 100px; }
 .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 38px; }

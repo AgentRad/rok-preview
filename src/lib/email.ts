@@ -291,6 +291,33 @@ export async function sendApplicationStatus(args: {
   }
 }
 
+export async function sendThreadMessage(args: {
+  to: string;
+  senderName: string;
+  subjectPrefix: string; // "Order PP-ABC123" or "RFQ RFQ-ABC123"
+  context: string; // human-readable line, e.g. "your order for 100 A breakers"
+  body: string;
+  threadUrl: string;
+}): Promise<void> {
+  const safeBody = args.body
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px;">${line || "&nbsp;"}</p>`)
+    .join("");
+  const html = wrap(
+    "New message",
+    `<p>${args.senderName} sent you a message about ${args.context}:</p>
+     <div style="margin:14px 0;padding:14px 16px;background:#f3f2ef;border-left:3px solid #1a1916;">${safeBody}</div>
+     <p style="margin-top:18px;">${btn(args.threadUrl, "Open thread")}</p>
+     <p style="font-size:12px;color:#6f6d64;margin-top:14px;">Reply on PartsPort. Reply-by-email is not yet enabled.</p>`,
+    "Replies sent on PartsPort stay tied to this thread so admin support can step in if needed."
+  );
+  await send({
+    to: args.to,
+    subject: `[${args.subjectPrefix}] Message from ${args.senderName}`,
+    html,
+  });
+}
+
 export async function sendPasswordReset(args: {
   to: string;
   name: string;

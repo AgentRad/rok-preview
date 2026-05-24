@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PayOrder from "@/components/PayOrder";
 import CancelOrderButton from "@/components/CancelOrderButton";
 import ReturnRequestForm from "@/components/ReturnRequestForm";
+import MessageThread from "@/components/MessageThread";
 import { formatCents } from "@/lib/money";
 import { trackingLink } from "@/lib/tracking";
 
@@ -26,9 +28,23 @@ export default async function OrderPage({
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id },
-    include: { items: true, returns: { orderBy: { createdAt: "desc" } } },
+    include: {
+      items: { include: { product: { include: { supplier: true } } } },
+      returns: { orderBy: { createdAt: "desc" } },
+      messages: { orderBy: { createdAt: "asc" } },
+    },
   });
   if (!order) notFound();
+
+  const viewer = await getCurrentUser();
+  const isBuyer = !!viewer && !!order.buyerId && viewer.id === order.buyerId;
+  const isAdmin = viewer?.role === "ADMIN";
+  const isOrderSupplier =
+    viewer?.role === "SUPPLIER" &&
+    order.items.some(
+      (it) => it.product.supplier.userId === viewer.id
+    );
+  const canMessage = !!viewer && (isBuyer || isAdmin || isOrderSupplier);
 
   const paid = order.status !== "PENDING" && order.status !== "CANCELLED";
   const fulfilled = order.status === "FULFILLED";
@@ -267,6 +283,25 @@ export default async function OrderPage({
               . The invoice has been voided.
             </div>
           )}
+
+          <div className="card" style={{ marginTop: 28 }}>
+            <div className="card-head">
+              <h2>Messages{order.messages.length > 0 ? ` · ${order.messages.length}` : ""}</h2>
+            </div>
+            <div className="card-body">
+              <MessageThread
+                orderId={order.id}
+                canPost={canMessage}
+                messages={order.messages.map((m) => ({
+                  id: m.id,
+                  senderName: m.senderName,
+                  senderRole: m.senderRole,
+                  body: m.body,
+                  createdAt: m.createdAt.toISOString(),
+                }))}
+              />
+            </div>
+          </div>
 
           {canOpenReturn && (
             <div className="card" style={{ marginTop: 28 }}>
