@@ -150,6 +150,9 @@ model Supplier {
   reviews        Int            @default(0)
   onTimeRate     Float          @default(97.5)
   certifications String         @default("")
+  logoUrl        String?
+  website        String         @default("")
+  description    String         @default("")
   user           User?          @relation(fields: [userId], references: [id])
   userId         String?        @unique
   products       Product[]

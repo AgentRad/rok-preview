@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { requireRole } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import {
   ROLE_LABEL,
   canEditCatalog,
@@ -9,7 +10,7 @@ import {
   canViewOrders,
   canViewPayouts,
   canViewQuotes,
-  getSupplierContextForUser,
+  getActiveSupplierContext,
 } from "@/lib/supplier-access";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
@@ -19,6 +20,7 @@ import CatalogCsvImport from "@/components/CatalogCsvImport";
 import SupplierTeam from "@/components/SupplierTeam";
 import FulfillButton from "@/components/FulfillButton";
 import QuoteResponder from "@/components/QuoteResponder";
+import ActingAsBanner from "@/components/ActingAsBanner";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -31,8 +33,11 @@ const STATUS_CLASS: Record<string, string> = {
 };
 
 export default async function SupplierDashboard() {
-  const user = await requireRole("SUPPLIER");
-  const ctx = await getSupplierContextForUser(user.id);
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (user.role !== "SUPPLIER" && user.role !== "ADMIN") redirect("/");
+
+  const ctx = await getActiveSupplierContext(user);
   const role = ctx?.role ?? null;
   const supplier = ctx
     ? await prisma.supplier.findUnique({
@@ -57,8 +62,9 @@ export default async function SupplierDashboard() {
           <div className="page-pad narrow">
             <h1 className="page-title">Supplier dashboard</h1>
             <div className="alert alert-info" style={{ marginTop: 16 }}>
-              No supplier profile is linked to this account yet. Once an admin
-              approves your supplier application, your dashboard appears here.
+              {user.role === "ADMIN"
+                ? "No supplier selected. Go to /admin and click 'Manage as' next to a supplier to operate their dashboard."
+                : "No supplier profile is linked to this account yet. Once an admin approves your supplier application, your dashboard appears here."}
             </div>
           </div>
         </main>
@@ -113,11 +119,14 @@ export default async function SupplierDashboard() {
       <SiteHeader />
       <main id="main">
         <div className="page-pad">
+          {ctx?.actingAsAdmin && (
+            <ActingAsBanner supplierName={supplier.name} />
+          )}
           <h1 className="page-title">{supplier.name}</h1>
           <p className="page-sub">
             Supplier dashboard · ★ {supplier.rating.toFixed(1)} ·{" "}
             {supplier.onTimeRate.toFixed(1)}% on-time
-            {role ? ` · You are signed in as ${ROLE_LABEL[role]}` : ""}
+            {role ? ` · ${ctx?.actingAsAdmin ? "Admin override" : "Signed in as " + ROLE_LABEL[role]}` : ""}
           </p>
 
           <div className="kpi-grid">

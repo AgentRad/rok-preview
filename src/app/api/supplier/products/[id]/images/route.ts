@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { canEditCatalog, userHasAccessToSupplier } from "@/lib/supplier-access";
+import type { User } from "@prisma/client";
+import { canEditCatalog, effectiveAccessToSupplier } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 
-async function ownedProduct(userId: string, productId: string) {
+async function ownedProduct(user: User, productId: string) {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     include: { supplier: true },
   });
   if (!product) return null;
-  const access = await userHasAccessToSupplier(userId, product.supplierId);
+  const access = await effectiveAccessToSupplier(user, product.supplierId);
   if (!access.ok || !canEditCatalog(access.role)) return null;
   return product;
 }
@@ -29,7 +30,7 @@ async function requireSupplierProduct(req: Request, productId: string) {
     }
     return { product };
   }
-  const product = await ownedProduct(user.id, productId);
+  const product = await ownedProduct(user, productId);
   if (!product) {
     return { error: NextResponse.json({ error: "Not your product." }, { status: 403 }) };
   }

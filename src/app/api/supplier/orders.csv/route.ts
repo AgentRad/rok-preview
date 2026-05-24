@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { canRunExports, getSupplierContextForUser } from "@/lib/supplier-access";
+import { canRunExports, getActiveSupplierContext } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,10 +26,9 @@ export async function GET() {
   if (!user || (user.role !== "SUPPLIER" && user.role !== "ADMIN")) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
-  const ctx =
-    user.role === "SUPPLIER"
-      ? await getSupplierContextForUser(user.id)
-      : null;
+  // When the admin is acting as a supplier, scope the export to that supplier
+  // too (instead of all orders). Otherwise unscoped for plain admin.
+  const ctx = await getActiveSupplierContext(user);
   if (user.role === "SUPPLIER") {
     if (!ctx) {
       return NextResponse.json(
@@ -44,7 +43,12 @@ export async function GET() {
       );
     }
   }
-  const supplier = ctx?.supplier ?? null;
+  const supplier =
+    user.role === "ADMIN"
+      ? ctx?.actingAsAdmin
+        ? ctx.supplier
+        : null
+      : (ctx?.supplier ?? null);
 
   const orders = await prisma.order.findMany({
     where: {

@@ -1,11 +1,36 @@
 import "server-only";
-import type { Supplier, SupplierMemberRole } from "@prisma/client";
+import type { Supplier, SupplierMemberRole, User } from "@prisma/client";
 import { prisma } from "./db";
+import { getActingAsSupplier } from "./acting-as";
 
 export type SupplierContext = {
   supplier: Supplier;
   role: SupplierMemberRole;
+  /** True when an admin is impersonating this supplier via the act-as cookie. */
+  actingAsAdmin?: boolean;
 };
+
+/**
+ * Request-aware lookup. Honors the admin "acting-as" cookie when set, so the
+ * caller doesn't need to know about that mechanism. Use this in pages and
+ * endpoints; getSupplierContextForUser is the lower-level primitive.
+ */
+export async function getActiveSupplierContext(
+  user: User
+): Promise<SupplierContext | null> {
+  if (user.role === "ADMIN") {
+    const actingAs = await getActingAsSupplier();
+    if (actingAs) {
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: actingAs },
+      });
+      if (supplier) {
+        return { supplier, role: "OWNER", actingAsAdmin: true };
+      }
+    }
+  }
+  return getSupplierContextForUser(user.id);
+}
 
 /**
  * Returns the supplier the given user is acting for, and their role on it.
@@ -47,6 +72,22 @@ export async function userHasAccessToSupplier(
   if (legacy) return { ok: true, role: "OWNER" };
 
   return { ok: false, role: null };
+}
+
+/**
+ * Same as userHasAccessToSupplier, but admins with an active act-as cookie
+ * for this supplier are treated as OWNER. Use this in API routes that
+ * suppliers normally hit so admin overrides work end-to-end.
+ */
+export async function effectiveAccessToSupplier(
+  user: User,
+  supplierId: string
+): Promise<{ ok: boolean; role: SupplierMemberRole | null }> {
+  if (user.role === "ADMIN") {
+    const actingAs = await getActingAsSupplier();
+    if (actingAs === supplierId) return { ok: true, role: "OWNER" };
+  }
+  return userHasAccessToSupplier(user.id, supplierId);
 }
 
 // ---------------------------------------------------------------------------

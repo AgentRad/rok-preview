@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
-import { canEditCatalog, userHasAccessToSupplier } from "@/lib/supplier-access";
+import { canEditCatalog, effectiveAccessToSupplier } from "@/lib/supplier-access";
 
 export async function PATCH(
   req: Request,
@@ -17,8 +17,8 @@ export async function PATCH(
   if (!product) {
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
-  if (user.role === "SUPPLIER") {
-    const access = await userHasAccessToSupplier(user.id, product.supplierId);
+  if (user.role !== "ADMIN") {
+    const access = await effectiveAccessToSupplier(user, product.supplierId);
     if (!access.ok) {
       return NextResponse.json({ error: "Not your product." }, { status: 403 });
     }

@@ -6,6 +6,7 @@ import SiteFooter from "@/components/SiteFooter";
 import ApplicationReview from "@/components/ApplicationReview";
 import ReturnActions from "@/components/ReturnActions";
 import AddSupplierForm from "@/components/AddSupplierForm";
+import SupplierAdminRow from "@/components/SupplierAdminRow";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -372,6 +373,9 @@ export default async function AdminConsole() {
           <div className="card">
             <div className="card-head">
               <h2>Suppliers</h2>
+              <span className="muted-text" style={{ fontSize: 12.5 }}>
+                Edit profile or Manage as to operate their dashboard
+              </span>
             </div>
             <div className="table-wrap">
               <table className="table">
@@ -381,24 +385,28 @@ export default async function AdminConsole() {
                     <th>Contact</th>
                     <th>Status</th>
                     <th className="num">Rating</th>
-                    <th className="num">On-time</th>
                     <th className="num">Listings</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {suppliers.map((s) => (
-                    <tr key={s.id}>
-                      <td style={{ fontWeight: 600 }}>{s.name}</td>
-                      <td className="muted-text" style={{ fontSize: 12.5 }}>
-                        {s.contactEmail}
-                      </td>
-                      <td>
-                        <span className="badge badge-approved">{s.status}</span>
-                      </td>
-                      <td className="num">★ {s.rating.toFixed(1)}</td>
-                      <td className="num">{s.onTimeRate.toFixed(1)}%</td>
-                      <td className="num">{s._count.products}</td>
-                    </tr>
+                    <SupplierAdminRow
+                      key={s.id}
+                      supplier={{
+                        id: s.id,
+                        name: s.name,
+                        contactEmail: s.contactEmail,
+                        certifications: s.certifications,
+                        logoUrl: s.logoUrl,
+                        website: s.website,
+                        description: s.description,
+                        status: s.status,
+                        rating: s.rating,
+                        onTimeRate: s.onTimeRate,
+                        productCount: s._count.products,
+                      }}
+                    />
                   ))}
                 </tbody>
               </table>

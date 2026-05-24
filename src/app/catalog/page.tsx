@@ -239,7 +239,7 @@ export default async function CatalogPage({
                 </span>
                 <div>
                   <div className="ai-banner-label">
-                    {aiSearch ? "AI search" : "Search"} ·{" "}
+                    {aiSearch ? "Smart search" : "Search"} ·{" "}
                     <span className="ai-query">&ldquo;{q}&rdquo;</span>
                   </div>
                   <div className="ai-banner-text">

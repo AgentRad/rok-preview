@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { parseCsvWithHeader } from "@/lib/csv";
 import { ICON_KEYS } from "@/components/PartIcon";
-import { canEditCatalog, getSupplierContextForUser } from "@/lib/supplier-access";
+import { canEditCatalog, getActiveSupplierContext } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 
@@ -88,13 +88,18 @@ function normalizeRow(
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "SUPPLIER") {
+  if (!user || (user.role !== "SUPPLIER" && user.role !== "ADMIN")) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
-  const ctx = await getSupplierContextForUser(user.id);
+  const ctx = await getActiveSupplierContext(user);
   if (!ctx) {
     return NextResponse.json(
-      { error: "No supplier profile linked to this account." },
+      {
+        error:
+          user.role === "ADMIN"
+            ? "Use 'Manage as' on /admin to act as a specific supplier first."
+            : "No supplier profile linked to this account.",
+      },
       { status: 400 }
     );
   }

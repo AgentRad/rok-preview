@@ -3,14 +3,14 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { ICON_KEYS } from "@/components/PartIcon";
-import { canEditCatalog, getSupplierContextForUser } from "@/lib/supplier-access";
+import { canEditCatalog, getActiveSupplierContext } from "@/lib/supplier-access";
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "SUPPLIER") {
+  if (!user || (user.role !== "SUPPLIER" && user.role !== "ADMIN")) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
-  const ctx = await getSupplierContextForUser(user.id);
+  const ctx = await getActiveSupplierContext(user);
   if (!ctx) {
     return NextResponse.json(
       { error: "No supplier profile is linked to this account." },

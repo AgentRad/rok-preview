@@ -1,8 +1,28 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
+import type { SupplierMemberRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
-import { sendSupplierWelcome } from "@/lib/email";
+import { sendSupplierWelcome, sendSupplierInvite } from "@/lib/email";
+import { siteUrl } from "@/lib/site-url";
+
+const VALID_ROLES: SupplierMemberRole[] = [
+  "OWNER",
+  "ADMIN",
+  "SALES",
+  "FULFILLMENT",
+  "CATALOG",
+  "FINANCE",
+  "VIEWER",
+];
+
+function parseRole(input: unknown): SupplierMemberRole {
+  if (typeof input !== "string") return "ADMIN";
+  const upper = input.toUpperCase() as SupplierMemberRole;
+  return VALID_ROLES.includes(upper) ? upper : "ADMIN";
+}
+
+const INVITE_DAYS = 14;
 
 export const runtime = "nodejs";
 
@@ -22,7 +42,15 @@ export async function POST(req: Request) {
   const contactName = String(body.contactName || "").trim();
   const contactEmail = String(body.contactEmail || "").toLowerCase().trim();
   const certifications = String(body.certifications || "").trim();
+  const website = String(body.website || "").trim();
+  const description = String(body.description || "").trim();
+  const logoUrl = String(body.logoUrl || "").trim();
   const sendEmail = body.sendEmail !== false; // default true
+  const teammates = Array.isArray(body.invites)
+    ? (body.invites as Array<{ email?: string; role?: string }>).filter(
+        (t) => t && typeof t.email === "string" && t.email.includes("@")
+      )
+    : [];
 
   if (!companyName) {
     return NextResponse.json({ error: "Company name is required." }, { status: 400 });
@@ -81,6 +109,9 @@ export async function POST(req: Request) {
       contactEmail,
       status: "APPROVED",
       certifications,
+      website,
+      description,
+      logoUrl: logoUrl || null,
       userId: user.id,
     },
   });
@@ -100,10 +131,86 @@ export async function POST(req: Request) {
     );
   }
 
+  // Optional teammate invites at creation time. Existing PartsPort users are
+  // added as SupplierMember immediately; new emails get a one-time-token
+  // invite link. Anything malformed is dropped silently (we only filter out
+  // entries without an email; bad emails just won't resolve to a user).
+  const inviteSummary: Array<{
+    email: string;
+    role: SupplierMemberRole;
+    status: "added" | "invited" | "skipped-self";
+  }> = [];
+  for (const t of teammates) {
+    const email = String(t.email).toLowerCase().trim();
+    if (!email) continue;
+    if (email === contactEmail) {
+      inviteSummary.push({ email, role: "OWNER", status: "skipped-self" });
+      continue;
+    }
+    const role = parseRole(t.role);
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      const already = await prisma.supplierMember.findUnique({
+        where: {
+          supplierId_userId: {
+            supplierId: supplier.id,
+            userId: existingUser.id,
+          },
+        },
+      });
+      if (!already) {
+        await prisma.$transaction([
+          prisma.user.update({
+            where: { id: existingUser.id },
+            data: existingUser.role === "BUYER" ? { role: "SUPPLIER" } : {},
+          }),
+          prisma.supplierMember.create({
+            data: { supplierId: supplier.id, userId: existingUser.id, role },
+          }),
+        ]);
+      }
+      sendSupplierInvite({
+        to: email,
+        inviterName: me.name,
+        companyName: supplier.name,
+        acceptUrl: siteUrl(`/supplier`),
+        expiresDays: INVITE_DAYS,
+      }).catch((err) =>
+        console.error("[email] team-invite (existing) failed:", err)
+      );
+      inviteSummary.push({ email, role, status: "added" });
+    } else {
+      const raw = crypto.randomBytes(32).toString("base64url");
+      const tokenHash = crypto.createHash("sha256").update(raw).digest("hex");
+      const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
+      await prisma.supplierInvite.create({
+        data: {
+          supplierId: supplier.id,
+          email,
+          role,
+          tokenHash,
+          invitedById: me.id,
+          expiresAt,
+        },
+      });
+      sendSupplierInvite({
+        to: email,
+        inviterName: me.name,
+        companyName: supplier.name,
+        acceptUrl: siteUrl(`/invite/${raw}`),
+        expiresDays: INVITE_DAYS,
+      }).catch((err) =>
+        console.error("[email] team-invite (new) failed:", err)
+      );
+      inviteSummary.push({ email, role, status: "invited" });
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     supplierId: supplier.id,
     userId: user.id,
     tempPassword, // shown to admin once; not stored
+    invites: inviteSummary,
   });
 }
