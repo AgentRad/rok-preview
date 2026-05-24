@@ -65,7 +65,7 @@ export default function PayOrder({
         {error && <div className="alert alert-error">{error}</div>}
         <div className="pay-note">
           PartsPort collects payment, then releases funds to the supplier on
-          dispatch. The 4% service fee is included in the total.
+          dispatch. The marketplace fee is included in the total.
         </div>
         {paymentsConfigured ? (
           <>

@@ -250,7 +250,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
           <span>{formatCents(freight)}</span>
         </div>
         <div className="summary-line">
-          <span>Platform fee (4%)</span>
+          <span>Platform fee</span>
           <span style={{ color: "var(--amber-deep)" }}>{formatCents(fee)}</span>
         </div>
         <div className="summary-line">
@@ -353,7 +353,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
             <div className="card-body">
               <div className="pay-note">
                 PartsPort collects payment, then releases funds to the supplier
-                on dispatch. The 4% service fee is included in the total below.
+                on dispatch. The marketplace fee is included in the total below.
               </div>
               {paymentsConfigured ? (
                 <>

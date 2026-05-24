@@ -23,6 +23,44 @@ const CATEGORIES: { name: string; icon: string }[] = [
   { name: "Safety & Arc-Flash", icon: "shield" },
 ];
 
+const COMPARE: { label: string; off: string; on: string }[] = [
+  {
+    label: "Find the right part",
+    off: "Call 3 to 5 distributors, wait for callbacks",
+    on: "Type it or describe it, see every vetted option",
+  },
+  {
+    label: "Get a price",
+    off: "Wait 1 to 3 days for quotes, chase email threads",
+    on: "Price on screen for in-stock, same-day RFQ response target",
+  },
+  {
+    label: "Compare options",
+    off: "Spreadsheet, gut feel, hope the supplier is real",
+    on: "Side by side: photo, brand, price, rating, ETA",
+  },
+  {
+    label: "Place the order",
+    off: "Cut a PO, fax or email, confirm by phone",
+    on: "Click order. One invoice with subtotal, freight, fee, tax",
+  },
+  {
+    label: "Pay",
+    off: "Net 30 to 60, AP cycles, separate wire per supplier",
+    on: "ACH or wire to PartsPort, one transaction, downloadable invoice",
+  },
+  {
+    label: "Track the shipment",
+    off: "Phone the carrier when nothing arrives",
+    on: "Live timeline on the order page with carrier deep link",
+  },
+  {
+    label: "If something goes wrong",
+    off: "Three-way phone calls, paperwork, weeks",
+    on: "Open a return on the order page, single accountable partner",
+  },
+];
+
 export default async function HomePage() {
   const [productCount, supplierCount, featured] = await Promise.all([
     prisma.product.count({ where: { active: true } }),
@@ -61,32 +99,18 @@ export default async function HomePage() {
             <div className="hero-stats">
               <div><div className="num">{productCount}</div><div className="lbl">parts in catalog</div></div>
               <div><div className="num">{supplierCount}</div><div className="lbl">vetted suppliers</div></div>
-              <div><div className="num">98.4%</div><div className="lbl">on-time delivery</div></div>
-              <div><div className="num">4%</div><div className="lbl">flat marketplace fee</div></div>
+              <div><div className="num">End to end</div><div className="lbl">freight, tax, invoicing handled</div></div>
+              <div><div className="num">Same day</div><div className="lbl">RFQ response target</div></div>
             </div>
           </div>
         </section>
-
-        <div className="industries">
-          <div className="wrap">
-            <span className="ind-label">Built for every industrial sector</span>
-            <div className="ind-list">
-              <span>Energy &amp; Utilities</span>
-              <span>Manufacturing</span>
-              <span>Construction</span>
-              <span>Oil &amp; Gas</span>
-              <span>Aerospace</span>
-              <span>Heavy Equipment</span>
-            </div>
-          </div>
-        </div>
 
         <section className="section">
           <div className="wrap">
             <div className="section-head center">
               <span className="eyebrow">Browse the catalog</span>
               <h2>Shop by category</h2>
-              <p>Every category in the catalog, sourced from vetted suppliers with delivery handled.</p>
+              <p>Every category, sourced from vetted suppliers with delivery handled.</p>
             </div>
             <div className="cat-grid">
               {CATEGORIES.map((c) => (
@@ -150,42 +174,66 @@ export default async function HomePage() {
 
         <section className="section alt">
           <div className="wrap">
-            <div className="split">
-              <div className="panel">
-                <h3>How a transaction works</h3>
-                <div className="fee-row"><span>Equipment price (set by supplier)</span><span>$8,450.00</span></div>
-                <div className="fee-row"><span>PartsPort service fee (4%)</span><span className="amber">$338.00</span></div>
-                <div className="fee-row total"><span>Buyer pays</span><span>$8,788.00</span></div>
-                <p className="muted" style={{ marginTop: 14 }}>
-                  PartsPort takes a small percentage of each transaction.
-                  Suppliers get qualified demand and guaranteed payment; buyers
-                  get one accountable partner.
-                </p>
-              </div>
-              <div>
-                <span className="eyebrow">For suppliers</span>
-                <h2 className="section-head" style={{ marginBottom: 0 }}>
-                  Qualified demand, without the chase.
-                </h2>
-                <p style={{ color: "var(--steel)", marginTop: 12 }}>
-                  We only work with suppliers who meet our bar, and in return
-                  you reach buyers who are ready to order, with payment and
-                  logistics handled for you.
-                </p>
-                <ul className="feature-list">
-                  <li><span className="ico">✓</span><div><strong>Reach active buyers</strong><span>Your catalog appears the moment a buyer searches for what you sell.</span></div></li>
-                  <li><span className="ico">✓</span><div><strong>Guaranteed payment</strong><span>PartsPort collects from the buyer and pays you on dispatch.</span></div></li>
-                  <li><span className="ico">✓</span><div><strong>No logistics overhead</strong><span>We coordinate delivery, returns, and buyer support.</span></div></li>
-                </ul>
-                <div className="mt-32">
-                  <Link className="btn btn-primary" href="/suppliers">See qualification criteria</Link>
-                </div>
-              </div>
+            <div className="section-head center">
+              <span className="eyebrow">Same operations, one place</span>
+              <h2>Sourcing one part, the old way and the PartsPort way</h2>
+              <p>The work doesn&rsquo;t change. Where it happens does.</p>
             </div>
+            <div className="compare">
+              <div className="compare-head">
+                <div></div>
+                <div className="compare-col-off">Today, off-platform</div>
+                <div className="compare-col-on">On PartsPort</div>
+              </div>
+              {COMPARE.map((row) => (
+                <div className="compare-row" key={row.label}>
+                  <div className="compare-label">{row.label}</div>
+                  <div className="compare-off">{row.off}</div>
+                  <div className="compare-on">
+                    <span className="compare-check" aria-hidden="true">✓</span>
+                    {row.on}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="center muted-text" style={{ marginTop: 22, fontSize: 13.5 }}>
+              Same supplier you would have called. Same delivery. Just orchestrated, recorded, and accountable.
+            </p>
           </div>
         </section>
 
         <section className="section">
+          <div className="wrap">
+            <div className="section-head center">
+              <span className="eyebrow">Pricing</span>
+              <h2>One marketplace fee. Cheaper per dollar as orders get bigger.</h2>
+              <p>You see the supplier price; the fee is added on top on a tiered schedule.</p>
+            </div>
+            <div className="fee-tiers">
+              <div className="fee-tier-row">
+                <div>First $1,000</div>
+                <div className="num">6.0%</div>
+              </div>
+              <div className="fee-tier-row">
+                <div>$1,000 to $10,000</div>
+                <div className="num">5.0%</div>
+              </div>
+              <div className="fee-tier-row">
+                <div>$10,000 to $50,000</div>
+                <div className="num">4.0%</div>
+              </div>
+              <div className="fee-tier-row">
+                <div>Over $50,000</div>
+                <div className="num">3.0%</div>
+              </div>
+            </div>
+            <p className="center muted-text" style={{ marginTop: 18, fontSize: 13.5 }}>
+              Marginal schedule. An $8,450 order pays 6% on the first $1,000 and 5% on the next $7,450, blended to roughly 5.1%. Bigger orders pay a lower blended rate. Freight and sales tax are separate line items, never absorbed into the fee.
+            </p>
+          </div>
+        </section>
+
+        <section className="section alt">
           <div className="wrap">
             <div className="cta-band">
               <div>

@@ -128,7 +128,7 @@ export default function CartClient() {
             <span>{formatCents(subtotal)}</span>
           </div>
           <div className="summary-line">
-            <span>PartsPort fee &amp; delivery (4%)</span>
+            <span>Marketplace fee</span>
             <span style={{ color: "var(--amber-dark)" }}>{formatCents(fee)}</span>
           </div>
           <div className="summary-line total">

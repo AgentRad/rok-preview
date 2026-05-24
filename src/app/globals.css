@@ -1147,3 +1147,66 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   a { color: #000 !important; text-decoration: none !important; }
   @page { margin: 18mm; }
 }
+
+/* ---------- Homepage: before vs after comparison ---------- */
+.compare {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+}
+.compare-head,
+.compare-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr 1.5fr;
+  gap: 0;
+}
+.compare-head {
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-strong);
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--steel);
+}
+.compare-head > div { padding: 14px 18px; }
+.compare-col-off { color: var(--steel); }
+.compare-col-on { color: var(--ink); }
+.compare-row { border-bottom: 1px solid var(--line); }
+.compare-row:last-child { border-bottom: 0; }
+.compare-label {
+  padding: 16px 18px; font-weight: 600; font-size: 14.5px;
+}
+.compare-off, .compare-on { padding: 16px 18px; font-size: 14px; line-height: 1.5; }
+.compare-off { color: var(--steel); background: var(--bg); }
+.compare-on {
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.compare-check {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ink); color: var(--amber);
+  font-size: 11px; font-weight: 700; flex-shrink: 0;
+  margin-top: 2px;
+}
+@media (max-width: 720px) {
+  .compare-head, .compare-row { grid-template-columns: 1fr; }
+  .compare-head > div:first-child { display: none; }
+  .compare-label { background: var(--bg); }
+  .compare-off, .compare-on { border-left: 0; }
+}
+
+/* ---------- Homepage: fee tier block ---------- */
+.fee-tiers {
+  max-width: 560px; margin: 0 auto;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+}
+.fee-tier-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 22px; border-bottom: 1px solid var(--line);
+  font-size: 15px;
+}
+.fee-tier-row:last-child { border-bottom: 0; }
+.fee-tier-row .num {
+  font-family: var(--mono); font-size: 18px; font-weight: 600;
+  color: var(--ink); letter-spacing: -.01em;
+}

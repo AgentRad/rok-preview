@@ -92,7 +92,7 @@ export default async function AdminConsole() {
             <div className="kpi">
               <div className="k-label">Marketplace revenue</div>
               <div className="k-value">{formatCents(revenue)}</div>
-              <div className="k-foot">4% transaction fees</div>
+              <div className="k-foot">Marketplace fees collected</div>
             </div>
             <div className="kpi">
               <div className="k-label">Suppliers</div>

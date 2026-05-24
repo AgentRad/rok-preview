@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
-import { feeFor, FEE_RATE_BPS } from "@/lib/money";
+import { effectiveBps, feeFor } from "@/lib/money";
 import { sendOrderConfirmation } from "@/lib/email";
 
 export async function POST(req: Request) {
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       feeCents: fee,
       taxCents: tax,
       totalCents: total,
-      feeRateBps: FEE_RATE_BPS,
+      feeRateBps: effectiveBps(subtotal),
       items: { create: orderItems },
     },
     include: { items: true },

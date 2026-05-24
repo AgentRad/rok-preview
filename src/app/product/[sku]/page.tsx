@@ -176,8 +176,8 @@ export default async function ProductPage({
 
                 <div className="fee-note">
                   {product.quoteOnly
-                    ? "Configured equipment is priced by a vetted supplier. The order, payment, and delivery all run through PartsPort, with a 4% service fee included."
-                    : "PartsPort verifies the supplier, handles payment, and delivers the part. A 4% service fee is added at checkout. You are not charged until you pay."}
+                    ? "Configured equipment is priced by a vetted supplier. The order, payment, and delivery all run through PartsPort, with the marketplace fee included."
+                    : "PartsPort verifies the supplier, handles payment, and delivers the part. The marketplace fee is added at checkout. You are not charged until you pay."}
                 </div>
               </div>
             </div>

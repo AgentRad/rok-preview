@@ -140,7 +140,7 @@ export default async function QuotePage({
                   <span>{formatCents(freight)}</span>
                 </div>
                 <div className="summary-line">
-                  <span>Platform fee (4%)</span>
+                  <span>Platform fee</span>
                   <span style={{ color: "var(--amber-deep)" }}>{formatCents(fee)}</span>
                 </div>
                 <div className="summary-line">
