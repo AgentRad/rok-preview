@@ -5,6 +5,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import AddressBook from "@/components/AddressBook";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
+import TwoFactorSetup from "@/components/TwoFactorSetup";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,20 @@ export default async function AccountPage() {
             </div>
             <div className="card-body">
               <ChangePasswordForm />
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop: 24 }}>
+            <div className="card-head">
+              <h2>Two-factor authentication</h2>
+            </div>
+            <div className="card-body">
+              <TwoFactorSetup
+                enabled={!!user.totpEnabledAt}
+                enabledAt={
+                  user.totpEnabledAt ? user.totpEnabledAt.toISOString() : null
+                }
+              />
             </div>
           </div>
 

@@ -76,6 +76,9 @@ model User {
   name                String
   role                Role     @default(BUYER)
   manufacturerName    String?
+  totpSecret          String?
+  totpEnabledAt       DateTime?
+  totpBackupCodes     Json?
   supplier            Supplier?
   orders              Order[]
   resetTokens         PasswordResetToken[]
