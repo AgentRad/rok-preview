@@ -1,16 +1,192 @@
 {
-  "_README": "Map of product SKU -> ordered list of public image URLs. Owner pastes URLs here (from thradd.com or other licensed sources). Seeder is idempotent: it skips any SKU that already has ProductImage rows. To force a refresh, manually delete the existing ProductImage rows for that SKU first.",
+  "_README": "Map of product SKU -> ordered list of public image URLs. First URL is the primary listing photo. Seeder is idempotent: it skips any SKU that already has ProductImage rows in the DB. To force a refresh on a SKU, manually delete the existing ProductImage rows for that SKU first. URLs below pull from Unsplash (free/licensed) for category-level photography; replace with real product photos as they become available.",
 
-  "TXF-PM75": [],
-  "SWG-VCB15": [],
-  "SWG-CUT100": [],
-  "RLY-SEL751": [],
-  "CND-ACSR795": [],
-  "CBL-URD10": [],
-  "LNH-INS15P": [],
-  "MTR-RIVA": [],
-  "GEN-PROT48": [],
-  "ATS-200A": [],
-  "PV-QC410": [],
-  "INV-STP50": []
+  "TXF-PM75": [
+    "https://images.unsplash.com/photo-1509390673020-a5b2450e33f1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "TXF-PM25": [
+    "https://images.unsplash.com/photo-1509390673020-a5b2450e33f1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "TXF-PM167": [
+    "https://images.unsplash.com/photo-1509390673020-a5b2450e33f1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "TXF-OL50": [
+    "https://images.unsplash.com/photo-1669277779371-608c8156f1f8?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "TXF-DRY15": [
+    "https://images.unsplash.com/photo-1707498633827-936bb448b513?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "TXF-AUTO500": [
+    "https://images.unsplash.com/photo-1708783306039-320d6b9dfa07?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "SWG-VCB15": [
+    "https://images.unsplash.com/photo-1661660860311-dc26ed236d5f?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SWG-CUT100": [
+    "https://images.unsplash.com/photo-1677558502269-3425212e75f1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SWG-CUT200": [
+    "https://images.unsplash.com/photo-1677558502269-3425212e75f1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SWG-3VA-250": [
+    "https://images.unsplash.com/photo-1757146578941-37e7acc595a1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SWG-NX-630": [
+    "https://images.unsplash.com/photo-1661660860311-dc26ed236d5f?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SWG-MCC1200": [
+    "https://images.unsplash.com/photo-1707498633827-936bb448b513?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SWG-PNL400": [
+    "https://images.unsplash.com/photo-1757146578941-37e7acc595a1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SWG-LIM100": [
+    "https://images.unsplash.com/photo-1677558502269-3425212e75f1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SWG-DSCN600": [
+    "https://images.unsplash.com/photo-1661660860311-dc26ed236d5f?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "RLY-SEL751": [
+    "https://images.unsplash.com/photo-1636867759143-c28c1e909bd3?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "RLY-SEL351": [
+    "https://images.unsplash.com/photo-1636867759143-c28c1e909bd3?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "RLY-SIPRO5": [
+    "https://images.unsplash.com/photo-1708783306039-320d6b9dfa07?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "RLY-MICOM-P54": [
+    "https://images.unsplash.com/photo-1636867759143-c28c1e909bd3?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "RLY-RET670": [
+    "https://images.unsplash.com/photo-1708783306039-320d6b9dfa07?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "RLY-FA-RECL": [
+    "https://images.unsplash.com/photo-1707498633827-936bb448b513?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "CBL-URD10": [
+    "https://images.unsplash.com/photo-1518181835702-6eef8b4b2113?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "CBL-MV1000": [
+    "https://images.unsplash.com/photo-1607631755187-298a3f9a640a?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "CBL-SVC4-4-4": [
+    "https://images.unsplash.com/photo-1625276254563-f0fbbf66a5e7?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "CBL-CTRL14": [
+    "https://images.unsplash.com/photo-1614903756535-8a6863184e02?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "LNH-INS15P": [
+    "https://images.unsplash.com/photo-1776251896448-a5eb8ae25e35?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "LNH-INS35P": [
+    "https://images.unsplash.com/photo-1776251896448-a5eb8ae25e35?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "LNH-PINS25P": [
+    "https://images.unsplash.com/photo-1669277779371-608c8156f1f8?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "LNH-DEADEND": [
+    "https://images.unsplash.com/photo-1669277779371-608c8156f1f8?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "MTR-RIVA": [
+    "https://images.unsplash.com/photo-1604177420682-0c840feb01de?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "MTR-FOC": [
+    "https://images.unsplash.com/photo-1555009784-ae7e7d1b97aa?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "MTR-CT-200": [
+    "https://images.unsplash.com/photo-1684684383508-261dd0e8f467?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "MTR-INDS": [
+    "https://images.unsplash.com/photo-1762115106003-30a83b29f609?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "GEN-PROT48": [
+    "https://images.unsplash.com/photo-1509390144018-eeaf65052242?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "GEN-PROT22": [
+    "https://images.unsplash.com/photo-1509390144018-eeaf65052242?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "GEN-DIESEL100": [
+    "https://images.unsplash.com/photo-1705051278299-7e64ba21437a?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "ATS-200A": [
+    "https://images.unsplash.com/photo-1757146578941-37e7acc595a1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "ATS-400A": [
+    "https://images.unsplash.com/photo-1757146578941-37e7acc595a1?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "PV-QC410": [
+    "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "PV-QC430": [
+    "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "PV-MICRO-IQ8": [
+    "https://images.unsplash.com/photo-1624397640148-949b1732bb0a?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "PV-RACK-IB": [
+    "https://images.unsplash.com/photo-1558449028-b53a39d100fc?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "INV-STP50": [
+    "https://images.unsplash.com/photo-1613665813446-82a78c468a1d?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "INV-FRONIUS50": [
+    "https://images.unsplash.com/photo-1613665813446-82a78c468a1d?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "ESS-MOD5": [
+    "https://images.unsplash.com/photo-1592318348310-f31b61a931c8?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "ESS-MOD10": [
+    "https://images.unsplash.com/photo-1605191737662-98ba90cb953e?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "ESS-INV30": [
+    "https://images.unsplash.com/photo-1619641805634-b867f535071c?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "ESS-RACK": [
+    "https://images.unsplash.com/photo-1605191738062-c861b8afebc1?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "SRG-ARR18": [
+    "https://images.unsplash.com/photo-1776251896448-a5eb8ae25e35?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SRG-ARR36": [
+    "https://images.unsplash.com/photo-1776251896448-a5eb8ae25e35?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "GND-CADWELD": [
+    "https://images.unsplash.com/photo-1687038520579-8d8f24721267?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "GND-CLAMP58": [
+    "https://images.unsplash.com/photo-1687038520563-2310e8b06ed2?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "SCD-RTAC": [
+    "https://images.unsplash.com/photo-1708783306039-320d6b9dfa07?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SCD-SEL2240": [
+    "https://images.unsplash.com/photo-1636867759143-c28c1e909bd3?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SCD-RTU-DL8": [
+    "https://images.unsplash.com/photo-1707498633827-936bb448b513?w=1200&q=80&auto=format&fit=crop"
+  ],
+
+  "SAF-AFK40": [
+    "https://images.unsplash.com/photo-1652303518379-c0ef1c9fb2b1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SAF-AFK12": [
+    "https://images.unsplash.com/photo-1652303518379-c0ef1c9fb2b1?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SAF-VOLTM": [
+    "https://images.unsplash.com/photo-1684684383508-261dd0e8f467?w=1200&q=80&auto=format&fit=crop"
+  ],
+  "SAF-RUBGLV": [
+    "https://images.unsplash.com/photo-1652303518379-c0ef1c9fb2b1?w=1200&q=80&auto=format&fit=crop"
+  ]
 }
