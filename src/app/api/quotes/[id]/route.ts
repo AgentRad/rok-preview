@@ -38,6 +38,16 @@ export async function PATCH(
 
   if (b.action === "quote") {
     const user = await getCurrentUser();
+    if (user && !user.emailVerified && user.role !== "ADMIN") {
+      return NextResponse.json(
+        {
+          error:
+            "Verify your email before responding to RFQs. Request a new verification link from /account.",
+          code: "EMAIL_NOT_VERIFIED",
+        },
+        { status: 403 }
+      );
+    }
     if (!user || (user.role !== "SUPPLIER" && user.role !== "ADMIN")) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }

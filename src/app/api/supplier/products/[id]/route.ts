@@ -28,6 +28,16 @@ export async function PATCH(
         { status: 403 }
       );
     }
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        {
+          error:
+            "Verify your email before editing listings. Request a new verification link from /account.",
+          code: "EMAIL_NOT_VERIFIED",
+        },
+        { status: 403 }
+      );
+    }
   }
 
   const b = await req.json().catch(() => ({}));

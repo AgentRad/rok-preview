@@ -23,6 +23,18 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
+  // Suppliers must verify their email before listing parts. Read-only
+  // access to the dashboard is still allowed; this only gates mutations.
+  if (!user.emailVerified && !ctx.actingAsAdmin) {
+    return NextResponse.json(
+      {
+        error:
+          "Verify your email before publishing listings. Use the link in your welcome email or request a new one from /account.",
+        code: "EMAIL_NOT_VERIFIED",
+      },
+      { status: 403 }
+    );
+  }
   const supplier = ctx.supplier;
 
   const b = await req.json().catch(() => ({}));

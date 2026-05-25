@@ -401,6 +401,83 @@ export async function sendSupplierInvite(args: {
   });
 }
 
+export async function sendEmailVerification(args: {
+  to: string;
+  name: string;
+  verifyUrl: string;
+  expiresHours: number;
+}): Promise<void> {
+  const body = `
+    <p>Hi ${args.name},</p>
+    <p>Confirm this email to finish setting up your PartsPort account. The link below works for the next ${args.expiresHours} hours.</p>
+    <p style="margin-top:22px;">${btn(args.verifyUrl, "Verify email")}</p>
+    <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">If you didn't create a PartsPort account, you can ignore this email and the address won't be added to anything.</p>
+    <p style="font-size:12.5px;color:#6f6d64;margin-top:6px;">Or paste this link into your browser: ${args.verifyUrl}</p>`;
+  await send({
+    to: args.to,
+    subject: "Verify your PartsPort email",
+    html: wrap("Verify your email", body),
+    from: FROM_AUTH,
+  });
+}
+
+export async function sendEmailChangeNotice(args: {
+  to: string;
+  name: string;
+  oldEmail: string;
+  newEmail: string;
+}): Promise<void> {
+  const body = `
+    <p>Hi ${args.name},</p>
+    <p>The email on your PartsPort account was changed from <strong>${args.oldEmail}</strong> to <strong>${args.newEmail}</strong>. From now on, sign-ins and notifications use the new address.</p>
+    <p>If you didn't make this change, email <a href="mailto:security@partsport.agentgaming.gg">security@partsport.agentgaming.gg</a> immediately. We'll lock the account and roll the change back.</p>`;
+  await send({
+    to: args.to,
+    subject: "Your PartsPort email was changed",
+    html: wrap("Email change confirmed", body),
+    from: FROM_AUTH,
+  });
+}
+
+export async function sendEmailChangeConfirm(args: {
+  to: string;
+  name: string;
+  confirmUrl: string;
+  expiresHours: number;
+}): Promise<void> {
+  const body = `
+    <p>Hi ${args.name},</p>
+    <p>To switch your PartsPort sign-in to this email address, click the button below within the next ${args.expiresHours} hours. The change doesn't take effect until you confirm.</p>
+    <p style="margin-top:22px;">${btn(args.confirmUrl, "Confirm new email")}</p>
+    <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">If you didn't request this change, ignore this email.</p>`;
+  await send({
+    to: args.to,
+    subject: "Confirm your new PartsPort email",
+    html: wrap("Confirm new email", body),
+    from: FROM_AUTH,
+  });
+}
+
+export async function sendAccountDeletionScheduled(args: {
+  to: string;
+  name: string;
+  graceDays: number;
+  recoverUrl: string;
+}): Promise<void> {
+  const body = `
+    <p>Hi ${args.name},</p>
+    <p>Your PartsPort account is scheduled for deletion. We've anonymized your profile and you'll be signed out everywhere. After ${args.graceDays} days, the remaining personal data is hard-deleted.</p>
+    <p>If you changed your mind, sign in within the grace period to recover the account:</p>
+    <p style="margin-top:22px;">${btn(args.recoverUrl, "Recover account")}</p>
+    <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">Order and invoice records are retained for tax and accounting purposes even after the grace period ends, as described in the Privacy Policy.</p>`;
+  await send({
+    to: args.to,
+    subject: "Your PartsPort account is being deleted",
+    html: wrap("Account deletion scheduled", body),
+    from: FROM_AUTH,
+  });
+}
+
 export async function sendPasswordReset(args: {
   to: string;
   name: string;

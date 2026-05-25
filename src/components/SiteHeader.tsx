@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
 import HeaderNav from "./HeaderNav";
+import UnverifiedEmailBanner from "./UnverifiedEmailBanner";
 
 export default async function SiteHeader() {
   const user = await getCurrentUser();
@@ -18,6 +19,9 @@ export default async function SiteHeader() {
       <HeaderNav
         user={user ? { name: user.name, role: user.role } : null}
       />
+      {user && !user.emailVerified && (
+        <UnverifiedEmailBanner email={user.email} />
+      )}
     </>
   );
 }

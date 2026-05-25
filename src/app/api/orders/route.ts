@@ -30,6 +30,21 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
+  // Signed-in buyers must verify their email before placing orders. Guest
+  // checkout (no session) is still allowed; the order email + invoice land
+  // at whatever address they typed. The fraud risk for an unverified
+  // signed-in buyer is higher than a guest because account abuse can
+  // unlock saved addresses / reorders / reviews; verification gates those.
+  if (sessionUser && !sessionUser.emailVerified) {
+    return NextResponse.json(
+      {
+        error:
+          "Verify your email before placing orders. Check your inbox for the welcome email, or request a new verification link from /account.",
+        code: "EMAIL_NOT_VERIFIED",
+      },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json().catch(() => ({}));
   const items: { sku: string; qty: number }[] = Array.isArray(body.items)

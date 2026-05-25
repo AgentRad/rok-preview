@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hashPassword, createSession } from "@/lib/auth";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { issueEmailVerification } from "@/lib/email-verification";
 
 export async function POST(req: Request) {
-  const limit = rateLimit("register", clientIp(req));
+  const limit = await rateLimit("register", clientIp(req));
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many sign-up attempts. Please try again later." },
@@ -35,8 +36,22 @@ export async function POST(req: Request) {
       email: normalized,
       passwordHash: await hashPassword(String(password)),
       role: "BUYER",
+      // emailVerified starts null; user clicks the link in the welcome
+      // email to flip it. State-changing endpoints (orders, listings)
+      // gate on isEmailVerified().
     },
   });
   await createSession(user.id);
-  return NextResponse.json({ ok: true, role: user.role });
+  // Awaited so the email is guaranteed to fire before the response returns;
+  // see HABITS.md on Vercel killing the function after the response.
+  await issueEmailVerification({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+  });
+  return NextResponse.json({
+    ok: true,
+    role: user.role,
+    verificationRequired: true,
+  });
 }

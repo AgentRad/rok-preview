@@ -88,6 +88,18 @@ model User {
   totpSecret          String?
   totpEnabledAt       DateTime?
   totpBackupCodes     Json?
+  // Email verification. emailVerified is null until the user clicks the
+  // link in the welcome email; verified buyers/suppliers can complete
+  // state-changing flows (orders, listings). The token + expiry are
+  // cleared on success or on resend.
+  emailVerified                DateTime?
+  emailVerificationToken       String?   @unique
+  emailVerificationExpiresAt   DateTime?
+  emailVerificationSentAt      DateTime?
+  // Soft delete for GDPR/CCPA. When set, PII is anonymized but order
+  // history is retained for tax/accounting. Hard-delete happens after
+  // 30 days unless the user recovers.
+  deletedAt           DateTime?
   supplier            Supplier?
   orders              Order[]
   resetTokens         PasswordResetToken[]

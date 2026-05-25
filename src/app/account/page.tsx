@@ -19,13 +19,19 @@ const STATUS_CLASS: Record<string, string> = {
   CANCELLED: "badge-cancelled",
 };
 
-export default async function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ verified?: string }>;
+}) {
   const user = await requireUser();
   // /account is the buyer's home. Suppliers and OEMs land on their own
   // dashboards instead - admin stays here so they can use it as a buyer
   // surrogate during testing.
   if (user.role === "SUPPLIER") redirect("/supplier");
   if (user.role === "MANUFACTURER") redirect("/oem");
+  const sp = await searchParams;
+  const verifiedFlag = sp.verified;
   const [orders, attention, addresses] = await Promise.all([
     prisma.order.findMany({
       where: { buyerId: user.id },
@@ -46,6 +52,19 @@ export default async function AccountPage() {
       <SiteHeader />
       <main id="main" className="app-page">
         <div className="page-pad narrow">
+          {verifiedFlag === "1" && (
+            <div className="alert alert-ok" style={{ marginBottom: 16 }}>
+              <strong>Email verified.</strong> You can now place orders and
+              respond to RFQs.
+            </div>
+          )}
+          {verifiedFlag === "expired" && (
+            <div className="alert alert-error" style={{ marginBottom: 16 }}>
+              <strong>Verification link is no longer valid.</strong> It may
+              have expired or been used already. Use the Resend button in the
+              banner above to get a new one.
+            </div>
+          )}
           <h1 className="page-title">My orders</h1>
           <p className="page-sub">
             Signed in as {user.name} · {user.email} ·{" "}
