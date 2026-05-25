@@ -57,7 +57,7 @@ export default async function QuotePage({
   return (
     <>
       <SiteHeader />
-      <main id="main">
+      <main id="main" className="app-page">
         <div className="page-pad narrow">
           <div className="breadcrumb">
             <Link href="/catalog">Catalog</Link> › Quote {quote.reference}

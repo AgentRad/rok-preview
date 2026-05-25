@@ -31,7 +31,7 @@ export default async function AccountPage() {
   return (
     <>
       <SiteHeader />
-      <main id="main">
+      <main id="main" className="app-page">
         <div className="page-pad narrow">
           <h1 className="page-title">My orders</h1>
           <p className="page-sub">

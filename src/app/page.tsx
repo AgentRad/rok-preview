@@ -70,7 +70,7 @@ export default async function HomePage() {
       where: { active: true, stock: { gt: 0 } },
       include: { supplier: true },
       orderBy: { createdAt: "asc" },
-      take: 4,
+      take: 8,
     }),
   ]);
 

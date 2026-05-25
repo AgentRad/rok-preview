@@ -55,7 +55,7 @@ export default async function OpsConsole() {
   const delivered = orders.filter((o) => o.status === "FULFILLED").length;
 
   return (
-    <main id="main">
+    <main id="main" className="app-page">
       <div className="page-pad">
         <h1 className="page-title">Fulfillment ops</h1>
           <p className="page-sub">

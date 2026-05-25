@@ -63,7 +63,7 @@ export default async function SupplierDashboard() {
     return (
       <>
         <SiteHeader />
-        <main id="main">
+        <main id="main" className="app-page">
           <div className="page-pad narrow">
             <h1 className="page-title">Supplier dashboard</h1>
             <div className="alert alert-info" style={{ marginTop: 16 }}>
@@ -156,7 +156,7 @@ export default async function SupplierDashboard() {
   return (
     <>
       <SiteHeader />
-      <main id="main">
+      <main id="main" className="app-page">
         <div className="page-pad">
           {ctx?.actingAsAdmin && (
             <ActingAsBanner supplierName={supplier.name} />

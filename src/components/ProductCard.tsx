@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ProductImage from "./ProductImage";
+import QuickAddButton from "./QuickAddButton";
 import { formatCents } from "@/lib/money";
 
 export type CardProduct = {
@@ -51,6 +52,9 @@ export default function ProductCard({ product }: { product: CardProduct }) {
           <div className="product-sub">
             <span>Sold by {product.supplier.name}</span>
           </div>
+        </div>
+        <div className="product-action">
+          <QuickAddButton sku={product.sku} quoteOnly={product.quoteOnly} />
         </div>
       </div>
     </Link>

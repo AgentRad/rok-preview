@@ -11,7 +11,7 @@ export default async function CheckoutPage() {
   return (
     <>
       <SiteHeader />
-      <main id="main">
+      <main id="main" className="app-page">
         <div className="page-pad narrow">
           <h1 className="page-title">Checkout</h1>
           <p className="page-sub">

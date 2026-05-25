@@ -78,7 +78,7 @@ export default async function OrderPage({
   return (
     <>
       <SiteHeader />
-      <main id="main">
+      <main id="main" className="app-page">
         <div className="page-pad narrow">
           {paid && (
             <div className="alert alert-ok">

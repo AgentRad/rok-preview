@@ -29,7 +29,7 @@ export default async function SettingsPage() {
   return (
     <>
       {header}
-      <main id="main">
+      <main id="main" className="app-page">
         <div className="page-pad narrow">
           <h1 className="page-title">Settings</h1>
           <p className="page-sub">

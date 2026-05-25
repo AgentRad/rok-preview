@@ -8,7 +8,7 @@ export default function CartPage() {
   return (
     <>
       <SiteHeader />
-      <main id="main">
+      <main id="main" className="app-page">
         <div className="page-pad narrow">
           <h1 className="page-title">Your cart</h1>
           <p className="page-sub">

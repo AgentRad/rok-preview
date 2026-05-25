@@ -177,14 +177,14 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 
 /* ---------- Hero ---------- */
 .hero { background: var(--bg); border-bottom: 1px solid var(--line); }
-.hero .wrap { padding: 96px 32px 104px; text-align: center; }
+.hero .wrap { padding: 64px 32px 80px; text-align: center; }
 .hero-eyebrow {
   display: inline-flex; align-items: center; gap: 9px;
   font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase;
   color: var(--steel); margin-bottom: 36px;
 }
 .hero h1 {
-  font-size: clamp(42px, 7vw, 84px); font-weight: 300;
+  font-size: clamp(38px, 5.5vw, 64px); font-weight: 300;
   letter-spacing: -0.035em; line-height: 1.02; max-width: 18ch; margin: 0 auto;
 }
 .hero h1 .hl { color: var(--amber-deep); }
@@ -244,7 +244,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .ind-list span { font-size: 14.5px; color: var(--ink-soft); font-weight: 500; letter-spacing: -.01em; }
 
 /* ---------- Sections ---------- */
-.section { padding: 104px 0; }
+.section { padding: 72px 0; }
 .section.alt { background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .section-head { max-width: 680px; margin-bottom: 56px; }
 .section-head.center { margin-left: auto; margin-right: auto; text-align: center; }
@@ -408,6 +408,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 }
 
 .product-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+@media (min-width: 1280px) { .product-grid { grid-template-columns: repeat(4, 1fr); } }
 .product-card {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   overflow: hidden; cursor: pointer; display: flex; flex-direction: column;
@@ -415,9 +416,9 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 }
 .product-card:hover { border-color: var(--ink); }
 .product-thumb {
-  background: var(--surface-2); aspect-ratio: 4 / 3; display: flex;
+  background: var(--surface-2); aspect-ratio: 3 / 2.5; display: flex;
   align-items: center; justify-content: center; position: relative;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line); min-height: 220px;
 }
 .product-thumb svg { width: 50%; height: 50%; color: var(--ink-soft); }
 .detail-gallery svg { color: var(--ink-soft); }
@@ -438,6 +439,17 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .rating { color: var(--amber-deep); font-weight: 600; }
 .eta { color: var(--green); font-weight: 500; }
 .stock-out { color: var(--red); font-weight: 500; }
+.product-action { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.quick-add-btn {
+  width: 100%; padding: 9px 0; font: inherit; font-size: 13px; font-weight: 600;
+  background: var(--ink); color: #f3f2ef; border: 0; border-radius: var(--radius-sm);
+  cursor: pointer; transition: background .15s;
+}
+.quick-add-btn:hover { background: #000; }
+.quick-add-tag {
+  display: block; text-align: center; font-size: 12px; font-weight: 600;
+  color: var(--amber-deep); letter-spacing: .04em;
+}
 
 .empty-state, .empty-block {
   grid-column: 1 / -1; text-align: center; padding: 80px 20px; color: var(--steel);
@@ -446,7 +458,8 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 
 /* ---------- Product detail ---------- */
 .detail { max-width: var(--maxw); margin: 0 auto; padding: 40px 32px 100px; }
-.detail-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 56px; }
+.detail-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 48px; }
+.detail-grid > :last-child { position: sticky; top: 90px; align-self: start; }
 .detail-gallery {
   background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius);
   aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center;
@@ -820,6 +833,8 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .page-pad { max-width: var(--maxw); margin: 0 auto; padding: 56px 32px 100px; }
 .page-pad.narrow { max-width: 980px; }
 .page-title { font-size: clamp(28px, 3.4vw, 40px); font-weight: 300; letter-spacing: -.035em; }
+.app-page .page-title { font-size: 28px; font-weight: 500; letter-spacing: -.025em; }
+.app-page { line-height: 1.45; }
 .page-sub { color: var(--steel); margin-top: 8px; font-size: 15px; }
 
 .page-hero { background: var(--panel-dark); color: #f3f2ef; padding: 88px 0 80px; }
@@ -878,7 +893,8 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .card-head { padding: 18px 24px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.card-head h2 { font-size: 14px; font-weight: 500; font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.card-head h2 { font-size: 22px; font-weight: 500; letter-spacing: -.02em; }
+.app-page .card-head h2 { font-size: 20px; }
 .card-body { padding: 24px; }
 .card + .card { margin-top: 26px; }
 

@@ -76,7 +76,7 @@ export default async function AdminConsole() {
   const revenue = paidAgg._sum.feeCents || 0;
 
   return (
-    <main id="main">
+    <main id="main" className="app-page">
       <div className="page-pad">
         <h1 className="page-title">Admin console</h1>
           <p className="page-sub">

@@ -40,7 +40,7 @@ export default async function OrderInvoicePage({
     return (
       <>
         <SiteHeader />
-        <main id="main">
+        <main id="main" className="app-page">
           <div className="page-pad narrow">
             <div className="alert alert-info">
               Order {order.reference} has no invoice yet. Invoices are issued
@@ -70,7 +70,7 @@ export default async function OrderInvoicePage({
       <div className="no-print">
         <SiteHeader />
       </div>
-      <main id="main">
+      <main id="main" className="app-page">
       <div className="page-pad narrow invoice-page">
         <div className="invoice-toolbar no-print">
           <Link className="btn btn-ghost btn-sm" href={`/orders/${order.id}`}>
