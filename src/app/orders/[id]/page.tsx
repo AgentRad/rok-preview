@@ -222,7 +222,19 @@ export default async function OrderPage({
                           {it.skuSnapshot}
                         </div>
                       </td>
-                      <td>{it.supplierName}</td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {it.product?.supplier?.logoUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={it.product.supplier.logoUrl}
+                              alt=""
+                              className="invoice-supplier-logo"
+                            />
+                          )}
+                          <span>{it.supplierName}</span>
+                        </div>
+                      </td>
                       <td className="num">{formatCents(it.unitPriceCents)}</td>
                       <td className="num">{it.qty}</td>
                       <td className="num">

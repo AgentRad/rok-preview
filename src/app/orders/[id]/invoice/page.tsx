@@ -25,7 +25,10 @@ export default async function OrderInvoicePage({
 
   const order = await prisma.order.findUnique({
     where: { id },
-    include: { items: true, invoice: true },
+    include: {
+      items: { include: { product: { include: { supplier: true } } } },
+      invoice: true,
+    },
   });
   if (!order) notFound();
 
@@ -81,10 +84,22 @@ export default async function OrderInvoicePage({
 
         <div className="invoice invoice-doc">
           <div className="invoice-head">
-            <div>
-              <h2>PartsPort</h2>
-              <div className="muted-text" style={{ fontSize: 13 }}>
-                The Industrial Parts Marketplace
+            <div className="invoice-brand">
+              <svg className="invoice-mark" viewBox="0 0 64 64" aria-hidden="true">
+                <path
+                  d="M32 10 51.5 21.5v23L32 56 12.5 44.5v-23Z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3.4"
+                  strokeLinejoin="round"
+                />
+                <circle cx="32" cy="32" r="7" fill="#e0a32a" />
+              </svg>
+              <div>
+                <div className="invoice-brand-name">PartsPort</div>
+                <div className="muted-text" style={{ fontSize: 13 }}>
+                  The Industrial Parts Marketplace
+                </div>
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -173,7 +188,19 @@ export default async function OrderInvoicePage({
                         {it.skuSnapshot}
                       </div>
                     </td>
-                    <td>{it.supplierName}</td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {it.product?.supplier?.logoUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={it.product.supplier.logoUrl}
+                            alt=""
+                            className="invoice-supplier-logo"
+                          />
+                        )}
+                        <span>{it.supplierName}</span>
+                      </div>
+                    </td>
                     <td className="num">{formatCents(it.unitPriceCents)}</td>
                     <td className="num">{it.qty}</td>
                     <td className="num">
