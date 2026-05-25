@@ -23,6 +23,7 @@ import SupplierLogoUploader from "@/components/SupplierLogoUploader";
 import SupplierDocuments from "@/components/SupplierDocuments";
 import SupplierBankInfo from "@/components/SupplierBankInfo";
 import SupplierStripeConnect from "@/components/SupplierStripeConnect";
+import SupplierWarehouses from "@/components/SupplierWarehouses";
 import GoLiveGauge from "@/components/GoLiveGauge";
 import { isBlobConfigured } from "@/lib/blob-config";
 import { snapshotConnect } from "@/lib/stripe-connect";
@@ -90,7 +91,7 @@ export default async function SupplierDashboard({
     );
   }
 
-  const [orders, quotes, payouts, attention, documents] = await Promise.all([
+  const [orders, quotes, payouts, attention, documents, warehouses] = await Promise.all([
     prisma.order.findMany({
       where: {
         items: { some: { product: { supplierId: supplier.id } } },
@@ -116,6 +117,10 @@ export default async function SupplierDashboard({
     prisma.supplierDocument.findMany({
       where: { supplierId: supplier.id },
       orderBy: [{ uploadedAt: "desc" }],
+    }),
+    prisma.supplierWarehouse.findMany({
+      where: { supplierId: supplier.id },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
     }),
   ]);
 
@@ -237,6 +242,24 @@ export default async function SupplierDashboard({
                   reviewedAt: d.reviewedAt
                     ? d.reviewedAt.toISOString()
                     : null,
+                }))}
+              />
+            </div>
+          </div>
+
+          <div id="warehouses" className="card">
+            <div className="card-head">
+              <h2>Origin warehouses</h2>
+            </div>
+            <div className="card-body">
+              <SupplierWarehouses
+                initial={warehouses.map((w) => ({
+                  id: w.id,
+                  label: w.label,
+                  zip: w.zip,
+                  city: w.city,
+                  state: w.state,
+                  isDefault: w.isDefault,
                 }))}
               />
             </div>

@@ -253,6 +253,7 @@ model Supplier {
   members           SupplierMember[]
   invites           SupplierInvite[]
   documents         SupplierDocument[]
+  warehouses        SupplierWarehouse[]
   createdAt         DateTime           @default(now())
 }
 
@@ -274,6 +275,27 @@ model SupplierDocument {
 
   @@index([supplierId])
   @@index([status])
+}
+
+/**
+ * Origin warehouse for a supplier. Real-rate freight quotes need an
+ * origin zip; we let suppliers register multiple warehouses (regional
+ * stock points) and pick a default. When a buyer lands on the checkout
+ * page, we compute freight using each supplier's default warehouse as
+ * the origin.
+ */
+model SupplierWarehouse {
+  id         String   @id @default(cuid())
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId String
+  label      String   @default("")
+  zip        String
+  city       String
+  state      String   // two-letter US state code
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([supplierId])
 }
 
 model SupplierMember {

@@ -157,6 +157,33 @@ async function main() {
       });
     }
     supplierIds[s.name] = rec.id;
+
+    // P9: per-supplier default warehouse. Idempotent: only seeded if the
+    // supplier has zero warehouses today, so a re-seed never overwrites
+    // a real one a supplier (or admin) added later.
+    const SEED_WAREHOUSE = {
+      "Gridline Power Supply":           { label: "Phoenix HQ",   zip: "85004", city: "Phoenix",      state: "AZ" },
+      "Substation Components Co.":       { label: "Houston yard", zip: "77002", city: "Houston",      state: "TX" },
+      "Voltworks Switchgear":            { label: "Chicago hub",  zip: "60607", city: "Chicago",      state: "IL" },
+      "Relay & Protection Partners":     { label: "Atlanta hub",  zip: "30303", city: "Atlanta",      state: "GA" },
+      "Ironwood Transmission Supply":    { label: "Birmingham",   zip: "35203", city: "Birmingham",   state: "AL" },
+      "Cascade Utility Hardware":        { label: "Portland",     zip: "97204", city: "Portland",     state: "OR" },
+      "Meridian Electric Distribution":  { label: "Indianapolis", zip: "46204", city: "Indianapolis", state: "IN" },
+      "Summit Power Systems":            { label: "Denver hub",   zip: "80202", city: "Denver",       state: "CO" },
+      "SunPath Renewables":              { label: "Phoenix solar",zip: "85003", city: "Phoenix",      state: "AZ" },
+      "StoreVolt Energy":                { label: "San Diego",    zip: "92101", city: "San Diego",    state: "CA" },
+    };
+    const seedWh = SEED_WAREHOUSE[s.name];
+    if (seedWh) {
+      const existingWh = await prisma.supplierWarehouse.count({
+        where: { supplierId: rec.id },
+      });
+      if (existingWh === 0) {
+        await prisma.supplierWarehouse.create({
+          data: { supplierId: rec.id, ...seedWh, isDefault: true },
+        });
+      }
+    }
   }
 
   for (const p of PRODUCTS) {
