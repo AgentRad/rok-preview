@@ -434,6 +434,20 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   padding: 3px 8px; border-radius: 100px; letter-spacing: .04em;
 }
 .product-supplier { display: flex; align-items: center; gap: 6px; }
+.pager-numbers { display: inline-flex; align-items: center; gap: 4px; }
+.pager-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; height: 32px; padding: 0 10px;
+  font-family: var(--mono); font-size: 13px; color: var(--ink-soft);
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  text-decoration: none; cursor: pointer;
+}
+.pager-num:hover { background: var(--surface-2); color: var(--ink); }
+.pager-num.is-current {
+  background: var(--ink); color: #f3f2ef; cursor: default; font-weight: 600;
+}
+.pager-gap { cursor: default; color: var(--steel-light); }
+.pager-gap:hover { background: transparent; color: var(--steel-light); }
 .product-body { padding: 18px; display: flex; flex-direction: column; flex: 1; }
 .product-mfr { font-size: 10px; font-weight: 500; color: var(--amber-deep); text-transform: uppercase; letter-spacing: .1em; }
 .product-name { font-size: 15px; font-weight: 500; margin-top: 7px; line-height: 1.4; letter-spacing: -.01em; }

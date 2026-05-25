@@ -28,6 +28,21 @@ const ORDER: Record<string, Prisma.ProductOrderByWithRelationInput> = {
   featured: { createdAt: "asc" },
 };
 
+/** Compact page list: 1, 2, …, current-1, current, current+1, …, last */
+function pageWindow(current: number, total: number): (number | "…")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const out: (number | "…")[] = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) out.push("…");
+  for (let i = start; i <= end; i++) out.push(i);
+  if (end < total - 1) out.push("…");
+  out.push(total);
+  return out;
+}
+
 function sortInMemory(list: SearchProduct[], sort: string): SearchProduct[] {
   const l = [...list];
   switch (sort) {
@@ -251,9 +266,18 @@ export default async function CatalogPage({
 
             <div className="results-bar">
               <span className="results-count">
-                <strong>{totalCount}</strong> part
-                {totalCount === 1 ? "" : "s"}
-                {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
+                {totalCount === 0 ? (
+                  <>No parts match these filters</>
+                ) : (
+                  <>
+                    Showing <strong>{(page - 1) * PAGE_SIZE + 1}</strong> to{" "}
+                    <strong>
+                      {Math.min(page * PAGE_SIZE, totalCount)}
+                    </strong>{" "}
+                    of <strong>{totalCount}</strong> result
+                    {totalCount === 1 ? "" : "s"}
+                  </>
+                )}
               </span>
               <CatalogSort value={sort} />
             </div>
@@ -291,8 +315,34 @@ export default async function CatalogPage({
                         ← Previous
                       </span>
                     )}
-                    <span className="muted-text" style={{ fontSize: 13 }}>
-                      Page {page} of {totalPages}
+                    <span className="pager-numbers">
+                      {pageWindow(page, totalPages).map((p, idx) =>
+                        p === "…" ? (
+                          <span
+                            key={`gap-${idx}`}
+                            className="pager-num pager-gap"
+                            aria-hidden="true"
+                          >
+                            …
+                          </span>
+                        ) : p === page ? (
+                          <span
+                            key={p}
+                            className="pager-num is-current"
+                            aria-current="page"
+                          >
+                            {p}
+                          </span>
+                        ) : (
+                          <Link
+                            key={p}
+                            className="pager-num"
+                            href={hrefWith({ page: String(p) })}
+                          >
+                            {p}
+                          </Link>
+                        )
+                      )}
                     </span>
                     {page < totalPages ? (
                       <Link
