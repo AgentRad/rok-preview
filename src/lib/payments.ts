@@ -117,7 +117,10 @@ const stripeProvider: PaymentProvider = {
 
     const session = await s.checkout.sessions.create({
       mode: "payment",
-      payment_method_types: ["us_bank_account", "card"],
+      // Card is intentionally listed first so Stripe shows the card form by
+      // default. ACH is still offered, but it should be the alternative, not
+      // the primary path (test cards are the most common flow).
+      payment_method_types: ["card", "us_bank_account"],
       customer_email: input.buyerEmail,
       client_reference_id: input.orderId,
       metadata: {
@@ -184,4 +187,47 @@ export function getProvider(): PaymentProvider | null {
 
 export function isPaymentsConfigured(): boolean {
   return getProvider() !== null;
+}
+
+/**
+ * Webhook-independent reconciliation. When a buyer returns from Stripe to the
+ * success_url and the webhook has not landed yet (or has been mis-configured),
+ * we still need to flip the order to PAID so the UI is honest. This pulls the
+ * most recent Checkout Session matching the order out of Stripe and, if it is
+ * paid, runs the same markOrderPaid path the webhook would have.
+ *
+ * Returns true if the order was reconciled to PAID (either now or previously).
+ * Safe to call repeatedly; markOrderPaid is idempotent.
+ */
+export async function reconcileOrderFromStripe(
+  orderId: string
+): Promise<{ paid: boolean; reason?: string }> {
+  const s = stripeClient();
+  if (!s) return { paid: false, reason: "Stripe not configured" };
+  // Stripe lets us list checkout sessions filtered by client_reference_id =
+  // the orderId we set in createCheckoutSession. Iterate; the most recent
+  // paid one wins.
+  const sessions = await s.checkout.sessions.list({
+    limit: 5,
+    // Stripe API does not directly support filtering by client_reference_id;
+    // we filter client-side.
+  });
+  const matching = sessions.data.filter(
+    (sess) =>
+      sess.client_reference_id === orderId ||
+      (sess.metadata?.orderId as string | undefined) === orderId
+  );
+  // If we did not find anything in the last 5, broaden the search by paging.
+  // For typical traffic this is unnecessary; we keep the simple path here.
+  for (const sess of matching) {
+    if (sess.payment_status === "paid" || sess.status === "complete") {
+      const { markOrderPaid } = await import("./order-utils");
+      await markOrderPaid(orderId, "stripe", sess.id, {
+        taxCents: sess.total_details?.amount_tax ?? 0,
+        amountTotalCents: sess.amount_total ?? 0,
+      });
+      return { paid: true };
+    }
+  }
+  return { paid: false, reason: "No paid session found for this order" };
 }

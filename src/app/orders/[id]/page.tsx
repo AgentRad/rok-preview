@@ -10,7 +10,7 @@ import ReturnRequestForm from "@/components/ReturnRequestForm";
 import MessageThread from "@/components/MessageThread";
 import { formatCents } from "@/lib/money";
 import { trackingLink } from "@/lib/tracking";
-import { isPaymentsConfigured } from "@/lib/payments";
+import { isPaymentsConfigured, reconcileOrderFromStripe } from "@/lib/payments";
 import WriteReview from "@/components/WriteReview";
 
 function rateLabelForOrder(order: { feeRateBps: number }): string {
@@ -28,11 +28,14 @@ const STATUS_CLASS: Record<string, string> = {
 
 export default async function OrderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const order = await prisma.order.findUnique({
+  const sp = (await searchParams) ?? {};
+  let order = await prisma.order.findUnique({
     where: { id },
     include: {
       items: { include: { product: { include: { supplier: true } } } },
@@ -42,6 +45,33 @@ export default async function OrderPage({
     },
   });
   if (!order) notFound();
+
+  // Webhook-independent reconciliation: when the buyer returns from Stripe
+  // with ?paid=1 in the URL but the order is still PENDING (the webhook may
+  // be delayed, mis-configured, or signature-failing), ask Stripe directly
+  // if a session for this order has been paid, and flip the order in-line
+  // so the page renders honest state on first load.
+  if (sp.paid === "1" && order.status === "PENDING") {
+    try {
+      const result = await reconcileOrderFromStripe(order.id);
+      if (result.paid) {
+        order = await prisma.order.findUnique({
+          where: { id },
+          include: {
+            items: { include: { product: { include: { supplier: true } } } },
+            returns: { orderBy: { createdAt: "desc" } },
+            messages: { orderBy: { createdAt: "asc" } },
+            reviews: { select: { productId: true, rating: true, createdAt: true } },
+          },
+        });
+        if (!order) notFound();
+      }
+    } catch (e) {
+      // Reconciliation failed; render the page as PENDING and surface a
+      // hint to the buyer below. The webhook will catch up in time.
+      console.error("[order] Stripe reconcile failed:", e);
+    }
+  }
 
   const viewer = await getCurrentUser();
   const isBuyer = !!viewer && !!order.buyerId && viewer.id === order.buyerId;
