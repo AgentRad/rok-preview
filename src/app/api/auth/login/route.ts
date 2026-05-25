@@ -30,6 +30,19 @@ export async function POST(req: Request) {
       { status: 401 }
     );
   }
+  // Soft-deleted accounts can't sign in until they hit the recovery link
+  // mailed when /api/account/delete fired. Hint the user at the email so
+  // they don't think the password's wrong.
+  if (user.deletedAt) {
+    return NextResponse.json(
+      {
+        error:
+          "This account is scheduled for deletion. Check your email for the recovery link we sent, or wait until the grace period ends.",
+        code: "ACCOUNT_DELETED",
+      },
+      { status: 403 }
+    );
+  }
 
   // 2FA gate. Password was right, but we don't drop the session cookie yet;
   // instead we return a short-lived ticket the client passes to login-2fa

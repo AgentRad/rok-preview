@@ -70,54 +70,79 @@ enum SupplierMemberRole {
 }
 
 model User {
-  id                  String   @id @default(cuid())
-  email               String   @unique
-  passwordHash        String
-  name                String
-  role                Role     @default(BUYER)
-  manufacturerName    String?
-  manufacturerTagline String   @default("")
-  manufacturerBio     String   @default("")
-  manufacturerLogoUrl String?
-  manufacturerWebsite String   @default("")
+  id                         String               @id @default(cuid())
+  email                      String               @unique
+  passwordHash               String
+  name                       String
+  role                       Role                 @default(BUYER)
+  manufacturerName           String?
+  manufacturerTagline        String               @default("")
+  manufacturerBio            String               @default("")
+  manufacturerLogoUrl        String?
+  manufacturerWebsite        String               @default("")
   // Buyer company profile (B2B). Shown on checkout, order detail, invoice,
   // and in the shipped/paid emails when set. Optional; guest checkout
   // doesn't get this.
-  companyName         String?
-  companyLogoUrl      String?
-  totpSecret          String?
-  totpEnabledAt       DateTime?
-  totpBackupCodes     Json?
+  companyName                String?
+  companyLogoUrl             String?
+  totpSecret                 String?
+  totpEnabledAt              DateTime?
+  totpBackupCodes            Json?
   // Email verification. emailVerified is null until the user clicks the
   // link in the welcome email; verified buyers/suppliers can complete
   // state-changing flows (orders, listings). The token + expiry are
   // cleared on success or on resend.
-  emailVerified                DateTime?
-  emailVerificationToken       String?   @unique
-  emailVerificationExpiresAt   DateTime?
-  emailVerificationSentAt      DateTime?
+  emailVerified              DateTime?
+  emailVerificationToken     String?              @unique
+  emailVerificationExpiresAt DateTime?
+  emailVerificationSentAt    DateTime?
   // Soft delete for GDPR/CCPA. When set, PII is anonymized but order
   // history is retained for tax/accounting. Hard-delete happens after
   // 30 days unless the user recovers.
-  deletedAt           DateTime?
-  supplier            Supplier?
-  orders              Order[]
-  resetTokens         PasswordResetToken[]
-  reviews             Review[]
-  addresses           Address[]
-  messages            Message[]
-  supplierMemberships SupplierMember[]
-  createdAt           DateTime @default(now())
+  deletedAt                  DateTime?
+  supplier                   Supplier?
+  orders                     Order[]
+  resetTokens                PasswordResetToken[]
+  reviews                    Review[]
+  addresses                  Address[]
+  messages                   Message[]
+  supplierMemberships        SupplierMember[]
+  createdAt                  DateTime             @default(now())
+  accountTokens              AccountToken[]
+}
+
+/**
+ * Single-use account tokens for sensitive flows that have to go through
+ * a confirmation email round-trip: changing the sign-in email and
+ * undoing a soft-deleted account during the grace period. Pattern
+ * matches PasswordResetToken (tokenHash stored at rest).
+ */
+model AccountToken {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  // Hex-encoded SHA-256 of the random token. The raw token only ever
+  // appears in the URL emailed to the user.
+  tokenHash String    @unique
+  // EMAIL_CHANGE | ACCOUNT_RECOVERY
+  type      String
+  payload   Json?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([type])
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
@@ -147,26 +172,26 @@ model Review {
 }
 
 model Address {
-  id         String   @id @default(cuid())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     String
-  label      String   @default("")
-  recipient  String
-  company    String   @default("")
-  line1      String
-  line2      String   @default("")
-  city       String
-  region     String
-  postalCode String
-  country    String   @default("US")
-  phone      String   @default("")
-  isDefault  Boolean  @default(false)
+  id                      String   @id @default(cuid())
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                  String
+  label                   String   @default("")
+  recipient               String
+  company                 String   @default("")
+  line1                   String
+  line2                   String   @default("")
+  city                    String
+  region                  String
+  postalCode              String
+  country                 String   @default("US")
+  phone                   String   @default("")
+  isDefault               Boolean  @default(false)
   // Tax-exempt buyers can upload a resale or government-entity certificate.
   // When present and APPROVED, Stripe Tax (or any tax engine) skips
   // computation on the order. Admin reviews the cert before approval.
   taxExemptCertificateUrl String?
-  taxExemptStatus         String?  // "PENDING" | "APPROVED" | "REJECTED" | null
-  createdAt  DateTime @default(now())
+  taxExemptStatus         String? // "PENDING" | "APPROVED" | "REJECTED" | null
+  createdAt               DateTime @default(now())
 
   @@index([userId])
 }
@@ -178,58 +203,58 @@ model SearchEvent {
 }
 
 model Supplier {
-  id             String         @id @default(cuid())
-  name           String
-  contactEmail   String
-  status         SupplierStatus @default(APPROVED)
-  rating         Float          @default(4.7)
-  reviews        Int            @default(0)
-  onTimeRate     Float          @default(97.5)
-  certifications String         @default("")
-  logoUrl        String?
-  website        String         @default("")
-  description    String         @default("")
+  id                String             @id @default(cuid())
+  name              String
+  contactEmail      String
+  status            SupplierStatus     @default(APPROVED)
+  rating            Float              @default(4.7)
+  reviews           Int                @default(0)
+  onTimeRate        Float              @default(97.5)
+  certifications    String             @default("")
+  logoUrl           String?
+  website           String             @default("")
+  description       String             @default("")
   // Go-live gate. Defaults to false. The supplier's products are filtered
   // out of the public catalog, the home page, brand storefronts, search,
   // and the sitemap until an admin flips this to true (typically after the
   // 10-item onboarding checklist passes: legal docs approved, bank info
   // on file, at least one product). See lib/supplier-access.ts.
-  publicVisible  Boolean        @default(false)
+  publicVisible     Boolean            @default(false)
   // Payout method summary. PartsPort does NOT store full account or routing
   // numbers; suppliers send those via secure channel and admin flips the
   // status to ON_FILE once received.
-  bankInfoStatus     String    @default("MISSING") // MISSING | PENDING | ON_FILE | REJECTED
-  bankInfoLast4      String?
-  bankInfoType       String?   // CHECKING | SAVINGS
-  bankInfoBankName   String?
-  bankInfoNote       String    @default("")
-  bankInfoUpdatedAt  DateTime?
-  user           User?          @relation(fields: [userId], references: [id])
-  userId         String?        @unique
-  products       Product[]
-  productReviews Review[]
-  payouts        Payout[]
-  members        SupplierMember[]
-  invites        SupplierInvite[]
-  documents      SupplierDocument[]
-  createdAt      DateTime       @default(now())
+  bankInfoStatus    String             @default("MISSING") // MISSING | PENDING | ON_FILE | REJECTED
+  bankInfoLast4     String?
+  bankInfoType      String? // CHECKING | SAVINGS
+  bankInfoBankName  String?
+  bankInfoNote      String             @default("")
+  bankInfoUpdatedAt DateTime?
+  user              User?              @relation(fields: [userId], references: [id])
+  userId            String?            @unique
+  products          Product[]
+  productReviews    Review[]
+  payouts           Payout[]
+  members           SupplierMember[]
+  invites           SupplierInvite[]
+  documents         SupplierDocument[]
+  createdAt         DateTime           @default(now())
 }
 
 model SupplierDocument {
-  id          String   @id @default(cuid())
-  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  supplierId  String
+  id         String    @id @default(cuid())
+  supplier   Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId String
   // SUPPLIER_AGREEMENT | W9 | INSURANCE_COI | OTHER. Kept as a string so we
   // can introduce new kinds without a schema migration; the API rejects
   // unknown values.
-  kind        String
-  filename    String
-  url         String
-  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
-  reviewNote  String   @default("")
-  reviewedAt  DateTime?
-  reviewedBy  String?
-  uploadedAt  DateTime @default(now())
+  kind       String
+  filename   String
+  url        String
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewNote String    @default("")
+  reviewedAt DateTime?
+  reviewedBy String?
+  uploadedAt DateTime  @default(now())
 
   @@index([supplierId])
   @@index([status])
@@ -318,56 +343,56 @@ model Payout {
 }
 
 model ReturnRequest {
-  id           String       @id @default(cuid())
-  reference    String       @unique
-  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId      String
-  buyerId      String?
-  reason       String
-  details      String       @default("")
-  status       ReturnStatus @default(OPEN)
-  adminNote    String       @default("")
-  createdAt    DateTime     @default(now())
-  resolvedAt   DateTime?
+  id         String       @id @default(cuid())
+  reference  String       @unique
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String
+  buyerId    String?
+  reason     String
+  details    String       @default("")
+  status     ReturnStatus @default(OPEN)
+  adminNote  String       @default("")
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
 
   @@index([orderId])
   @@index([status])
 }
 
 model Order {
-  id            String      @id @default(cuid())
-  reference     String      @unique
-  status        OrderStatus @default(PENDING)
-  buyer         User?       @relation(fields: [buyerId], references: [id])
-  buyerId       String?
-  buyerEmail    String
-  buyerName     String
+  id                  String          @id @default(cuid())
+  reference           String          @unique
+  status              OrderStatus     @default(PENDING)
+  buyer               User?           @relation(fields: [buyerId], references: [id])
+  buyerId             String?
+  buyerEmail          String
+  buyerName           String
   // Snapshotted from User.companyName / User.companyLogoUrl at order
   // creation time so later profile edits never retroactively rewrite a
   // past invoice's branding.
-  buyerCompanyName String?
+  buyerCompanyName    String?
   buyerCompanyLogoUrl String?
-  shipTo        String
-  subtotalCents Int
-  freightCents  Int         @default(0)
-  feeCents      Int
-  taxCents      Int         @default(0)
-  totalCents    Int
-  feeRateBps    Int         @default(600)
-  paymentMethod String      @default("paypal")
-  paypalOrderId String?
-  shipmentStage String      @default("")
-  carrier       String?
-  trackingCode  String?
-  items         OrderItem[]
-  invoice       Invoice?
-  returns       ReturnRequest[]
-  payouts       Payout[]
-  messages      Message[]
-  reviews       Review[]
-  createdAt     DateTime    @default(now())
-  paidAt        DateTime?
-  cancelledAt   DateTime?
+  shipTo              String
+  subtotalCents       Int
+  freightCents        Int             @default(0)
+  feeCents            Int
+  taxCents            Int             @default(0)
+  totalCents          Int
+  feeRateBps          Int             @default(600)
+  paymentMethod       String          @default("paypal")
+  paypalOrderId       String?
+  shipmentStage       String          @default("")
+  carrier             String?
+  trackingCode        String?
+  items               OrderItem[]
+  invoice             Invoice?
+  returns             ReturnRequest[]
+  payouts             Payout[]
+  messages            Message[]
+  reviews             Review[]
+  createdAt           DateTime        @default(now())
+  paidAt              DateTime?
+  cancelledAt         DateTime?
 }
 
 model Invoice {
@@ -388,16 +413,16 @@ model Invoice {
 }
 
 model OrderItem {
-  id           String  @id @default(cuid())
-  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId      String
-  product      Product @relation(fields: [productId], references: [id])
-  productId    String
-  nameSnapshot String
-  skuSnapshot  String
-  supplierName String
+  id             String  @id @default(cuid())
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId        String
+  product        Product @relation(fields: [productId], references: [id])
+  productId      String
+  nameSnapshot   String
+  skuSnapshot    String
+  supplierName   String
   unitPriceCents Int
-  qty          Int
+  qty            Int
 }
 
 model QuoteRequest {
@@ -439,18 +464,18 @@ model Message {
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  actorId     String?
-  actorEmail  String
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String
   // Free-form string instead of an enum so we can introduce new actions
   // without a schema migration. Set of well-known values is enforced at
   // the lib/audit.ts boundary.
-  action      String
-  targetType  String
-  targetId    String
-  summary     String
-  metadata    Json?
-  createdAt   DateTime @default(now())
+  action     String
+  targetType String
+  targetId   String
+  summary    String
+  metadata   Json?
+  createdAt  DateTime @default(now())
 
   @@index([actorId])
   @@index([targetType, targetId])

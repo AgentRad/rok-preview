@@ -9,13 +9,21 @@ import TwoFactorSetup from "@/components/TwoFactorSetup";
 import ProfileForm from "@/components/ProfileForm";
 import AddressBook from "@/components/AddressBook";
 import CompanyProfileForm from "@/components/CompanyProfileForm";
+import EmailChangeForm from "@/components/EmailChangeForm";
+import DeleteAccountForm from "@/components/DeleteAccountForm";
 import { isBlobConfigured } from "@/lib/blob-config";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ emailChange?: string }>;
+}) {
   const user = await requireUser();
+  const sp = await searchParams;
+  const emailChangeFlag = sp.emailChange;
   const isAdmin = user.role === "ADMIN";
   const isBuyer = user.role === "BUYER";
 
@@ -40,6 +48,32 @@ export default async function SettingsPage() {
             {/* Title-case the role enum so "BUYER" doesn't render as "buyer". */}
             {user.role.charAt(0) + user.role.slice(1).toLowerCase()}
           </p>
+          {emailChangeFlag === "done" && (
+            <div className="alert alert-ok" style={{ marginBottom: 16 }}>
+              <strong>Email updated.</strong> Sign-ins and notifications now
+              go to {user.email}. The previous address got a confirmation
+              note.
+            </div>
+          )}
+          {emailChangeFlag === "expired" && (
+            <div className="alert alert-error" style={{ marginBottom: 16 }}>
+              <strong>Email-change link expired.</strong> Submit the form
+              below again to send a fresh one.
+            </div>
+          )}
+          {emailChangeFlag === "taken" && (
+            <div className="alert alert-error" style={{ marginBottom: 16 }}>
+              <strong>That email is taken.</strong> Someone else registered
+              with the address between your request and your click. Pick a
+              different one.
+            </div>
+          )}
+          {emailChangeFlag === "invalid" && (
+            <div className="alert alert-error" style={{ marginBottom: 16 }}>
+              <strong>Confirmation link was malformed.</strong> Request a
+              new one below.
+            </div>
+          )}
 
           <div className="card" style={{ marginTop: 24 }}>
             <div className="card-head">
@@ -112,6 +146,26 @@ export default async function SettingsPage() {
               </div>
               <div className="card-body">
                 <AddressBook initial={addresses} />
+              </div>
+            </div>
+          )}
+
+          <div className="card" style={{ marginTop: 24 }}>
+            <div className="card-head">
+              <h2>Email address</h2>
+            </div>
+            <div className="card-body">
+              <EmailChangeForm currentEmail={user.email} />
+            </div>
+          </div>
+
+          {!isAdmin && (
+            <div className="card" style={{ marginTop: 24 }}>
+              <div className="card-head">
+                <h2>Delete account</h2>
+              </div>
+              <div className="card-body">
+                <DeleteAccountForm />
               </div>
             </div>
           )}

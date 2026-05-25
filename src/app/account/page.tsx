@@ -22,7 +22,7 @@ const STATUS_CLASS: Record<string, string> = {
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ verified?: string }>;
+  searchParams: Promise<{ verified?: string; recover?: string }>;
 }) {
   const user = await requireUser();
   // /account is the buyer's home. Suppliers and OEMs land on their own
@@ -32,6 +32,7 @@ export default async function AccountPage({
   if (user.role === "MANUFACTURER") redirect("/oem");
   const sp = await searchParams;
   const verifiedFlag = sp.verified;
+  const recoverFlag = sp.recover;
   const [orders, attention, addresses] = await Promise.all([
     prisma.order.findMany({
       where: { buyerId: user.id },
@@ -52,6 +53,12 @@ export default async function AccountPage({
       <SiteHeader />
       <main id="main" className="app-page">
         <div className="page-pad narrow">
+          {recoverFlag === "1" && (
+            <div className="alert alert-ok" style={{ marginBottom: 16 }}>
+              <strong>Account recovered.</strong> Welcome back. Deletion is
+              cancelled and your account is active again.
+            </div>
+          )}
           {verifiedFlag === "1" && (
             <div className="alert alert-ok" style={{ marginBottom: 16 }}>
               <strong>Email verified.</strong> You can now place orders and
