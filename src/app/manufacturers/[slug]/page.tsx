@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductCard from "@/components/ProductCard";
@@ -86,6 +87,9 @@ export default async function ManufacturerStorefront({
   const brandData = await resolveBrand(slug);
   if (!brandData) notFound();
   const { name: brand, claimed } = brandData;
+  const viewer = await getCurrentUser();
+  const viewerCanBuy =
+    !viewer || viewer.role === "BUYER" || viewer.role === "ADMIN";
 
   // Products and their distributors (same for claimed + unclaimed).
   const products = await prisma.product.findMany({
@@ -227,6 +231,7 @@ export default async function ManufacturerStorefront({
                 {products.map((p) => (
                   <ProductCard
                     key={p.sku}
+                    viewerCanBuy={viewerCanBuy}
                     product={{
                       sku: p.sku,
                       name: p.name,

@@ -4,6 +4,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PartIcon from "@/components/PartIcon";
 import ProductCard from "@/components/ProductCard";
+import { getCurrentUser } from "@/lib/auth";
 import HeroSearch from "@/components/HeroSearch";
 import { FEE_RATE_BPS, FEE_RATE_LABEL, formatCents } from "@/lib/money";
 
@@ -63,7 +64,7 @@ const COMPARE: { label: string; off: string; on: string }[] = [
 ];
 
 export default async function HomePage() {
-  const [productCount, supplierCount, featured] = await Promise.all([
+  const [productCount, supplierCount, featured, viewer] = await Promise.all([
     prisma.product.count({ where: { active: true } }),
     prisma.supplier.count({ where: { status: "APPROVED" } }),
     prisma.product.findMany({
@@ -72,7 +73,10 @@ export default async function HomePage() {
       orderBy: { createdAt: "asc" },
       take: 8,
     }),
+    getCurrentUser(),
   ]);
+  const viewerCanBuy =
+    !viewer || viewer.role === "BUYER" || viewer.role === "ADMIN";
 
   return (
     <>
@@ -140,7 +144,7 @@ export default async function HomePage() {
             </div>
             <div className="product-grid">
               {featured.map((p) => (
-                <ProductCard key={p.sku} product={p} />
+                <ProductCard key={p.sku} product={p} viewerCanBuy={viewerCanBuy} />
               ))}
             </div>
           </div>

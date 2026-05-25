@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { runSearch, type SearchProduct } from "@/lib/search";
+import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductCard from "@/components/ProductCard";
@@ -72,6 +73,11 @@ export default async function CatalogPage({
   const cat = sp.cat || "";
   const mfr = sp.mfr || "";
   const sort = sp.sort || "featured";
+  // Buyer-eligible viewers see the QuickAdd CTA on product cards. OEMs
+  // and suppliers don't (matches the gated buy flow on the detail page).
+  const viewer = await getCurrentUser();
+  const viewerCanBuy =
+    !viewer || viewer.role === "BUYER" || viewer.role === "ADMIN";
   const inStock = sp.instock === "1";
   const requestedPage = Math.max(1, parseInt(sp.page || "1", 10) || 1);
 
@@ -301,7 +307,7 @@ export default async function CatalogPage({
               <>
                 <div className="product-grid">
                   {products.map((p) => (
-                    <ProductCard key={p.sku} product={p} />
+                    <ProductCard key={p.sku} product={p} viewerCanBuy={viewerCanBuy} />
                   ))}
                 </div>
 

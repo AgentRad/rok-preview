@@ -195,7 +195,30 @@ export default async function ProductPage({
                   </span>
                 </div>
 
-                {product.quoteOnly ? (
+                {/* Purchase affordances only for buyer-eligible viewers
+                    (anonymous shoppers, BUYER role, ADMIN for testing).
+                    OEMs and suppliers are explicitly excluded from the
+                    buy flow per the platform's no-channel-conflict
+                    business rule. */}
+                {user?.role === "MANUFACTURER" ? (
+                  <div className="alert alert-info" style={{ marginTop: 18 }}>
+                    <strong>Distributors carry this part.</strong> Orders
+                    route to {product.supplier.name}; manufacturers don&rsquo;t
+                    purchase through PartsPort. View your storefront on{" "}
+                    <Link
+                      href="/oem"
+                      style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                    >
+                      /oem
+                    </Link>{" "}
+                    to see how buyers find your brand.
+                  </div>
+                ) : user?.role === "SUPPLIER" ? (
+                  <div className="alert alert-info" style={{ marginTop: 18 }}>
+                    <strong>Suppliers fulfill, don&rsquo;t buy.</strong>{" "}
+                    Sign in as a buyer account to test the purchase flow.
+                  </div>
+                ) : product.quoteOnly ? (
                   <div style={{ marginTop: 18 }}>
                     <RequestQuote
                       sku={product.sku}

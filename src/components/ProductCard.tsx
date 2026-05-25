@@ -20,7 +20,17 @@ export type CardProduct = {
   supplier: { name: string; rating: number; logoUrl?: string | null };
 };
 
-export default function ProductCard({ product }: { product: CardProduct }) {
+export default function ProductCard({
+  product,
+  viewerCanBuy = true,
+}: {
+  product: CardProduct;
+  /** When false (OEM / supplier viewer), the QuickAdd CTA is hidden so the
+   *  catalog card matches the gated buy flow on the detail page. Default
+   *  true keeps existing pages (homepage featured, brand storefront)
+   *  rendering normally for anonymous / buyer / admin viewers. */
+  viewerCanBuy?: boolean;
+}) {
   const imageCount = product.imageCount ?? product._count?.images ?? 0;
   return (
     <Link className="product-card" href={`/product/${product.sku}`}>
@@ -67,9 +77,11 @@ export default function ProductCard({ product }: { product: CardProduct }) {
             <span>Sold by {product.supplier.name}</span>
           </div>
         </div>
-        <div className="product-action">
-          <QuickAddButton sku={product.sku} quoteOnly={product.quoteOnly} />
-        </div>
+        {viewerCanBuy && (
+          <div className="product-action">
+            <QuickAddButton sku={product.sku} quoteOnly={product.quoteOnly} />
+          </div>
+        )}
       </div>
     </Link>
   );
