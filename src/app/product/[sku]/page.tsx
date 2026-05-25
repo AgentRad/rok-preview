@@ -93,7 +93,11 @@ export default async function ProductPage({
             › {product.sku}
           </div>
           <div className="detail-grid">
-            <div className="detail-gallery">
+            <div
+              className={
+                "detail-gallery" + (product.images.length > 0 ? " has-gallery" : "")
+              }
+            >
               {product.images.length > 0 ? (
                 <ProductGallery
                   images={product.images.map((i) => ({ id: i.id, url: i.url }))}
