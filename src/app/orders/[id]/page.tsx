@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PayOrder from "@/components/PayOrder";
+import ReorderButton from "@/components/ReorderButton";
 import CancelOrderButton from "@/components/CancelOrderButton";
 import ConfirmReceiptButton from "@/components/ConfirmReceiptButton";
 import ReturnRequestForm from "@/components/ReturnRequestForm";
@@ -116,8 +117,16 @@ export default async function OrderPage({
           )}
           {!paid && order.status === "PENDING" && (
             <div className="alert alert-info">
-              Order {order.reference} is awaiting payment. Review the details
-              below and pay to confirm.
+              <strong>Order {order.reference} is awaiting payment.</strong>
+              {" "}
+              Review the details below, then{" "}
+              <a
+                href="#pay"
+                style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "underline" }}
+              >
+                resume payment
+              </a>
+              {" "}to confirm.
             </div>
           )}
 
@@ -322,12 +331,14 @@ export default async function OrderPage({
           </div>
 
           {order.status === "PENDING" && (
-            <PayOrder
-              orderId={order.id}
-              totalCents={order.totalCents}
-              paypalClientId={process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || ""}
-              paymentsConfigured={isPaymentsConfigured()}
-            />
+            <div id="pay">
+              <PayOrder
+                orderId={order.id}
+                totalCents={order.totalCents}
+                paypalClientId={process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || ""}
+                paymentsConfigured={isPaymentsConfigured()}
+              />
+            </div>
           )}
 
           <div style={{ marginTop: 24 }} className="row-gap">
@@ -342,6 +353,7 @@ export default async function OrderPage({
             <Link className="btn btn-ghost" href="/account">
               View my orders
             </Link>
+            {paid && isBuyer && <ReorderButton orderId={order.id} />}
             {cancellable && <CancelOrderButton orderId={order.id} />}
           </div>
 

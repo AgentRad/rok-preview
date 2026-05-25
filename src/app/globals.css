@@ -1029,6 +1029,8 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 /* ---------- Forms ---------- */
 .form-row { margin-bottom: 18px; }
 .form-row.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-row.three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+@media (max-width: 600px) { .form-row.three { grid-template-columns: 1fr; } }
 .form-row label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 7px; font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--steel); }
 .form-row input, .form-row select, .form-row textarea {
   width: 100%; font-family: var(--sans); font-size: 14.5px; padding: 11px 13px;
@@ -1351,6 +1353,19 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .invoice-doc {
   background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
   padding: 56px 56px 48px; box-shadow: 0 4px 24px rgba(0,0,0,.04);
+  position: relative;
+}
+/* If a code path ever renders an invoice for an unpaid order, the DRAFT
+   watermark makes it obvious it's not a real receipt. Today the PENDING
+   path doesn't reach the invoice doc, but this guards against regression. */
+.invoice-doc.draft::before {
+  content: "DRAFT";
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18vw; font-weight: 800; letter-spacing: .02em;
+  color: rgba(176, 38, 38, .08); pointer-events: none;
+  transform: rotate(-20deg);
+  z-index: 1;
 }
 .invoice-head {
   display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap;

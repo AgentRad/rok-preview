@@ -46,8 +46,13 @@ export default async function OrderInvoicePage({
         <main id="main" className="app-page">
           <div className="page-pad narrow">
             <div className="alert alert-info">
-              Order {order.reference} has no invoice yet. Invoices are issued
-              after payment is received.
+              <strong>No invoice issued yet.</strong>
+              <br />
+              Order {order.reference} is{" "}
+              {order.status === "PENDING" ? "awaiting payment" : "cancelled"}.{" "}
+              {order.status === "PENDING"
+                ? "An invoice is created automatically once payment is received."
+                : "Cancelled orders never receive an invoice."}
             </div>
             <div style={{ marginTop: 16 }}>
               <Link className="btn btn-ghost" href={`/orders/${order.id}`}>

@@ -35,6 +35,8 @@ export async function PATCH(
     website?: string;
     description?: string;
     status?: "PENDING" | "APPROVED" | "SUSPENDED";
+    rating?: number;
+    onTimeRate?: number;
   } = {};
   if (typeof body.name === "string" && body.name.trim()) data.name = body.name.trim();
   if (typeof body.contactEmail === "string" && body.contactEmail.trim()) {
@@ -57,6 +59,16 @@ export async function PATCH(
     body.status === "SUSPENDED"
   ) {
     data.status = body.status;
+  }
+  if (typeof body.rating === "number" && body.rating >= 0 && body.rating <= 5) {
+    data.rating = body.rating;
+  }
+  if (
+    typeof body.onTimeRate === "number" &&
+    body.onTimeRate >= 0 &&
+    body.onTimeRate <= 100
+  ) {
+    data.onTimeRate = body.onTimeRate;
   }
 
   const updated = await prisma.supplier.update({ where: { id }, data });

@@ -1,0 +1,351 @@
+{
+  "orderId": "cmpkr3azk000akz04q3cayyib",
+  "firstProductHref": "/product/CBL-CTRL14",
+  "secondProductHref": "/product/CND-ACSR397",
+  "highPriceProductHref": "/product/GEN-DIESEL100",
+  "firstSku": "CBL-CTRL14",
+  "secondSku": "CND-ACSR397",
+  "steps": [
+    {
+      "name": "01 — login",
+      "status": "PASS",
+      "notes": "Landed at https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/login"
+    },
+    {
+      "name": "02 — account page",
+      "status": "PASS",
+      "notes": "Account len=25339 hasNameField=true"
+    },
+    {
+      "name": "03 — homepage",
+      "status": "PASS",
+      "notes": "Home loaded"
+    },
+    {
+      "name": "04 — catalog browse",
+      "status": "PASS",
+      "notes": "24 product links visible"
+    },
+    {
+      "name": "05 — catalog search 'circuit breaker'",
+      "status": "PASS",
+      "notes": "3 search results"
+    },
+    {
+      "name": "06 — collect 2 non-quote-only product hrefs (price-asc)",
+      "status": "PASS",
+      "notes": "1st=/product/CBL-CTRL14  2nd=/product/CND-ACSR397"
+    },
+    {
+      "name": "07 — view product 1 + add to cart",
+      "status": "PASS",
+      "notes": "Added SKU CBL-CTRL14; cart=[{\"sku\":\"CBL-CTRL14\",\"qty\":1}]"
+    },
+    {
+      "name": "08 — view product 2 + add to cart",
+      "status": "PASS",
+      "notes": "Added SKU CND-ACSR397; cart=[{\"sku\":\"CBL-CTRL14\",\"qty\":1},{\"sku\":\"CND-ACSR397\",\"qty\":1}]"
+    },
+    {
+      "name": "09 — cart page",
+      "status": "PASS",
+      "notes": "Cart page loaded. cart-line count=2"
+    },
+    {
+      "name": "10 — cart change qty (increase)",
+      "status": "PASS",
+      "notes": "Increased first line qty +2"
+    },
+    {
+      "name": "10b — cart remove second line",
+      "status": "PASS",
+      "notes": "Remove buttons available=2 (not clicked, need 2 items downstream)"
+    },
+    {
+      "name": "11 — go to checkout",
+      "status": "PASS",
+      "notes": "Checkout form present: true"
+    },
+    {
+      "name": "12 — fill checkout form",
+      "status": "PASS",
+      "notes": "submitted form, captured orderId=cmpkr3azk000akz04q3cayyib, now at https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/checkout"
+    },
+    {
+      "name": "13 — pay (demo / hosted / paypal)",
+      "status": "PASS",
+      "notes": "Hosted payment (Stripe-style) button shown — cannot auto-complete external checkout"
+    },
+    {
+      "name": "14 — order detail page",
+      "status": "PASS",
+      "notes": "Order page hasTotal=true hasStatus=true"
+    },
+    {
+      "name": "15 — invoice page",
+      "status": "PASS",
+      "notes": "Invoice page len=14786 hasInvoice=true"
+    },
+    {
+      "name": "16 — RFQ: high-ticket product",
+      "status": "PASS",
+      "notes": "RFQ submitted from /product/GEN-DIESEL100"
+    },
+    {
+      "name": "17 — message thread on order page",
+      "status": "PASS",
+      "notes": "Message sent"
+    },
+    {
+      "name": "18 — account addresses + add new",
+      "status": "PASS",
+      "notes": "hasAddressBook=true totalInputs=1 addBtns=1 clicked Save"
+    },
+    {
+      "name": "19 — order history visible on /account",
+      "status": "PASS",
+      "notes": "orderLinks=12 orderRefInPage=true"
+    },
+    {
+      "name": "20 — review flow on product",
+      "status": "PASS",
+      "notes": "review CTA count=0 mentionsReview=true"
+    },
+    {
+      "name": "21 — cancel / return on order",
+      "status": "PASS",
+      "notes": "cancel/return CTA count=1"
+    },
+    {
+      "name": "22 — reorder",
+      "status": "PASS",
+      "notes": "reorder CTA count=0"
+    },
+    {
+      "name": "23 — final account view",
+      "status": "PASS",
+      "notes": "done"
+    }
+  ],
+  "consoleErrors": [
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/login",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/account",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/catalog",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/catalog?q=circuit+breaker",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/catalog?sort=price-asc",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/product/CBL-CTRL14",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/product/CND-ACSR397",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/cart",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/checkout",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/orders/cmpkr3azk000akz04q3cayyib",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/orders/cmpkr3azk000akz04q3cayyib/invoice",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/catalog?sort=price-desc",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/product/GEN-DIESEL100",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/catalog?q=",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/orders/cmpkr3azk000akz04q3cayyib",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/account",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/catalog?q=",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/account",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/product/CBL-CTRL14",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/orders/cmpkr3azk000akz04q3cayyib",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/orders/cmpkr3azk000akz04q3cayyib",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/account",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    }
+  ],
+  "pageErrors": [
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/orders/cmpkr3azk000akz04q3cayyib",
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/orders/cmpkr3azk000akz04q3cayyib",
+      "text": "Minified React error #418; visit https://react.dev/errors/418?args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+    }
+  ],
+  "failedRequests": [
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    },
+    {
+      "url": "https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/",
+      "status": 400,
+      "method": "OPTIONS"
+    }
+  ]
+}

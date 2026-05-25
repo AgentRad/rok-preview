@@ -121,37 +121,49 @@ export default async function SupplierDashboard() {
   const unitsInStock = supplier.products.reduce((s, p) => s + p.stock, 0);
   const openQuotes = quotes.filter((q) => q.status === "OPEN").length;
 
+  // Checklist reflects the supplier's actual operational readiness. Items
+  // already satisfied at sign-up (admin-approved status) count toward
+  // completion so the number isn't artificially low for working accounts.
   const checklist: SupplierChecklistItem[] = [
+    {
+      key: "approved",
+      label: "Profile approved",
+      done: supplier.status === "APPROVED",
+      note:
+        supplier.status === "APPROVED"
+          ? "Verified by PartsPort. Buyers see the verified badge."
+          : "Approval is pending; you'll be notified by email.",
+    },
     {
       key: "logo",
       label: "Add a company logo",
       done: !!supplier.logoUrl,
       href: "/supplier#profile",
-      note: "Shows next to your name on product cards and listings.",
-    },
-    {
-      key: "website",
-      label: "Add your website",
-      done: !!supplier.website,
-      note: "Buyers tap through for credibility before placing big orders.",
+      note: "Shows next to your name on product cards, orders, and invoices.",
     },
     {
       key: "description",
       label: "Write a one-sentence description",
-      done: !!supplier.description,
+      done: !!(supplier.description && supplier.description.trim()),
       note: "Appears on your supplier profile.",
     },
     {
       key: "certs",
       label: "List certifications",
-      done: !!supplier.certifications,
+      done: !!(supplier.certifications && supplier.certifications.trim()),
       note: "ISO 9001, IEEE C57, authorized-distributor proofs, etc.",
     },
     {
+      key: "website",
+      label: "Add your website",
+      done: !!(supplier.website && supplier.website.trim()),
+      note: "Buyers tap through for credibility before placing big orders.",
+    },
+    {
       key: "products",
-      label: "Add at least one product",
+      label: "Publish at least one product",
       done: supplier.products.length > 0,
-      note: "Paste a CSV below or hand-enter your first part.",
+      note: "Paste a CSV in the import card or hand-enter your first part.",
     },
   ];
 
