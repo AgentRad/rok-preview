@@ -147,6 +147,12 @@ When you flip these on, the code starts using them; absent, it gracefully no-ops
 
 **Upstash (production rate limiting).** Sign up at upstash.com (free tier is 10k commands/day). Create a Redis DB, copy `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`, paste both into Vercel, redeploy. Without these vars, rate limiting falls back to in-memory per-function-instance, which is fine for low traffic but stops being correct under load.
 
+**Stripe Connect (supplier payouts).** In the Stripe dashboard, Settings → Connect → Onboarding options, enable Express. The platform uses Express + standard daily payouts. No additional env vars beyond the existing `STRIPE_SECRET_KEY`; suppliers complete onboarding in a Stripe-hosted flow that PartsPort never sees. Stripe issues 1099-K forms automatically when a connected supplier crosses $600 in calendar-year earnings; verify "Tax forms" is enabled under Settings → Connect → Tax forms. The Connect-related webhooks PartsPort listens for: `account.updated`, `transfer.created`, `transfer.updated`, `transfer.reversed`. The Stripe webhook configured at `/api/payments/webhook` should subscribe to those plus `checkout.session.completed` and `charge.refunded`.
+
+**Stripe Tax.** Settings → Tax → Configure must be set to "active" with the platform registered in at least one state. The daily `/api/admin/cron/health-check` cron pings `stripe.tax.settings.retrieve()` and emails the admin if status drifts.
+
+**CRON_SECRET.** All four daily crons (auto-deliver, reconcile, reserve-release, payout-retry, health-check) check `Authorization: Bearer ${CRON_SECRET}`. Generate one with `openssl rand -hex 32`, paste into Vercel, redeploy. Without the secret the gate falls open for testing; production sets it.
+
 ## Secret hygiene
 
 If a session token (JWT) or credential ever leaks into the repo — even briefly — the right reflex is to rotate the corresponding secret in Vercel and let the auto-redeploy kill all live sessions. `SESSION_SECRET` was rotated once already after a curl cookie jar (`jar.txt`) got committed and reverted within 90 seconds. The gitignore now covers `jar.txt`, `*.cookie-jar`, `cookies.txt`. If something similar happens, rotate the relevant secret immediately, push a no-op commit to force a fresh Vercel build (env-var changes don't always auto-redeploy), and write up what was exposed in the commit message that contains the rotation note.

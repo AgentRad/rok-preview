@@ -108,6 +108,20 @@ export default async function AdminConsole() {
               style={{ color: "var(--blue)", fontWeight: 600 }}
             >
               Audit log →
+            </Link>{" "}
+            ·{" "}
+            <Link
+              href="/admin/profit"
+              style={{ color: "var(--blue)", fontWeight: 600 }}
+            >
+              Profit dashboard →
+            </Link>{" "}
+            ·{" "}
+            <Link
+              href="/admin/tax-registrations"
+              style={{ color: "var(--blue)", fontWeight: 600 }}
+            >
+              Tax registrations →
             </Link>
           </p>
 
