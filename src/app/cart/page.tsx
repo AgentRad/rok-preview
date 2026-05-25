@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
@@ -24,6 +25,22 @@ export default async function CartPage() {
           </p>
           <div style={{ marginTop: 24 }}>
             <CartClient />
+            {/* Crawlers and JS-disabled visitors get a real empty state
+                instead of the "Loading..." spinner that the cart shows
+                while it hydrates from localStorage. */}
+            <noscript>
+              <div className="empty-state" style={{ marginTop: 0 }}>
+                <h3>Your cart is empty.</h3>
+                <p>
+                  PartsPort uses your browser to remember items before
+                  checkout. Turn on JavaScript or start browsing the
+                  catalog.
+                </p>
+                <Link href="/catalog" className="btn btn-primary">
+                  Browse catalog
+                </Link>
+              </div>
+            </noscript>
           </div>
         </div>
       </main>
