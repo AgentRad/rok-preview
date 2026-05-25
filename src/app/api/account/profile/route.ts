@@ -27,6 +27,7 @@ export async function PATCH(req: Request) {
   // OEM sets their manufacturerName, and we want the storefront link
   // (/manufacturers/[slug]) to resolve to actual products on day 1.
   let manufacturerName: string | null | undefined = undefined;
+  let brandMismatchWarning: string | null = null;
   if (typeof body.manufacturerName === "string") {
     const raw = body.manufacturerName.trim();
     if (raw === "") {
@@ -46,6 +47,14 @@ export async function PATCH(req: Request) {
         (m) => manufacturerSlug(m.manufacturer) === slug
       );
       manufacturerName = exact ? exact.manufacturer : canonical;
+      // Soft warning when the OEM's brand name has no matching products on
+      // the platform. We don't reject (they might be the first OEM listing
+      // for a brand whose distributors haven't joined yet), but the UI
+      // surfaces the warning so the OEM knows their storefront will start
+      // empty.
+      if (!exact) {
+        brandMismatchWarning = `No products on PartsPort match "${canonical}" yet. Your storefront will be empty until a distributor lists products with this exact manufacturer name. Double-check the spelling, or contact support if you expect existing listings to roll up to your brand.`;
+      }
     }
   }
 
@@ -80,5 +89,8 @@ export async function PATCH(req: Request) {
     },
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    ...(brandMismatchWarning ? { warning: brandMismatchWarning } : {}),
+  });
 }

@@ -20,12 +20,14 @@ export default function ProfileForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [warning, setWarning] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
     setSaved(false);
+    setWarning("");
     try {
       const res = await fetch("/api/account/profile", {
         method: "PATCH",
@@ -41,6 +43,11 @@ export default function ProfileForm({
         return;
       }
       setSaved(true);
+      // Server can return a soft warning, e.g. when the OEM brand name
+      // doesn't match any Product.manufacturer string yet (empty storefront).
+      if (typeof data.warning === "string" && data.warning) {
+        setWarning(data.warning);
+      }
       router.refresh();
     } finally {
       setBusy(false);
@@ -51,6 +58,7 @@ export default function ProfileForm({
     <form onSubmit={submit}>
       {error && <div className="alert alert-error">{error}</div>}
       {saved && <div className="alert alert-ok">Profile updated.</div>}
+      {warning && <div className="alert alert-info">{warning}</div>}
       <div className="form-row">
         <label htmlFor="pf-name">Full name</label>
         <input

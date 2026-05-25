@@ -309,8 +309,23 @@ const RECALL_FLOOR = 5;
 
 /**
  * Ensure the result list has at least RECALL_FLOOR entries when the catalog
- * has enough plausibly-relevant items. Pads with same-category items the
- * primary ranker didn't pick. Used for both AI and heuristic paths.
+ * has enough plausibly-relevant items. Three tiers, applied in order:
+ *
+ *   1. Same-category fill: any product whose category matches one of the
+ *      primary results' categories.
+ *   2. Heuristic fill: keyword-rank the whole catalog against the query
+ *      and pull non-duplicates. Catches synonym hits via EXPANSIONS.
+ *   3. Fuzzy global fill: substring-score every active product against
+ *      query tokens over (name + manufacturer + description). Last
+ *      resort that ALWAYS finds something when the catalog has products,
+ *      so the floor is no longer silently violated for queries like
+ *      "meter" (one category, only 4 SKUs) or "lithium" (no EXPANSIONS
+ *      entry, "lithium" only appears in 2 product descriptions).
+ *
+ * If after all three tiers we're still under the floor, log a warning so
+ * future regressions surface in production logs instead of silently
+ * shrinking the result page. Padding never invents entries; the floor is
+ * capped at the catalog size.
  */
 function padToFloor(
   primary: SearchProduct[],
@@ -318,25 +333,60 @@ function padToFloor(
   all: SearchProduct[]
 ): SearchProduct[] {
   if (primary.length >= RECALL_FLOOR) return primary;
+  const target = Math.min(RECALL_FLOOR, all.length);
   const seen = new Set(primary.map((p) => p.sku));
-  // First, try same-category as the primary results.
+
+  // Tier 1: same-category fill.
   const cats = new Set(primary.map((p) => p.category));
-  const sameCat = all.filter(
-    (p) => !seen.has(p.sku) && cats.has(p.category)
-  );
-  for (const p of sameCat) {
-    if (primary.length >= RECALL_FLOOR) break;
+  for (const p of all) {
+    if (primary.length >= target) break;
+    if (seen.has(p.sku) || !cats.has(p.category)) continue;
     primary.push(p);
     seen.add(p.sku);
   }
-  // Still short: pad with heuristic-ranked candidates that share any term.
-  if (primary.length < RECALL_FLOOR) {
+  // Tier 2: keyword-ranked heuristic over the catalog (uses EXPANSIONS).
+  if (primary.length < target) {
     const heuristic = heuristicRank(query, all).filter((p) => !seen.has(p.sku));
     for (const p of heuristic) {
-      if (primary.length >= RECALL_FLOOR) break;
+      if (primary.length >= target) break;
       primary.push(p);
       seen.add(p.sku);
     }
+  }
+  // Tier 3: fuzzy substring scan over name + manufacturer + description.
+  // This is the catch-all: queries with no EXPANSIONS entry and no
+  // single-category match still find SOMETHING relevant if the term
+  // appears anywhere in product copy.
+  if (primary.length < target) {
+    const tokens = tokenize(query);
+    const fuzzy = all
+      .filter((p) => !seen.has(p.sku))
+      .map((p) => {
+        const hay = `${p.name} ${p.manufacturer} ${p.description ?? ""}`.toLowerCase();
+        let score = 0;
+        for (const t of tokens) if (hay.includes(t)) score += 1;
+        return { p, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+    for (const { p } of fuzzy) {
+      if (primary.length >= target) break;
+      primary.push(p);
+      seen.add(p.sku);
+    }
+  }
+  // Telemetry: catalog has enough products but we still couldn't fill.
+  // Logged as a warning so a real regression surfaces in production logs.
+  if (primary.length < target) {
+    console.warn(
+      "[search] recall floor unmet:",
+      JSON.stringify({
+        query,
+        returned: primary.length,
+        target,
+        catalogSize: all.length,
+      })
+    );
   }
   return primary;
 }

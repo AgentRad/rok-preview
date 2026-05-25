@@ -367,18 +367,13 @@ async function main() {
     where: { email: "buyer@partsport.example" },
   });
   if (buyer) {
-    const existingOrderCount = await prisma.order.count({
-      where: { buyerId: buyer.id },
-    });
-    if (existingOrderCount === 0) {
-      await seedDemoOrders(buyer);
-    }
-    const existingQuoteCount = await prisma.quoteRequest.count({
-      where: { buyerId: buyer.id },
-    });
-    if (existingQuoteCount === 0) {
-      await seedDemoQuotes(buyer);
-    }
+    // Per-state top-up. Previously gated on existingOrderCount === 0, which
+    // skipped EVERYTHING when the buyer had any test orders (and the test
+    // teams routinely create PENDING orders by clicking through Buy). Now
+    // we top up each state independently so the demo can always show a
+    // Shipped order with tracking and a Delivered order ready for review.
+    await seedDemoOrders(buyer);
+    await seedDemoQuotes(buyer);
   }
 
   console.log(
@@ -410,9 +405,12 @@ async function getProductBySku(sku) {
 
 async function seedDemoOrders(buyer) {
   // Order A: small PENDING order so the buyer can immediately test the
-  // payment flow on /orders/[id].
+  // payment flow on /orders/[id]. Skip if any PENDING order already exists.
+  const hasPending = await prisma.order.count({
+    where: { buyerId: buyer.id, status: "PENDING" },
+  });
   const pendingProd = await getProductBySku("SAF-AFK12");
-  if (pendingProd) {
+  if (hasPending === 0 && pendingProd) {
     const subtotal = pendingProd.priceCents * 2;
     const fee = Math.round((subtotal * FEE_BPS) / 10000);
     const total = subtotal + fee;
@@ -448,9 +446,16 @@ async function seedDemoOrders(buyer) {
 
   // Order B: PAID and currently Shipped with a carrier and tracking code, so
   // the buyer can test the timeline, the tracking link, and the in-thread
-  // messaging flow.
+  // messaging flow. Skip if any Shipped order already exists for the buyer.
+  const hasShipped = await prisma.order.count({
+    where: {
+      buyerId: buyer.id,
+      status: "PAID",
+      shipmentStage: "Shipped",
+    },
+  });
   const shippedProd = await getProductBySku("RLY-SEL751");
-  if (shippedProd) {
+  if (hasShipped === 0 && shippedProd) {
     const subtotal = shippedProd.priceCents * 1;
     const fee = Math.round((subtotal * FEE_BPS) / 10000);
     const total = subtotal + fee;
@@ -522,9 +527,15 @@ async function seedDemoOrders(buyer) {
   }
 
   // Order C: FULFILLED so the buyer can post a review and (if needed)
-  // open a return.
+  // open a return. Skip if any FULFILLED/Delivered order already exists.
+  const hasDelivered = await prisma.order.count({
+    where: {
+      buyerId: buyer.id,
+      OR: [{ status: "FULFILLED" }, { shipmentStage: "Delivered" }],
+    },
+  });
   const deliveredProd = await getProductBySku("LNH-INS15P");
-  if (deliveredProd) {
+  if (hasDelivered === 0 && deliveredProd) {
     const subtotal = deliveredProd.priceCents * 12;
     const fee = Math.round((subtotal * FEE_BPS) / 10000);
     const total = subtotal + fee;
@@ -586,9 +597,13 @@ async function seedDemoOrders(buyer) {
 }
 
 async function seedDemoQuotes(buyer) {
-  // Quote 1: OPEN (awaiting supplier response).
+  // Quote 1: OPEN (awaiting supplier response). Skip if buyer already has
+  // any OPEN quote.
+  const hasOpen = await prisma.quoteRequest.count({
+    where: { buyerId: buyer.id, status: "OPEN" },
+  });
   const openProd = await getProductBySku("TXF-PM75");
-  if (openProd) {
+  if (hasOpen === 0 && openProd) {
     await prisma.quoteRequest.create({
       data: {
         reference: refCode("RFQ"),
@@ -605,8 +620,12 @@ async function seedDemoQuotes(buyer) {
     });
   }
   // Quote 2: QUOTED (supplier has responded, waiting on buyer accept).
+  // Skip if buyer already has any QUOTED quote.
+  const hasQuoted = await prisma.quoteRequest.count({
+    where: { buyerId: buyer.id, status: "QUOTED" },
+  });
   const quotedProd = await getProductBySku("GEN-DIESEL100");
-  if (quotedProd) {
+  if (hasQuoted === 0 && quotedProd) {
     const created = await prisma.quoteRequest.create({
       data: {
         reference: refCode("RFQ"),
