@@ -101,6 +101,13 @@ export default async function AdminConsole() {
             Marketplace operations: suppliers, applications, and orders.{" "}
             <Link href="/ops" style={{ color: "var(--blue)", fontWeight: 600 }}>
               Open fulfillment ops →
+            </Link>{" "}
+            ·{" "}
+            <Link
+              href="/admin/audit"
+              style={{ color: "var(--blue)", fontWeight: 600 }}
+            >
+              Audit log →
             </Link>
           </p>
 

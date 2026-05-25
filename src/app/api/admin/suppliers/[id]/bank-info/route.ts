@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,14 @@ export async function PATCH(
       bankInfoUpdatedAt: new Date(),
       ...(note !== undefined ? { bankInfoNote: note } : {}),
     },
+  });
+  await writeAuditLog({
+    actor: user,
+    action: "SUPPLIER_BANK_INFO_UPDATED",
+    targetType: "Supplier",
+    targetId: updated.id,
+    summary: `${updated.name}: bank info ${supplier.bankInfoStatus} -> ${status}${note ? ` (${note})` : ""}`,
+    metadata: { previousStatus: supplier.bankInfoStatus, newStatus: status },
   });
   return NextResponse.json({
     ok: true,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { writeAuditLog, type AuditAction } from "@/lib/audit";
 
 export async function PATCH(
   req: Request,
@@ -36,6 +37,25 @@ export async function PATCH(
   const updated = await prisma.address.update({
     where: { id },
     data: { taxExemptStatus: status },
+  });
+
+  const action: AuditAction =
+    status === "APPROVED"
+      ? "TAX_EXEMPT_APPROVED"
+      : status === "REJECTED"
+        ? "TAX_EXEMPT_REJECTED"
+        : "TAX_EXEMPT_PENDING";
+  await writeAuditLog({
+    actor: user,
+    action,
+    targetType: "Address",
+    targetId: updated.id,
+    summary: `Tax-exempt cert ${address.taxExemptStatus || "PENDING"} -> ${status}`,
+    metadata: {
+      buyerId: address.userId,
+      city: address.city,
+      region: address.region,
+    },
   });
 
   return NextResponse.json({ ok: true, address: updated });

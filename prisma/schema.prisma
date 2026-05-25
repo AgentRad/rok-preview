@@ -438,6 +438,25 @@ model Message {
   @@index([quoteId])
 }
 
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?
+  actorEmail  String
+  // Free-form string instead of an enum so we can introduce new actions
+  // without a schema migration. Set of well-known values is enforced at
+  // the lib/audit.ts boundary.
+  action      String
+  targetType  String
+  targetId    String
+  summary     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
 model SupplierApplication {
   id           String            @id @default(cuid())
   companyName  String

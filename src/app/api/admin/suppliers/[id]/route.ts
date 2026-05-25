@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { writeAuditLog, type AuditAction } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -116,5 +117,52 @@ export async function PATCH(
   }
 
   const updated = await prisma.supplier.update({ where: { id }, data });
+
+  // Audit-log the kinds of changes a regulator or future-you cares about.
+  // Plain edits (rating tweak, description tidy) collapse to one summary
+  // row; status/visibility/legal-flag flips get their own action verbs so
+  // a filter in /admin/audit isolates them cleanly.
+  const changes: { action: AuditAction; summary: string }[] = [];
+  if (data.status && data.status !== supplier.status) {
+    const act: AuditAction =
+      data.status === "APPROVED"
+        ? "SUPPLIER_APPROVED"
+        : data.status === "SUSPENDED"
+          ? "SUPPLIER_SUSPENDED"
+          : "SUPPLIER_UPDATED";
+    changes.push({
+      action: act,
+      summary: `Set status ${supplier.status} -> ${data.status}`,
+    });
+  }
+  if (
+    data.publicVisible !== undefined &&
+    data.publicVisible !== supplier.publicVisible
+  ) {
+    changes.push({
+      action: "SUPPLIER_VISIBILITY_FLIPPED",
+      summary: `Visibility ${supplier.publicVisible ? "live" : "hidden"} -> ${data.publicVisible ? "live" : "hidden"}`,
+    });
+  }
+  // Everything else (rating, on-time, name, etc.) rolls up.
+  const otherKeys = Object.keys(data).filter(
+    (k) => k !== "status" && k !== "publicVisible"
+  );
+  if (otherKeys.length > 0 && changes.length === 0) {
+    changes.push({
+      action: "SUPPLIER_UPDATED",
+      summary: `Edited fields: ${otherKeys.join(", ")}`,
+    });
+  }
+  for (const c of changes) {
+    await writeAuditLog({
+      actor: user,
+      action: c.action,
+      targetType: "Supplier",
+      targetId: supplier.id,
+      summary: `${supplier.name}: ${c.summary}`,
+      metadata: { supplierName: supplier.name, changes: data },
+    });
+  }
   return NextResponse.json({ ok: true, supplier: updated });
 }

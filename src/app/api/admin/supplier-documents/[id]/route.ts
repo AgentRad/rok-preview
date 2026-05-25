@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { writeAuditLog, type AuditAction } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,20 @@ export async function PATCH(
       reviewedBy: user.email,
       ...(reviewNote !== undefined ? { reviewNote } : {}),
     },
+  });
+  const action: AuditAction =
+    status === "APPROVED"
+      ? "SUPPLIER_DOC_APPROVED"
+      : status === "REJECTED"
+        ? "SUPPLIER_DOC_REJECTED"
+        : "SUPPLIER_DOC_PENDING";
+  await writeAuditLog({
+    actor: user,
+    action,
+    targetType: "SupplierDocument",
+    targetId: updated.id,
+    summary: `${updated.kind} (${updated.filename}) ${status.toLowerCase()}${reviewNote ? `: ${reviewNote}` : ""}`,
+    metadata: { supplierId: updated.supplierId, kind: updated.kind },
   });
   return NextResponse.json({ ok: true, document: updated });
 }

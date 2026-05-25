@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -23,9 +24,17 @@ export async function PATCH(
 
   if (action === "mark-paid") {
     if (payout.status === "PAID") return NextResponse.json({ ok: true });
-    await prisma.payout.update({
+    const updated = await prisma.payout.update({
       where: { id },
       data: { status: "PAID", paidAt: new Date(), note: String(body.note || "").trim() || payout.note },
+    });
+    await writeAuditLog({
+      actor: user,
+      action: "PAYOUT_MARKED_PAID",
+      targetType: "Payout",
+      targetId: updated.id,
+      summary: `Payout ${updated.reference} marked PAID (${updated.amountCents} cents)`,
+      metadata: { supplierId: updated.supplierId, orderId: updated.orderId },
     });
     return NextResponse.json({ ok: true });
   }

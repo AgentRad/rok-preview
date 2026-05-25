@@ -4,7 +4,9 @@ import { getCurrentUser } from "@/lib/auth";
 import {
   setActingAsSupplier,
   clearActingAsSupplier,
+  getActingAsSupplier,
 } from "@/lib/acting-as";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -31,6 +33,14 @@ export async function POST(req: Request) {
     );
   }
   await setActingAsSupplier(supplier.id);
+  await writeAuditLog({
+    actor: user,
+    action: "ACCOUNT_IMPERSONATION_STARTED",
+    targetType: "Supplier",
+    targetId: supplier.id,
+    summary: `Started acting-as ${supplier.name}`,
+    metadata: { supplierName: supplier.name },
+  });
   return NextResponse.json({ ok: true, supplierName: supplier.name });
 }
 
@@ -39,6 +49,16 @@ export async function DELETE() {
   if (!user || user.role !== "ADMIN") {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
+  const wasActingAs = await getActingAsSupplier();
   await clearActingAsSupplier();
+  if (wasActingAs) {
+    await writeAuditLog({
+      actor: user,
+      action: "ACCOUNT_IMPERSONATION_STOPPED",
+      targetType: "Supplier",
+      targetId: wasActingAs,
+      summary: `Stopped acting-as`,
+    });
+  }
   return NextResponse.json({ ok: true });
 }

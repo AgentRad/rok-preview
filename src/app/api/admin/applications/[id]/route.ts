@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
 import { sendApplicationStatus } from "@/lib/email";
+import { writeAuditLog } from "@/lib/audit";
 
 const TEMP_PASSWORD = "demo1234";
 
@@ -30,6 +31,14 @@ export async function POST(
     await prisma.supplierApplication.update({
       where: { id },
       data: { status: "REJECTED" },
+    });
+    await writeAuditLog({
+      actor: user,
+      action: "SUPPLIER_REJECTED",
+      targetType: "SupplierApplication",
+      targetId: app.id,
+      summary: `Rejected application from ${app.companyName} (${app.email})`,
+      metadata: { category: app.category },
     });
     sendApplicationStatus({
       to: app.email,
@@ -89,6 +98,14 @@ export async function POST(
     await prisma.supplierApplication.update({
       where: { id },
       data: { status: "APPROVED" },
+    });
+    await writeAuditLog({
+      actor: user,
+      action: "SUPPLIER_APPROVED",
+      targetType: "SupplierApplication",
+      targetId: app.id,
+      summary: `Approved application from ${app.companyName} (${app.email}) as ${role}`,
+      metadata: { category: app.category, role, userId: account.id },
     });
     sendApplicationStatus({
       to: app.email,
