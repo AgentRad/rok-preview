@@ -115,6 +115,8 @@ export async function POST(req: Request) {
       context,
       body: text,
       threadUrl,
+      ...(orderId && { orderId }),
+      ...(quoteId && { quoteId }),
     }).catch((err) => console.error("[email] thread-message failed:", err));
   }
 

@@ -6,6 +6,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductCard from "@/components/ProductCard";
 import CatalogSort from "@/components/CatalogSort";
+import PaginationBar from "@/components/PaginationBar";
 
 export const dynamic = "force-dynamic";
 
@@ -251,9 +252,8 @@ export default async function CatalogPage({
 
             <div className="results-bar">
               <span className="results-count">
-                <strong>{totalCount}</strong> part
+                Showing <strong>{(page - 1) * PAGE_SIZE + 1}</strong> to <strong>{Math.min(page * PAGE_SIZE, totalCount)}</strong> of <strong>{totalCount}</strong> part
                 {totalCount === 1 ? "" : "s"}
-                {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
               </span>
               <CatalogSort value={sort} />
             </div>
@@ -274,40 +274,14 @@ export default async function CatalogPage({
                   ))}
                 </div>
 
-                {totalPages > 1 && (
-                  <nav
-                    className="catalog-pager"
-                    aria-label="Catalog pagination"
-                  >
-                    {page > 1 ? (
-                      <Link
-                        className="btn btn-ghost btn-sm"
-                        href={hrefWith({ page: String(page - 1) })}
-                      >
-                        ← Previous
-                      </Link>
-                    ) : (
-                      <span className="btn btn-ghost btn-sm" style={{ opacity: 0.4 }}>
-                        ← Previous
-                      </span>
-                    )}
-                    <span className="muted-text" style={{ fontSize: 13 }}>
-                      Page {page} of {totalPages}
-                    </span>
-                    {page < totalPages ? (
-                      <Link
-                        className="btn btn-ghost btn-sm"
-                        href={hrefWith({ page: String(page + 1) })}
-                      >
-                        Next →
-                      </Link>
-                    ) : (
-                      <span className="btn btn-ghost btn-sm" style={{ opacity: 0.4 }}>
-                        Next →
-                      </span>
-                    )}
-                  </nav>
-                )}
+                <PaginationBar
+                  currentPage={page}
+                  totalPages={totalPages}
+                  totalCount={totalCount}
+                  pageSize={PAGE_SIZE}
+                  baseHref={(p) => hrefWith({ page: String(p) })}
+                  onPageChange={() => {}}
+                />
               </>
             )}
           </div>

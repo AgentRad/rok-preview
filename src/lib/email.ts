@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { siteUrl } from "./site-url";
 import { trackingLink } from "./tracking";
 import { formatCents } from "./money";
+import { buildReplyAddress, isInboundEmailConfigured } from "./inbound-email";
 
 type SendArgs = {
   to: string | string[];
@@ -303,23 +304,37 @@ export async function sendThreadMessage(args: {
   context: string; // human-readable line, e.g. "your order for 100 A breakers"
   body: string;
   threadUrl: string;
+  orderId?: string;
+  quoteId?: string;
 }): Promise<void> {
   const safeBody = args.body
     .split("\n")
     .map((line) => `<p style="margin:0 0 8px;">${line || "&nbsp;"}</p>`)
     .join("");
+
+  const replyTo = isInboundEmailConfigured()
+    ? buildReplyAddress(args.orderId ? "order" : "quote", args.orderId || args.quoteId || "")
+    : null;
+
+  const replyHint = isInboundEmailConfigured()
+    ? "<p style=\"font-size:12px;color:#6f6d64;margin-top:14px;\">Reply directly to this email or <a href=\"" +
+      args.threadUrl +
+      "\" style=\"color:var(--amber-deep);\">open the thread on PartsPort</a>.</p>"
+    : "<p style=\"font-size:12px;color:#6f6d64;margin-top:14px;\">Reply on PartsPort. Reply-by-email is not yet enabled.</p>";
+
   const html = wrap(
     "New message",
     `<p>${args.senderName} sent you a message about ${args.context}:</p>
      <div style="margin:14px 0;padding:14px 16px;background:#f3f2ef;border-left:3px solid #1a1916;">${safeBody}</div>
      <p style="margin-top:18px;">${btn(args.threadUrl, "Open thread")}</p>
-     <p style="font-size:12px;color:#6f6d64;margin-top:14px;">Reply on PartsPort. Reply-by-email is not yet enabled.</p>`,
+     ${replyHint}`,
     "Replies sent on PartsPort stay tied to this thread so admin support can step in if needed."
   );
   await send({
     to: args.to,
     subject: `[${args.subjectPrefix}] Message from ${args.senderName}`,
     html,
+    replyTo,
   });
 }
 

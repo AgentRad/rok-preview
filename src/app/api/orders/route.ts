@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
 import { effectiveBps, feeFor } from "@/lib/money";
 import { sendOrderConfirmation } from "@/lib/email";
+import { isStripeTaxConfigured } from "@/lib/stripe-tax";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
