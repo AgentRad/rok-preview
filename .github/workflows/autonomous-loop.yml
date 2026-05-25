@@ -1,0 +1,92 @@
+name: Autonomous fix loop
+
+# When this runs:
+#  - Manually via the Actions tab (the "Run workflow" button) — use this when
+#    you want to kick off a round on demand.
+#  - On a schedule every 6 hours — set workflow_dispatch only if you want to
+#    disable this and run manually. The cron line below is the schedule.
+#
+# What it does:
+#  1. Checks out the repo on the working branch.
+#  2. Spawns Claude Code (Sonnet 4.6) as a subprocess.
+#  3. Claude Code reads HABITS.md, docs/TEAM_TESTING.md, docs/ORCHESTRATOR.md
+#     and the master prompt, then runs ONE complete fix round:
+#       test the live deploy → triage findings → apply fixes → commit + push
+#  4. The build runs again on Vercel automatically (because of the push).
+#  5. The next trigger picks up from the new state.
+#
+# Safety caps (enforced by Claude Code + by this workflow):
+#  - Per-run wall clock: 30 minutes max (job timeout below).
+#  - Per-run turn limit: 200 tool calls max (passed via --max-turns).
+#  - If the script crashes, it exits non-zero and the run shows red. No data loss.
+#  - Cost is visible in Anthropic dashboard (https://console.anthropic.com/usage).
+#
+# Required GitHub Secret:
+#  - ANTHROPIC_API_KEY — get from https://console.anthropic.com/settings/keys
+#    Add it at Settings → Secrets and variables → Actions → New repository secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'What this round should do'
+        required: true
+        default: 'verify-then-fix'
+        type: choice
+        options:
+          - verify-then-fix
+          - test-only
+          - fix-only
+
+  # Disabled by default. Uncomment the schedule block once you've validated
+  # that manual runs do what you expect.
+  # schedule:
+  #   - cron: '0 */6 * * *'  # every 6 hours
+
+permissions:
+  contents: write       # commit + push fixes
+  pull-requests: write  # post PR comments with reports
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: claude/industrial-marketplace-ROwAU
+          fetch-depth: 0
+          # Use a PAT or the default GITHUB_TOKEN with write perms above
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install repo deps (for running build + Playwright)
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+
+      - name: Configure git for autonomous commits
+        run: |
+          git config user.name "PartsPort Autonomous Loop"
+          git config user.email "autoloop@partsport.local"
+
+      - name: Run autonomous round
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MODE: ${{ inputs.mode || 'verify-then-fix' }}
+          DEPLOY_URL: 'https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app'
+        run: |
+          claude \
+            --model claude-sonnet-4-6 \
+            --max-turns 200 \
+            --permission-mode acceptEdits \
+            --print "$(cat scripts/auto/master-prompt.md)"
