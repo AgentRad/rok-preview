@@ -91,3 +91,42 @@ You CAN (in this environment):
 ## Decision-making default
 
 When in doubt: ship the small thing now, leave a note for the bigger thing later. I'd rather have 80% live this week than 100% live in a month.
+
+## Engineering patterns the testing team has caught (don't repeat them)
+
+These are real bugs found by walking flows end-to-end. The build chats keep producing them. Read this list before shipping anything new.
+
+**Vercel serverless kills your function after the response returns.**
+Fire-and-forget side effects (`emailFn().catch(...)`) will silently fail to run when the response is sent first. Symptoms: emails that didn't fire, DB rows that don't exist a few seconds after the POST claimed 200. Fix: `await` the side effect before responding, or use `waitUntil()` from `next/server` to keep it async but guaranteed to complete.
+
+**Helpers that mutate state must be idempotent or explicitly reject duplicates.**
+A button that posts to an endpoint can be double-clicked. A user with an open tab can refresh. A webhook can fire twice. If your helper writes a row and sends an email, the same POST twice should not produce two emails. Always short-circuit at the top: "if this work is already done, return the existing result, don't redo it."
+
+**Seed gates with `count === 0` are fragile.**
+If you skip seeding a demo row because the user already has any rows, you can't ever top up specific states. Use per-state independent checks: "does Jordan have any Shipped order? if no, create one." Idempotent top-up beats all-or-nothing seeding.
+
+**Don't silently succeed with bad data.**
+If a user gives you input that doesn't match anything in the system (e.g. an OEM types a brand name that doesn't exist), don't return 200 and create an empty record. Either reject with a clear error or return `{ ok: true, warning: "..." }` and surface the warning in the UI. Silent success creates phantom states that look fine in the DB but break the user flow.
+
+**Result-count floors need a global fallback tier.**
+If you promise "always return at least 5 results", category-only padding will silently violate it when a category is small. Add a final tier that searches the whole catalog by fuzzy match, even if relevance is weak. Log a warning when the floor isn't met so future regressions surface.
+
+**Shared logic helpers > duplicated endpoint code.**
+When two endpoints do the same thing (e.g. supplier-ships and admin-ships both transition an order to Shipped), extract one helper and route both through it. Same validation, same side effects, same edge cases. Bug fixed once = bug fixed everywhere.
+
+**When you report a fix as done, also state what side effects you verified.**
+"Pushed commit X" is not done. "Pushed commit X, then POSTed the endpoint, confirmed the DB row was written, confirmed the email was sent via the Resend dashboard" is done. List the side effects. If you didn't verify a side effect, say so explicitly.
+
+**The buyer's UI is the source of truth, not the API response.**
+After a state change, reload the page the buyer actually sees. If the timeline doesn't update, the tracking card doesn't appear, or the status badge stays stale — your fix is incomplete even if the API claims 200.
+
+## How I run the build → test → fix loop
+
+I work with two kinds of chats besides this one:
+
+1. **Build chat** — long-lived, deep in the codebase, ships features and fixes. One per project. Lives until it gets context-bloated, then I open a new one.
+2. **Test chats** — one-shot, fresh each round. Read the docs, run the 5-POV matrix, report findings, get deleted.
+
+The orchestrator chat (the one running this brief) coordinates between them. Punch lists go from orchestrator → build chat. Verify prompts go from orchestrator → test chat. Findings come back from test chat → orchestrator → build chat as the next punch list.
+
+**Stop criteria for the loop:** when the test chat reports zero functional fails and only cosmetic/UX polish items, the platform is launch-ready. Ship it. Address remaining polish post-launch.

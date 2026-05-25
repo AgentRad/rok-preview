@@ -123,3 +123,35 @@ Custom flows can be added too. To add a sixth tester (e.g. "QA tester who tries 
 - **Reproducible** — every tester has the same brief in this file, no drift between runs
 - **Honest** — agents drive real browsers, so they see what a real user sees
 - **Cheap to evolve** — change one bullet here, change the test
+
+## Mandatory test patterns (learned the hard way)
+
+These checks must run every round. Each one caught a real bug that previous rounds missed.
+
+**Idempotency check.** For every state-changing endpoint, POST it twice in a row. Verify the second call does not produce a second side effect (no duplicate emails, no duplicate DB rows, no duplicate notifications). If the API accepts the second call, that's a bug — fire it as a finding.
+
+**Tail side-effect verification.** After any POST that triggers async work (emails, payouts, third-party API calls), wait 5 seconds, then independently verify the side effect actually happened. Read the DB row, check the Resend log, hit the endpoint that lists payouts. "200 returned" is not proof the work completed on Vercel serverless.
+
+**Floor verification.** If the system promises a minimum (e.g. "search always returns at least 5 results"), test it at the boundary. Try queries that target small categories. Try queries that don't match anything at all. The promise must hold or the system must explicitly say "no results" — silent under-delivery is a bug.
+
+**Silent-success check.** When a user submits data that doesn't match anything (a brand name that doesn't exist, an SKU that's been deleted, an address ID that's not theirs), the system must either reject with a clear error or surface a warning. Returning 200 with a phantom record is a bug. Test this for every user-input flow.
+
+**End-to-end flow verification, not spot checks.** Walk the full flow for each POV from beginning to end. Don't just verify one fix — verify the fix didn't break the steps before or after it. Buyer flow goes register → login → search → product → cart → checkout → pay → order detail → message thread → tracking → invoice → reorder → review. All of it, every round.
+
+**UI sees the truth.** After any state change, reload the page the user actually sees. A fix that updates the database but doesn't update the timeline / tracking card / status badge is incomplete. Verify the UI reflects the new state on first load, not after a refresh.
+
+## How findings should be reported
+
+Every finding needs three things or it's not actionable:
+
+1. **What broke** — concrete, specific, in user terms. Not "search is bad", but "query 'meter' returns 4 results when floor is 5".
+2. **Where it broke** — file path and line number when possible, or the endpoint and payload that triggered it.
+3. **Why it broke** — root cause when you can identify it, not just the symptom.
+
+The orchestrator chat triages by severity:
+- **Critical** — a flow can't be completed (user can't buy, supplier can't ship, admin can't approve). Fix today.
+- **High** — a flow is degraded (silent data corruption, missing notifications, broken auth on a sub-route). Fix this sprint.
+- **Medium** — a polish item that affects the user experience but doesn't block a flow.
+- **Low / cosmetic** — visual nits, copy issues, accessibility refinements. Address post-launch.
+
+If a finding doesn't have a clear severity, default it to High — the build chat can downgrade if they disagree.
