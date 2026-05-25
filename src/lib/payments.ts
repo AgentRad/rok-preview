@@ -61,6 +61,47 @@ export type WebhookEvent =
       taxCents?: number;
       /** Total amount captured (subtotal + tax + shipping), in cents. */
       amountTotalCents?: number;
+      /** Stripe PaymentIntent id; needed later for the refund flow. */
+      paymentIntentId?: string | null;
+    }
+  | {
+      // Stripe Connect: account capability change. Fires on capability
+      // grant/revoke, identity verification updates, payouts enable, etc.
+      type: "account.updated";
+      accountId: string;
+      chargesEnabled: boolean;
+      payoutsEnabled: boolean;
+      detailsSubmitted: boolean;
+    }
+  | {
+      // Connected transfer landed in the destination account's pending
+      // balance. Promotes our Payout to PAID.
+      type: "transfer.paid";
+      transferId: string;
+      destinationAccountId: string | null;
+      amountCents: number;
+      orderId: string | null;
+      payoutReference: string | null;
+    }
+  | {
+      type: "transfer.failed";
+      transferId: string;
+      destinationAccountId: string | null;
+      amountCents: number;
+      orderId: string | null;
+      payoutReference: string | null;
+      failureMessage: string;
+    }
+  | {
+      // Charge refund webhook fires after refunds.create or a dashboard
+      // refund. We mostly act inline in the refund route, but ingest the
+      // event so the audit trail is complete and out-of-band dashboard
+      // refunds still flow through.
+      type: "charge.refunded";
+      paymentIntentId: string | null;
+      chargeId: string;
+      amountRefundedCents: number;
+      reason: string | null;
     }
   | { type: "ignored" };
 
@@ -161,6 +202,10 @@ const stripeProvider: PaymentProvider = {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
       const tax = session.total_details?.amount_tax ?? 0;
+      const pi =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id ?? null;
       return {
         type: "session.completed",
         sessionId: session.id,
@@ -170,6 +215,74 @@ const stripeProvider: PaymentProvider = {
           null,
         taxCents: tax,
         amountTotalCents: session.amount_total ?? 0,
+        paymentIntentId: pi,
+      };
+    }
+    if (event.type === "account.updated") {
+      const account = event.data.object as Stripe.Account;
+      return {
+        type: "account.updated",
+        accountId: account.id,
+        chargesEnabled: !!account.charges_enabled,
+        payoutsEnabled: !!account.payouts_enabled,
+        detailsSubmitted: !!account.details_submitted,
+      };
+    }
+    // Stripe's transfer lifecycle on Connect:
+    //   transfer.created  -> fires immediately after transfers.create.
+    //   transfer.reversed -> bank or compliance rejection; funds clawed back.
+    // We collapse the "happy" path (transfer.created + transfer.updated) into
+    // our internal "transfer.paid" because for Express destination accounts
+    // the funds are in the connected balance the moment Stripe accepts the
+    // call. Final payout to the bank is the connected account's own
+    // payout.paid event - we don't subscribe to it because Stripe handles
+    // bank transit on the connected side.
+    if (event.type === "transfer.created" || event.type === "transfer.updated") {
+      const transfer = event.data.object as Stripe.Transfer;
+      return {
+        type: "transfer.paid",
+        transferId: transfer.id,
+        destinationAccountId:
+          typeof transfer.destination === "string"
+            ? transfer.destination
+            : transfer.destination?.id ?? null,
+        amountCents: transfer.amount,
+        orderId:
+          (transfer.metadata?.partsportOrderId as string | undefined) || null,
+        payoutReference:
+          (transfer.metadata?.partsportPayoutRef as string | undefined) || null,
+      };
+    }
+    if (event.type === "transfer.reversed") {
+      const transfer = event.data.object as Stripe.Transfer;
+      return {
+        type: "transfer.failed",
+        transferId: transfer.id,
+        destinationAccountId:
+          typeof transfer.destination === "string"
+            ? transfer.destination
+            : transfer.destination?.id ?? null,
+        amountCents: transfer.amount,
+        orderId:
+          (transfer.metadata?.partsportOrderId as string | undefined) || null,
+        payoutReference:
+          (transfer.metadata?.partsportPayoutRef as string | undefined) || null,
+        failureMessage: "Transfer reversed by Stripe.",
+      };
+    }
+    if (event.type === "charge.refunded") {
+      const charge = event.data.object as Stripe.Charge;
+      const pi =
+        typeof charge.payment_intent === "string"
+          ? charge.payment_intent
+          : charge.payment_intent?.id ?? null;
+      return {
+        type: "charge.refunded",
+        paymentIntentId: pi,
+        chargeId: charge.id,
+        amountRefundedCents: charge.amount_refunded ?? 0,
+        reason:
+          charge.refunds?.data?.[0]?.reason ?? null,
       };
     }
     return { type: "ignored" };

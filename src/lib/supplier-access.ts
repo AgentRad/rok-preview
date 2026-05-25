@@ -193,7 +193,16 @@ export type ReadinessSupplier = {
   description: string;
   certifications: string;
   website: string;
+  // Polish 6 legacy gate. Kept on the type so the existing supplier
+  // dashboard call sites don't break; the gate logic prefers Stripe
+  // Connect when present (P8) and falls back to the in-house field
+  // when not.
   bankInfoStatus: string;
+  // Polish 8: Stripe Connect Express. When configured + active, this
+  // is what unlocks the "Bank info on file" checklist item, replacing
+  // the manual bankInfoStatus path.
+  stripePayoutsEnabled: boolean;
+  stripeAccountId: string | null;
 };
 
 export type ReadinessDoc = {
@@ -265,8 +274,13 @@ export function computeReadiness(
     },
     {
       key: "bank",
-      label: "Bank info on file",
-      done: supplier.bankInfoStatus === "ON_FILE",
+      // Connect-first label so the supplier knows where to look. Legacy
+      // bankInfoStatus is honored for accounts that completed manual
+      // verification before P8 landed.
+      label: "Stripe Connect active for payouts",
+      done:
+        (!!supplier.stripeAccountId && supplier.stripePayoutsEnabled) ||
+        supplier.bankInfoStatus === "ON_FILE",
     },
     {
       key: "product",

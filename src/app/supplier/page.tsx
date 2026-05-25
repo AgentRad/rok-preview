@@ -22,8 +22,10 @@ import SupplierTeam from "@/components/SupplierTeam";
 import SupplierLogoUploader from "@/components/SupplierLogoUploader";
 import SupplierDocuments from "@/components/SupplierDocuments";
 import SupplierBankInfo from "@/components/SupplierBankInfo";
+import SupplierStripeConnect from "@/components/SupplierStripeConnect";
 import GoLiveGauge from "@/components/GoLiveGauge";
 import { isBlobConfigured } from "@/lib/blob-config";
+import { snapshotConnect } from "@/lib/stripe-connect";
 import FulfillButton from "@/components/FulfillButton";
 import QuoteResponder from "@/components/QuoteResponder";
 import ActingAsBanner from "@/components/ActingAsBanner";
@@ -40,7 +42,14 @@ const STATUS_CLASS: Record<string, string> = {
   QUOTED: "badge-paid",
 };
 
-export default async function SupplierDashboard() {
+export default async function SupplierDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ stripeOnboard?: string }>;
+}) {
+  const sp = await searchParams;
+  const stripeOnboardSuccess = sp.stripeOnboard === "done";
+  const stripeOnboardRefresh = sp.stripeOnboard === "refresh";
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== "SUPPLIER" && user.role !== "ADMIN") redirect("/");
@@ -118,10 +127,13 @@ export default async function SupplierDashboard() {
       certifications: supplier.certifications,
       website: supplier.website,
       bankInfoStatus: supplier.bankInfoStatus,
+      stripePayoutsEnabled: supplier.stripePayoutsEnabled,
+      stripeAccountId: supplier.stripeAccountId,
     },
     documents.map((d) => ({ kind: d.kind, status: d.status })),
     supplier.products.length
   );
+  const connectSnap = snapshotConnect(supplier);
 
   const payoutsDue = payouts
     .filter((p) => p.status === "DUE")
@@ -235,18 +247,51 @@ export default async function SupplierDashboard() {
               <h2>Payout method</h2>
             </div>
             <div className="card-body">
-              <SupplierBankInfo
+              <SupplierStripeConnect
                 initial={{
-                  bankInfoStatus: supplier.bankInfoStatus,
-                  bankInfoLast4: supplier.bankInfoLast4,
-                  bankInfoType: supplier.bankInfoType,
-                  bankInfoBankName: supplier.bankInfoBankName,
-                  bankInfoNote: supplier.bankInfoNote,
-                  bankInfoUpdatedAt: supplier.bankInfoUpdatedAt
-                    ? supplier.bankInfoUpdatedAt.toISOString()
-                    : null,
+                  configured: connectSnap.configured,
+                  accountId: connectSnap.accountId,
+                  chargesEnabled: connectSnap.chargesEnabled,
+                  payoutsEnabled: connectSnap.payoutsEnabled,
+                  active: connectSnap.active,
+                  pending: connectSnap.pending,
                 }}
+                successFlag={stripeOnboardSuccess}
+                refreshFlag={stripeOnboardRefresh}
               />
+              {/* Legacy P6 in-house bank summary stays for accounts that
+                  completed manual ACH verification before Stripe Connect
+                  landed. New suppliers use the Connect flow above. */}
+              {supplier.bankInfoStatus === "ON_FILE" && !connectSnap.active && (
+                <details
+                  style={{
+                    marginTop: 18,
+                    paddingTop: 14,
+                    borderTop: "1px solid var(--line)",
+                  }}
+                >
+                  <summary
+                    className="muted-text"
+                    style={{ fontSize: 12.5, cursor: "pointer" }}
+                  >
+                    Legacy bank info (pre-Stripe Connect)
+                  </summary>
+                  <div style={{ marginTop: 12 }}>
+                    <SupplierBankInfo
+                      initial={{
+                        bankInfoStatus: supplier.bankInfoStatus,
+                        bankInfoLast4: supplier.bankInfoLast4,
+                        bankInfoType: supplier.bankInfoType,
+                        bankInfoBankName: supplier.bankInfoBankName,
+                        bankInfoNote: supplier.bankInfoNote,
+                        bankInfoUpdatedAt: supplier.bankInfoUpdatedAt
+                          ? supplier.bankInfoUpdatedAt.toISOString()
+                          : null,
+                      }}
+                    />
+                  </div>
+                </details>
+              )}
             </div>
           </div>
 

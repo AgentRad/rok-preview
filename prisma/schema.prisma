@@ -32,6 +32,7 @@ enum OrderStatus {
   PAID
   FULFILLED
   CANCELLED
+  REFUNDED
 }
 
 enum QuoteStatus {
@@ -56,7 +57,9 @@ enum ReturnStatus {
 
 enum PayoutStatus {
   DUE
+  PROCESSING
   PAID
+  FAILED
 }
 
 enum SupplierMemberRole {
@@ -220,15 +223,28 @@ model Supplier {
   // 10-item onboarding checklist passes: legal docs approved, bank info
   // on file, at least one product). See lib/supplier-access.ts.
   publicVisible     Boolean            @default(false)
-  // Payout method summary. PartsPort does NOT store full account or routing
-  // numbers; suppliers send those via secure channel and admin flips the
-  // status to ON_FILE once received.
+  // LEGACY payout method summary (Polish 6). Superseded by Stripe Connect
+  // in P8. Kept on existing rows for audit history but the supplier UI
+  // surfaces the stripeConnect* fields below as the source of truth.
   bankInfoStatus    String             @default("MISSING") // MISSING | PENDING | ON_FILE | REJECTED
   bankInfoLast4     String?
   bankInfoType      String? // CHECKING | SAVINGS
   bankInfoBankName  String?
   bankInfoNote      String             @default("")
   bankInfoUpdatedAt DateTime?
+  // Stripe Connect Express. Supplier onboards via Stripe-hosted flow; the
+  // PartsPort UI just renders an "Active / Pending / Disabled" status.
+  // PartsPort never touches the account or routing numbers.
+  stripeAccountId              String?   @unique
+  stripeChargesEnabled         Boolean   @default(false)
+  stripePayoutsEnabled         Boolean   @default(false)
+  stripeOnboardingCompletedAt  DateTime?
+  // Reserve / chargeback holdback. Each Payout subtracts this percent of
+  // the supplier subtotal before transferring; held funds accumulate in
+  // reserveBalanceCents and release after 60 days via cron (P8 S6) when
+  // no chargeback or refund has hit the order.
+  reservePercent       Int     @default(500)   // basis points (500 = 5%)
+  reserveBalanceCents  Int     @default(0)
   user              User?              @relation(fields: [userId], references: [id])
   userId            String?            @unique
   products          Product[]
@@ -326,20 +342,77 @@ model ProductImage {
 }
 
 model Payout {
-  id          String       @id @default(cuid())
-  reference   String       @unique
-  supplier    Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  supplierId  String
-  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId     String
-  amountCents Int
-  status      PayoutStatus @default(DUE)
-  note        String       @default("")
-  createdAt   DateTime     @default(now())
-  paidAt      DateTime?
+  id              String       @id @default(cuid())
+  reference       String       @unique
+  supplier        Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId      String
+  order           Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId         String
+  // amountCents is what the supplier actually receives: subtotal share
+  // minus reserve. reservedCents records what was held back, mirrored
+  // onto Order.reservedCents for the buyer-facing order view.
+  amountCents     Int
+  reservedCents   Int          @default(0)
+  status          PayoutStatus @default(DUE)
+  // Stripe transfer id for the supplier portion. Null on legacy manual
+  // payouts (pre-P8) and on payouts where Connect onboarding wasn't done.
+  stripeTransferId String?     @unique
+  // Number of retry attempts the payout-retry cron has burned; gives the
+  // cron an exponential backoff and a stopping point.
+  retryAttempts   Int          @default(0)
+  lastRetryAt     DateTime?
+  failureReason   String       @default("")
+  note            String       @default("")
+  createdAt       DateTime     @default(now())
+  paidAt          DateTime?
 
   @@unique([supplierId, orderId])
   @@index([status])
+}
+
+/**
+ * Audit trail for reserve holdback. Type values:
+ *   HOLD       - amount held when a payout was created
+ *   RELEASE    - amount released back to the supplier after the 60-day
+ *                quiet window or admin manual release
+ *   DRAW_DOWN  - amount pulled from the reserve to cover a refund or
+ *                chargeback
+ *
+ * The running supplier balance is in Supplier.reserveBalanceCents; this
+ * table is the per-transaction history.
+ */
+model SupplierReserveTransaction {
+  id          String   @id @default(cuid())
+  supplierId  String
+  type        String   // HOLD | RELEASE | DRAW_DOWN
+  amountCents Int
+  orderId     String?
+  reason      String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([supplierId])
+  @@index([orderId])
+}
+
+/**
+ * Stripe refund records. One row per refund (a single order can have
+ * multiple partial refunds). amountCents is positive; the running total
+ * is mirrored onto Order.refundedCents for fast access on the order view.
+ */
+model Refund {
+  id              String   @id @default(cuid())
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId         String
+  stripeRefundId  String?  @unique
+  amountCents     Int
+  reason          String   @default("")
+  returnRequestId String?
+  refundedBy      String?  // User.id of the admin who triggered it
+  status          String   @default("succeeded") // succeeded | pending | failed
+  createdAt       DateTime @default(now())
+
+  @@index([orderId])
+  @@index([returnRequestId])
 }
 
 model ReturnRequest {
@@ -381,6 +454,14 @@ model Order {
   feeRateBps          Int             @default(600)
   paymentMethod       String          @default("paypal")
   paypalOrderId       String?
+  // Stripe payment_intent id captured from the checkout session webhook.
+  // Required for the Stripe refund flow (P8 S4).
+  stripePaymentIntentId String?
+  // Running totals updated transactionally:
+  //   refundedCents: sum of Refund rows; flips Order to REFUNDED at full.
+  //   reservedCents: mirror of sum(Payout.reservedCents) for this order.
+  refundedCents       Int             @default(0)
+  reservedCents       Int             @default(0)
   shipmentStage       String          @default("")
   carrier             String?
   trackingCode        String?
@@ -388,6 +469,7 @@ model Order {
   invoice             Invoice?
   returns             ReturnRequest[]
   payouts             Payout[]
+  refunds             Refund[]
   messages            Message[]
   reviews             Review[]
   createdAt           DateTime        @default(now())
@@ -480,6 +562,22 @@ model AuditLog {
   @@index([actorId])
   @@index([targetType, targetId])
   @@index([createdAt])
+}
+
+/**
+ * Per-US-state tax registration tracker. Stripe Tax computes liability
+ * automatically; this table records where PartsPort has actually
+ * registered to remit. Used by /admin/tax-registrations.
+ */
+model TaxRegistration {
+  id                 String    @id @default(cuid())
+  state              String    @unique  // "TX" | "CA" | etc.
+  registrationStatus String    // NOT_REQUIRED | REQUIRED | REGISTERED | FILING
+  registeredAt       DateTime?
+  nextFilingDue      DateTime?
+  notes              String    @default("")
+  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime  @default(now())
 }
 
 model SupplierApplication {
