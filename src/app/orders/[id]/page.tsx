@@ -231,11 +231,27 @@ export default async function OrderPage({
                 <div className="muted-text" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 600 }}>
                   Billed to
                 </div>
-                <div style={{ marginTop: 4, fontWeight: 600 }}>
-                  {order.buyerName}
-                </div>
-                <div className="muted-text" style={{ fontSize: 13 }}>
-                  {order.buyerEmail}
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 4 }}>
+                  {order.buyerCompanyLogoUrl && (
+                    <span className="invoice-buyer-logo" aria-hidden="true">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={order.buyerCompanyLogoUrl}
+                        alt={`${order.buyerCompanyName ?? "Buyer"} logo`}
+                      />
+                    </span>
+                  )}
+                  <div>
+                    {order.buyerCompanyName && (
+                      <div style={{ fontWeight: 700 }}>
+                        {order.buyerCompanyName}
+                      </div>
+                    )}
+                    <div style={{ fontWeight: 600 }}>{order.buyerName}</div>
+                    <div className="muted-text" style={{ fontSize: 13 }}>
+                      {order.buyerEmail}
+                    </div>
+                  </div>
                 </div>
               </div>
               <div>

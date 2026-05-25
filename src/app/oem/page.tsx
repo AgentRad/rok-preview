@@ -7,6 +7,7 @@ import OemProfileEditor from "@/components/OemProfileEditor";
 import { getManufacturerAttention } from "@/lib/attention";
 import { manufacturerSlug } from "@/lib/manufacturer-slug";
 import { isBlobConfigured } from "@/lib/blob-config";
+import { recomputeBrandMismatch } from "@/lib/brand-status";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -137,6 +138,19 @@ export default async function OemDashboard() {
             emptyBody="Buyer searches mentioning your brand will surface here as soon as they hit the platform."
             emptyAction={{ label: "View demand details", href: "/oem#demand" }}
           />
+
+          {await (async () => {
+            const warn = await recomputeBrandMismatch({
+              role: user.role,
+              manufacturerName: user.manufacturerName,
+            });
+            if (!warn) return null;
+            return (
+              <div className="alert alert-info" style={{ marginTop: 18 }}>
+                <strong>Heads up.</strong> {warn.message}
+              </div>
+            );
+          })()}
 
           <div className="card" id="storefront">
             <div className="card-head">

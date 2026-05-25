@@ -39,7 +39,12 @@ type LookupProduct = {
 };
 
 type Props = {
-  user: { name: string; email: string } | null;
+  user: {
+    name: string;
+    email: string;
+    companyName?: string | null;
+    companyLogoUrl?: string | null;
+  } | null;
   paypalClientId: string;
   paymentsConfigured: boolean;
 };
@@ -225,6 +230,43 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   const summary = (
     <div className="card">
       <div className="card-body">
+        {user?.companyName || user?.companyLogoUrl ? (
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              marginBottom: 12,
+              paddingBottom: 12,
+              borderBottom: "1px solid var(--line)",
+            }}
+          >
+            {user.companyLogoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.companyLogoUrl}
+                alt={`${user.companyName ?? "Company"} logo`}
+                style={{
+                  width: 44,
+                  height: 44,
+                  objectFit: "contain",
+                  border: "1px solid var(--line)",
+                  borderRadius: 4,
+                  padding: 4,
+                  background: "var(--surface)",
+                }}
+              />
+            )}
+            <div>
+              <div style={{ fontSize: 11, color: "var(--steel)", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 600 }}>
+                Billed to
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 13.5 }}>
+                {user.companyName ?? user.name}
+              </div>
+            </div>
+          </div>
+        ) : null}
         <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
           Order summary
         </h2>

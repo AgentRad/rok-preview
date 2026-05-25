@@ -213,7 +213,7 @@ export async function reconcileOrderFromStripe(
     // we filter client-side.
   });
   const matching = sessions.data.filter(
-    (sess) =>
+    (sess: Stripe.Checkout.Session) =>
       sess.client_reference_id === orderId ||
       (sess.metadata?.orderId as string | undefined) === orderId
   );

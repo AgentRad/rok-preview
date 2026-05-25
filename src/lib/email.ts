@@ -93,6 +93,8 @@ type OrderLite = {
   reference: string;
   buyerName: string;
   buyerEmail: string;
+  buyerCompanyName?: string | null;
+  buyerCompanyLogoUrl?: string | null;
   totalCents: number;
   subtotalCents: number;
   freightCents: number;
@@ -104,6 +106,22 @@ type OrderLite = {
   trackingCode?: string | null;
   items: { nameSnapshot: string; skuSnapshot: string; qty: number; supplierName: string }[];
 };
+
+/**
+ * Render the buyer's company logo + name above the order summary block in
+ * emails when the order has one snapshotted. Inline-styled so it survives
+ * email-client CSS stripping. Renders nothing when missing.
+ */
+function buyerBranding(order: OrderLite): string {
+  if (!order.buyerCompanyName && !order.buyerCompanyLogoUrl) return "";
+  const logo = order.buyerCompanyLogoUrl
+    ? `<img src="${order.buyerCompanyLogoUrl}" alt="" width="56" height="56" style="border:1px solid #e2e0d9;border-radius:4px;padding:4px;background:#fff;object-fit:contain;vertical-align:middle;margin-right:10px;" />`
+    : "";
+  const name = order.buyerCompanyName
+    ? `<span style="font-weight:600;font-size:14px;color:#1a1916;">${order.buyerCompanyName}</span>`
+    : "";
+  return `<div style="margin:14px 0 6px;display:flex;align-items:center;">${logo}${name}</div>`;
+}
 
 function feeLabel(bps: number): string {
   return `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`;
@@ -134,6 +152,7 @@ export async function sendOrderConfirmation(order: OrderLite): Promise<void> {
   const body = `
     <p>Hi ${order.buyerName},</p>
     <p>We have received your order <strong>${order.reference}</strong>. Payment is the next step. Once received, the supplier will begin preparing your parts.</p>
+    ${buyerBranding(order)}
     <table cellpadding="0" cellspacing="0" width="100%" style="margin:12px 0;">${lineRows(order)}</table>
     ${totals(order)}
     <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
@@ -150,6 +169,7 @@ export async function sendPaymentReceived(order: OrderLite): Promise<void> {
   const body = `
     <p>Hi ${order.buyerName},</p>
     <p>Thank you. Payment for order <strong>${order.reference}</strong> has been received and the supplier has been notified. We will keep you posted as it moves through fulfillment.</p>
+    ${buyerBranding(order)}
     ${totals(order)}
     <p style="margin-top:22px;">${btn(url, "Track order")} &nbsp; <a href="${invoiceUrl}" style="color:#1a1916;font-weight:600;text-decoration:underline;">View invoice</a></p>`;
   await send({
@@ -173,6 +193,7 @@ export async function sendOrderShipped(order: OrderLite): Promise<void> {
   const body = `
     <p>Hi ${order.buyerName},</p>
     <p>Your order <strong>${order.reference}</strong> has shipped.</p>
+    ${buyerBranding(order)}
     ${trackBlock}
     <p>For LTL freight, please inspect the shipment on arrival and note any damage on the carrier delivery receipt before signing.</p>
     <p style="margin-top:22px;">${btn(url, "View order")}</p>`;

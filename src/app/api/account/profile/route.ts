@@ -14,12 +14,16 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   }
   const body = await req.json().catch(() => ({}));
-  const name =
-    typeof body.name === "string" && body.name.trim()
-      ? body.name.trim()
-      : null;
-  if (!name) {
-    return NextResponse.json({ error: "Name is required." }, { status: 400 });
+  // Name is optional in this PATCH: if the caller doesn't include it, we
+  // leave it alone. If they include it as an empty string, that's a
+  // validation error. Lets the CompanyProfileForm update just the company
+  // fields without re-sending the user's name.
+  let name: string | undefined = undefined;
+  if (body.name !== undefined) {
+    if (typeof body.name !== "string" || !body.name.trim()) {
+      return NextResponse.json({ error: "Name cannot be empty." }, { status: 400 });
+    }
+    name = body.name.trim();
   }
 
   // Canonicalize the OEM brand name and suggest a canonical Product.manufacturer
@@ -58,6 +62,25 @@ export async function PATCH(req: Request) {
     }
   }
 
+  // Buyer (and any role) company profile. Optional; missing leaves the
+  // current value alone. companyLogoUrl can be cleared by passing "".
+  const data: Record<string, unknown> = {};
+  if (name !== undefined) data.name = name;
+  if (typeof body.companyName === "string") {
+    const trimmed = body.companyName.trim();
+    data.companyName = trimmed === "" ? null : trimmed.slice(0, 200);
+  }
+  if (typeof body.companyLogoUrl === "string") {
+    const url = body.companyLogoUrl.trim();
+    if (url && !/^https?:\/\//i.test(url)) {
+      return NextResponse.json(
+        { error: "Logo URL must start with https:// or http://." },
+        { status: 400 }
+      );
+    }
+    data.companyLogoUrl = url === "" ? null : url;
+  }
+
   if (user.role === "MANUFACTURER" && manufacturerName !== undefined) {
     // Check uniqueness: another MANUFACTURER user can't already hold this brand.
     if (manufacturerName !== null) {
@@ -82,7 +105,7 @@ export async function PATCH(req: Request) {
   await prisma.user.update({
     where: { id: user.id },
     data: {
-      name,
+      ...data,
       ...(user.role === "MANUFACTURER" && manufacturerName !== undefined
         ? { manufacturerName }
         : {}),

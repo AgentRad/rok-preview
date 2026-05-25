@@ -80,6 +80,11 @@ model User {
   manufacturerBio     String   @default("")
   manufacturerLogoUrl String?
   manufacturerWebsite String   @default("")
+  // Buyer company profile (B2B). Shown on checkout, order detail, invoice,
+  // and in the shipped/paid emails when set. Optional; guest checkout
+  // doesn't get this.
+  companyName         String?
+  companyLogoUrl      String?
   totpSecret          String?
   totpEnabledAt       DateTime?
   totpBackupCodes     Json?
@@ -289,6 +294,11 @@ model Order {
   buyerId       String?
   buyerEmail    String
   buyerName     String
+  // Snapshotted from User.companyName / User.companyLogoUrl at order
+  // creation time so later profile edits never retroactively rewrite a
+  // past invoice's branding.
+  buyerCompanyName String?
+  buyerCompanyLogoUrl String?
   shipTo        String
   subtotalCents Int
   freightCents  Int         @default(0)

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { recomputeBrandMismatch } from "@/lib/brand-status";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import AdminHeader from "@/components/AdminHeader";
@@ -7,6 +8,8 @@ import ChangePasswordForm from "@/components/ChangePasswordForm";
 import TwoFactorSetup from "@/components/TwoFactorSetup";
 import ProfileForm from "@/components/ProfileForm";
 import AddressBook from "@/components/AddressBook";
+import CompanyProfileForm from "@/components/CompanyProfileForm";
+import { isBlobConfigured } from "@/lib/blob-config";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +46,18 @@ export default async function SettingsPage() {
               <h2>Profile</h2>
             </div>
             <div className="card-body">
+              {await (async () => {
+                const warn = await recomputeBrandMismatch({
+                  role: user.role,
+                  manufacturerName: user.manufacturerName,
+                });
+                if (!warn) return null;
+                return (
+                  <div className="alert alert-info" style={{ marginBottom: 14 }}>
+                    <strong>Brand mismatch.</strong> {warn.message}
+                  </div>
+                );
+              })()}
               <ProfileForm
                 initialName={user.name}
                 email={user.email}
@@ -74,6 +89,21 @@ export default async function SettingsPage() {
               />
             </div>
           </div>
+
+          {isBuyer && (
+            <div className="card" style={{ marginTop: 24 }}>
+              <div className="card-head">
+                <h2>Company profile</h2>
+              </div>
+              <div className="card-body">
+                <CompanyProfileForm
+                  initialName={user.companyName ?? ""}
+                  initialLogoUrl={user.companyLogoUrl ?? null}
+                  blobConfigured={isBlobConfigured()}
+                />
+              </div>
+            </div>
+          )}
 
           {isBuyer && (
             <div className="card" style={{ marginTop: 24 }}>

@@ -129,11 +129,27 @@ export default async function OrderInvoicePage({
           <div className="grid-2 invoice-grid">
             <div>
               <div className="invoice-meta-label">Billed to</div>
-              <div style={{ marginTop: 4, fontWeight: 600 }}>
-                {invoice.buyerName}
-              </div>
-              <div className="muted-text" style={{ fontSize: 13 }}>
-                {invoice.buyerEmail}
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start", marginTop: 4 }}>
+                {order.buyerCompanyLogoUrl && (
+                  <span className="invoice-buyer-logo" aria-hidden="true">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={order.buyerCompanyLogoUrl}
+                      alt={`${order.buyerCompanyName ?? "Buyer"} logo`}
+                    />
+                  </span>
+                )}
+                <div>
+                  {order.buyerCompanyName && (
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>
+                      {order.buyerCompanyName}
+                    </div>
+                  )}
+                  <div style={{ fontWeight: 600 }}>{invoice.buyerName}</div>
+                  <div className="muted-text" style={{ fontSize: 13 }}>
+                    {invoice.buyerEmail}
+                  </div>
+                </div>
               </div>
             </div>
             <div>

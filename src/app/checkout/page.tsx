@@ -24,7 +24,16 @@ export default async function CheckoutPage() {
           </p>
           <div style={{ marginTop: 24 }}>
             <CheckoutClient
-              user={user ? { name: user.name, email: user.email } : null}
+              user={
+                user
+                  ? {
+                      name: user.name,
+                      email: user.email,
+                      companyName: user.companyName,
+                      companyLogoUrl: user.companyLogoUrl,
+                    }
+                  : null
+              }
               paypalClientId={process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || ""}
               paymentsConfigured={isPaymentsConfigured()}
             />

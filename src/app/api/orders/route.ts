@@ -96,6 +96,12 @@ export async function POST(req: Request) {
       buyerId: user?.id ?? null,
       buyerName,
       buyerEmail,
+      // Snapshot the buyer's company branding onto the Order so future
+      // profile edits don't retroactively rewrite this invoice. Guest
+      // checkout has no user, so these stay null and the invoice falls
+      // back to no-logo rendering.
+      buyerCompanyName: user?.companyName ?? null,
+      buyerCompanyLogoUrl: user?.companyLogoUrl ?? null,
       shipTo,
       subtotalCents: totals.subtotalCents,
       freightCents: totals.freightCents,
