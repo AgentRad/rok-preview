@@ -724,6 +724,13 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 }
 .image-url-toggle { margin-top: 4px; }
 .logo-uploader { display: flex; gap: 18px; align-items: flex-start; }
+.logo-specs {
+  list-style: none; padding: 12px 14px; margin: 14px 0 0;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); font-size: 13px; line-height: 1.7;
+}
+.logo-specs li { color: var(--ink-soft); }
+.logo-specs strong { color: var(--ink); font-weight: 600; }
 .logo-preview {
   width: 96px; height: 96px; flex-shrink: 0;
   border: 1px solid var(--line); border-radius: var(--radius-sm);
