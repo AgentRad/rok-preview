@@ -107,6 +107,8 @@ export async function POST(req: Request) {
     },
   });
 
+  const threadKind = orderId ? "order" : "quote";
+  const threadId = orderId || quoteId;
   for (const to of recipients) {
     sendThreadMessage({
       to,
@@ -115,8 +117,8 @@ export async function POST(req: Request) {
       context,
       body: text,
       threadUrl,
-      ...(orderId && { orderId }),
-      ...(quoteId && { quoteId }),
+      threadKind,
+      threadId,
     }).catch((err) => console.error("[email] thread-message failed:", err));
   }
 

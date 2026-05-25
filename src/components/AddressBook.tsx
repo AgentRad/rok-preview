@@ -1,7 +1,115 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+
+function TaxExemptRow({ address }: { address: Address }) {
+  const router = useRouter();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const status = address.taxExemptStatus;
+  const url = address.taxExemptCertificateUrl;
+
+  async function upload(file: File) {
+    setBusy(true);
+    setError("");
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch(`/api/addresses/${address.id}/tax-exempt`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Upload failed.");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    if (!confirm("Remove the tax-exempt certificate from this address?")) return;
+    setBusy(true);
+    try {
+      await fetch(`/api/addresses/${address.id}/tax-exempt`, { method: "DELETE" });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const badge =
+    status === "APPROVED"
+      ? <span className="badge badge-fulfilled">Tax-exempt approved</span>
+      : status === "PENDING"
+        ? <span className="badge badge-pending">Tax-exempt under review</span>
+        : status === "REJECTED"
+          ? <span className="badge badge-cancelled">Tax-exempt rejected</span>
+          : null;
+
+  return (
+    <div style={{ marginTop: 10, fontSize: 12.5 }}>
+      {badge && <div style={{ marginBottom: 6 }}>{badge}</div>}
+      <input
+        ref={fileInput}
+        type="file"
+        accept="application/pdf,image/jpeg,image/png,image/webp"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) upload(f);
+          e.target.value = "";
+        }}
+      />
+      <div className="muted-text" style={{ fontSize: 12, lineHeight: 1.45 }}>
+        {url ? (
+          <>
+            <a href={url} target="_blank" rel="noreferrer" style={{ color: "var(--blue)" }}>
+              View certificate
+            </a>
+            {" · "}
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => fileInput.current?.click()}
+              disabled={busy}
+            >
+              Replace
+            </button>
+            {" · "}
+            <button
+              type="button"
+              className="link-btn link-btn-danger"
+              onClick={clear}
+              disabled={busy}
+            >
+              Remove
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => fileInput.current?.click()}
+            disabled={busy}
+          >
+            {busy ? "Uploading…" : "Upload tax-exempt certificate"}
+          </button>
+        )}
+      </div>
+      {error && (
+        <div className="alert alert-error" style={{ marginTop: 6 }}>
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export type Address = {
   id: string;
@@ -16,6 +124,8 @@ export type Address = {
   country: string;
   phone: string;
   isDefault: boolean;
+  taxExemptCertificateUrl?: string | null;
+  taxExemptStatus?: string | null;
 };
 
 type Draft = Omit<Address, "id" | "isDefault"> & { isDefault: boolean };
@@ -134,6 +244,7 @@ export default function AddressBook({ initial }: { initial: Address[] }) {
                 {a.country && a.country !== "US" ? <><br />{a.country}</> : null}
                 {a.phone ? <><br /><span className="muted-text">{a.phone}</span></> : null}
               </div>
+              <TaxExemptRow address={a} />
               <div className="address-actions">
                 {!a.isDefault && (
                   <button

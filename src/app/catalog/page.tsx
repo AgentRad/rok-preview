@@ -6,7 +6,6 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductCard from "@/components/ProductCard";
 import CatalogSort from "@/components/CatalogSort";
-import PaginationBar from "@/components/PaginationBar";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +27,21 @@ const ORDER: Record<string, Prisma.ProductOrderByWithRelationInput> = {
   rating: { supplier: { rating: "desc" } },
   featured: { createdAt: "asc" },
 };
+
+/** Compact page list: 1, 2, …, current-1, current, current+1, …, last */
+function pageWindow(current: number, total: number): (number | "…")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const out: (number | "…")[] = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) out.push("…");
+  for (let i = start; i <= end; i++) out.push(i);
+  if (end < total - 1) out.push("…");
+  out.push(total);
+  return out;
+}
 
 function sortInMemory(list: SearchProduct[], sort: string): SearchProduct[] {
   const l = [...list];
@@ -252,8 +266,18 @@ export default async function CatalogPage({
 
             <div className="results-bar">
               <span className="results-count">
-                Showing <strong>{(page - 1) * PAGE_SIZE + 1}</strong> to <strong>{Math.min(page * PAGE_SIZE, totalCount)}</strong> of <strong>{totalCount}</strong> part
-                {totalCount === 1 ? "" : "s"}
+                {totalCount === 0 ? (
+                  <>No parts match these filters</>
+                ) : (
+                  <>
+                    Showing <strong>{(page - 1) * PAGE_SIZE + 1}</strong> to{" "}
+                    <strong>
+                      {Math.min(page * PAGE_SIZE, totalCount)}
+                    </strong>{" "}
+                    of <strong>{totalCount}</strong> result
+                    {totalCount === 1 ? "" : "s"}
+                  </>
+                )}
               </span>
               <CatalogSort value={sort} />
             </div>
@@ -274,14 +298,66 @@ export default async function CatalogPage({
                   ))}
                 </div>
 
-                <PaginationBar
-                  currentPage={page}
-                  totalPages={totalPages}
-                  totalCount={totalCount}
-                  pageSize={PAGE_SIZE}
-                  baseHref={(p) => hrefWith({ page: String(p) })}
-                  onPageChange={() => {}}
-                />
+                {totalPages > 1 && (
+                  <nav
+                    className="catalog-pager"
+                    aria-label="Catalog pagination"
+                  >
+                    {page > 1 ? (
+                      <Link
+                        className="btn btn-ghost btn-sm"
+                        href={hrefWith({ page: String(page - 1) })}
+                      >
+                        ← Previous
+                      </Link>
+                    ) : (
+                      <span className="btn btn-ghost btn-sm" style={{ opacity: 0.4 }}>
+                        ← Previous
+                      </span>
+                    )}
+                    <span className="pager-numbers">
+                      {pageWindow(page, totalPages).map((p, idx) =>
+                        p === "…" ? (
+                          <span
+                            key={`gap-${idx}`}
+                            className="pager-num pager-gap"
+                            aria-hidden="true"
+                          >
+                            …
+                          </span>
+                        ) : p === page ? (
+                          <span
+                            key={p}
+                            className="pager-num is-current"
+                            aria-current="page"
+                          >
+                            {p}
+                          </span>
+                        ) : (
+                          <Link
+                            key={p}
+                            className="pager-num"
+                            href={hrefWith({ page: String(p) })}
+                          >
+                            {p}
+                          </Link>
+                        )
+                      )}
+                    </span>
+                    {page < totalPages ? (
+                      <Link
+                        className="btn btn-ghost btn-sm"
+                        href={hrefWith({ page: String(page + 1) })}
+                      >
+                        Next →
+                      </Link>
+                    ) : (
+                      <span className="btn btn-ghost btn-sm" style={{ opacity: 0.4 }}>
+                        Next →
+                      </span>
+                    )}
+                  </nav>
+                )}
               </>
             )}
           </div>

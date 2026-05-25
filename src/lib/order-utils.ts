@@ -19,7 +19,13 @@ export function invoiceNumberFor(orderReference: string): string {
 export async function markOrderPaid(
   orderId: string,
   paymentMethod: string,
-  paypalOrderId?: string
+  paypalOrderId?: string,
+  /**
+   * Optional Stripe Tax snapshot. When the payment provider returns a
+   * computed tax amount, we write it into Order.taxCents and re-derive
+   * totalCents so the invoice matches what the buyer was charged.
+   */
+  taxSnapshot?: { taxCents: number; amountTotalCents?: number }
 ): Promise<boolean> {
   const wasPending = await prisma.$transaction(async (tx) => {
     const order = await tx.order.findUnique({
@@ -35,6 +41,21 @@ export async function markOrderPaid(
         data: { stock: { decrement: item.qty } },
       });
     }
+
+    // Snapshot the tax (and recompute totalCents) only when a real engine
+    // returned one. The demo / PayPal sandbox path keeps tax at 0.
+    const taxUpdate =
+      taxSnapshot && taxSnapshot.taxCents > 0
+        ? {
+            taxCents: taxSnapshot.taxCents,
+            totalCents:
+              taxSnapshot.amountTotalCents ??
+              order.subtotalCents +
+                order.freightCents +
+                order.feeCents +
+                taxSnapshot.taxCents,
+          }
+        : {};
     await tx.order.update({
       where: { id: orderId },
       data: {
@@ -42,6 +63,7 @@ export async function markOrderPaid(
         paidAt: new Date(),
         paymentMethod,
         ...(paypalOrderId ? { paypalOrderId } : {}),
+        ...taxUpdate,
       },
     });
     return true;
