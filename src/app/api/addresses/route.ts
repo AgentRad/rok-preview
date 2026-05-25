@@ -7,7 +7,9 @@ export const runtime = "nodejs";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ addresses: [] });
+  if (!user) {
+    return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  }
   const addresses = await prisma.address.findMany({
     where: { userId: user.id },
     orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],

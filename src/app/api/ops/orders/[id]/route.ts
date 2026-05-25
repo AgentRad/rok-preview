@@ -47,6 +47,7 @@ export async function POST(
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
+    return NextResponse.json(result);
   } else if (stage === "Delivered") {
     // Refuse to skip Shipped on the way to Delivered. The buyer's order
     // page renders the tracking card and the shipped-email is what tells

@@ -24,7 +24,11 @@ type LookupProduct = {
 export default function CartClient() {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [products, setProducts] = useState<Record<string, LookupProduct>>({});
-  const [loading, setLoading] = useState(true);
+  // Start loading=false so SSR / no-JS render shows the noscript empty-state
+  // cleanly. The effect below flips loading=true only after hydration when
+  // we actually start fetching. Pre-hydration: empty cart UI, which matches
+  // the noscript fallback message.
+  const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     const cart = getCart();
@@ -34,6 +38,10 @@ export default function CartClient() {
       setLoading(false);
       return;
     }
+    // Flip to loading only when there's actually a fetch in flight, so the
+    // user with items in localStorage gets a real loading state while we
+    // fetch product metadata (instead of briefly seeing the empty-cart UI).
+    setLoading(true);
     const res = await fetch("/api/products/lookup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

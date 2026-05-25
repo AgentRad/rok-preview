@@ -26,8 +26,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { path: "/manufacturers", priority: 0.8, changeFrequency: "weekly" },
     { path: "/suppliers", priority: 0.7, changeFrequency: "monthly" },
     { path: "/how-it-works", priority: 0.6, changeFrequency: "monthly" },
-    { path: "/login", priority: 0.3, changeFrequency: "monthly" },
-    { path: "/register", priority: 0.4, changeFrequency: "monthly" },
   ];
 
   const [products, productManufacturers, oemUsers] = await Promise.all([

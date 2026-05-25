@@ -70,10 +70,11 @@ const EXPANSIONS: Record<string, string[]> = {
   inverter: ["inverter", "string", "solar", "microinverter", "hybrid"],
   microinverter: ["microinverter", "inverter", "solar"],
   racking: ["racking", "rail", "solar", "mount"],
-  battery: ["battery", "storage", "lfp", "bess", "cell"],
-  storage: ["battery", "storage", "bess", "ess"],
+  battery: ["battery", "storage", "lfp", "bess", "cell", "lithium"],
+  storage: ["battery", "storage", "bess", "ess", "lithium"],
   bess: ["bess", "battery", "storage", "ess"],
   ess: ["ess", "storage", "battery"],
+  lithium: ["battery", "storage", "lfp", "bess", "ess", "lithium"],
   // Grounding / surge
   ground: ["ground", "grounding", "earth", "rod", "clamp", "bond"],
   grounding: ["ground", "grounding", "rod"],
