@@ -98,9 +98,6 @@ export default function HeaderNav({ user }: { user: NavUser }) {
                     <div className="nm-role">{user.role.toLowerCase()}</div>
                   </div>
                   {dash && <Link href={dash.href} onClick={() => setMenuOpen(false)}>{dash.label}</Link>}
-                  {user.role === "BUYER" && (
-                    <Link href="/account" onClick={() => setMenuOpen(false)}>My orders</Link>
-                  )}
                   <Link href="/settings" onClick={() => setMenuOpen(false)}>Settings</Link>
                   <button onClick={logout}>Sign out</button>
                 </div>
