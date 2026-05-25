@@ -25,7 +25,10 @@ export async function POST(req: Request) {
   }
 
   if (event && event.type === "session.completed" && event.orderId) {
-    await markOrderPaid(event.orderId, provider.name, event.sessionId);
+    await markOrderPaid(event.orderId, provider.name, event.sessionId, {
+      taxCents: event.taxCents ?? 0,
+      amountTotalCents: event.amountTotalCents,
+    });
   }
   return NextResponse.json({ received: true });
 }

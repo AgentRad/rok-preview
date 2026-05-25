@@ -255,6 +255,14 @@ export default async function OrderPage({
                 <span>Total</span>
                 <span>{formatCents(order.totalCents)}</span>
               </div>
+              {order.taxCents === 0 && order.status === "PENDING" && (
+                <p
+                  className="muted-text"
+                  style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.4 }}
+                >
+                  Sales tax is calculated at checkout for live payment methods.
+                </p>
+              )}
             </div>
 
             <p className="muted-text" style={{ fontSize: 12.5, marginTop: 20 }}>

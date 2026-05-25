@@ -140,6 +140,11 @@ model Address {
   country    String   @default("US")
   phone      String   @default("")
   isDefault  Boolean  @default(false)
+  // Tax-exempt buyers can upload a resale or government-entity certificate.
+  // When present and APPROVED, Stripe Tax (or any tax engine) skips
+  // computation on the order. Admin reviews the cert before approval.
+  taxExemptCertificateUrl String?
+  taxExemptStatus         String?  // "PENDING" | "APPROVED" | "REJECTED" | null
   createdAt  DateTime @default(now())
 
   @@index([userId])
