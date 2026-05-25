@@ -314,9 +314,66 @@ export default async function OrderPage({
                 <span>{formatCents(order.subtotalCents)}</span>
               </div>
               <div className="summary-line">
-                <span>Freight</span>
+                <span>
+                  Freight
+                  {order.freightCarrier && (
+                    <span
+                      className="muted-text"
+                      style={{ fontSize: 11, marginLeft: 6 }}
+                    >
+                      {order.freightCarrier}
+                      {order.freightService ? ` ${order.freightService}` : ""}
+                    </span>
+                  )}
+                </span>
                 <span>{formatCents(order.freightCents)}</span>
               </div>
+              {Array.isArray(order.freightBreakdown) &&
+                order.freightBreakdown.length > 1 && (
+                  <div className="freight-breakdown" style={{ maxWidth: 300 }}>
+                    {(order.freightBreakdown as Array<{
+                      supplierName?: string;
+                      carrier?: string;
+                      service?: string;
+                      cents?: number;
+                    }>).map((s, idx) => (
+                      <div key={idx} className="freight-breakdown-line">
+                        <span className="freight-breakdown-supplier">
+                          {s.supplierName || "Shipment"}
+                          {s.carrier ? `: ${s.carrier} ${s.service || ""}` : ""}
+                        </span>
+                        <span>{formatCents(s.cents || 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              {order.freightSurcharges &&
+                typeof order.freightSurcharges === "object" &&
+                (() => {
+                  const s = order.freightSurcharges as {
+                    liftgate?: boolean;
+                    residential?: boolean;
+                    insideDelivery?: boolean;
+                  };
+                  const parts: { label: string; cents: number }[] = [];
+                  if (s.liftgate) parts.push({ label: "Liftgate", cents: 15000 });
+                  if (s.residential)
+                    parts.push({ label: "Residential delivery", cents: 7500 });
+                  if (s.insideDelivery)
+                    parts.push({ label: "Inside delivery", cents: 20000 });
+                  if (parts.length === 0) return null;
+                  return (
+                    <div
+                      className="muted-text"
+                      style={{ fontSize: 11.5, marginTop: 4, lineHeight: 1.5 }}
+                    >
+                      Includes:{" "}
+                      {parts
+                        .map((p) => `${p.label} (+${formatCents(p.cents)})`)
+                        .join(", ")}
+                    </div>
+                  );
+                })()}
               <div className="summary-line">
                 <span>Platform fee ({rateLabelForOrder(order)})</span>
                 <span>{formatCents(order.feeCents)}</span>

@@ -67,6 +67,105 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // P9: per-supplier freight selection + surcharges. Populated by the
+  // /api/freight/quote endpoint when the buyer's ZIP can be extracted
+  // from shipTo and the cart has at least one item with weight + dims.
+  type Shipment = {
+    supplierId: string;
+    supplierName: string;
+    originZip: string;
+    originCity: string;
+    originState: string;
+    rates: {
+      carrier: string;
+      service: string;
+      cents: number;
+      etaDays: number | null;
+      rateId: string | null;
+    }[];
+    fallbackReason?: string;
+    selectedIdx: number;
+  };
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [freightLoading, setFreightLoading] = useState(false);
+  const [surcharges, setSurcharges] = useState({
+    liftgate: false,
+    residential: false,
+    insideDelivery: false,
+  });
+  const SURCHARGE_CENTS_LOCAL = {
+    liftgate: 15_000,
+    residential: 7_500,
+    insideDelivery: 20_000,
+  };
+  const surchargeTotalCents =
+    (surcharges.liftgate ? SURCHARGE_CENTS_LOCAL.liftgate : 0) +
+    (surcharges.residential ? SURCHARGE_CENTS_LOCAL.residential : 0) +
+    (surcharges.insideDelivery ? SURCHARGE_CENTS_LOCAL.insideDelivery : 0);
+  const freightFromShipments =
+    shipments.length > 0
+      ? shipments.reduce((sum, s) => {
+          const rate = s.rates[s.selectedIdx];
+          return sum + (rate ? rate.cents : 0);
+        }, 0)
+      : 0;
+  const haveSelectedRates =
+    shipments.length > 0 && shipments.every((s) => s.rates.length > 0);
+
+  // Pull the 5-digit ZIP out of the buyer-typed shipTo block.
+  function extractZip(s: string): string | null {
+    const m = s.match(/\b(\d{5})(-\d{4})?\b/);
+    return m ? m[1] : null;
+  }
+  const destZip = extractZip(shipTo);
+
+  async function refreshFreightQuote() {
+    if (!destZip || valid.length === 0) {
+      setShipments([]);
+      return;
+    }
+    setFreightLoading(true);
+    try {
+      const res = await fetch("/api/freight/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: valid.map((l) => ({ sku: l.sku, qty: l.qty })),
+          destZip,
+          surcharges,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setShipments([]);
+        return;
+      }
+      const next: Shipment[] = (data.shipments || []).map(
+        (s: {
+          supplierId: string;
+          supplierName: string;
+          originZip: string;
+          originCity: string;
+          originState: string;
+          rates: Shipment["rates"];
+          fallbackReason?: string;
+        }) => ({
+          supplierId: s.supplierId,
+          supplierName: s.supplierName,
+          originZip: s.originZip,
+          originCity: s.originCity,
+          originState: s.originState,
+          rates: s.rates || [],
+          fallbackReason: s.fallbackReason,
+          selectedIdx: 0,
+        })
+      );
+      setShipments(next);
+    } finally {
+      setFreightLoading(false);
+    }
+  }
+
   useEffect(() => {
     const cart = getCart();
     setLines(cart);
@@ -120,12 +219,26 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   }
 
   const valid = lines.filter((l) => products[l.sku]);
+  // When the per-supplier quote came back with rates for every shipment,
+  // honor that total. Otherwise the flat-rate fallback in computeOrderTotals
+  // runs and the freight breakdown UI shows a hint about what's missing.
   const totals = computeOrderTotals(
     valid.map((l) => ({
       unitPriceCents: products[l.sku].priceCents,
       qty: l.qty,
       quoteOnly: (products[l.sku] as { quoteOnly?: boolean }).quoteOnly,
-    }))
+    })),
+    haveSelectedRates
+      ? {
+          freightOverrideCents: freightFromShipments + surchargeTotalCents,
+          freightOverrideLabel:
+            shipments.length === 1
+              ? `${shipments[0].rates[shipments[0].selectedIdx]?.carrier ?? "Carrier"} ${
+                  shipments[0].rates[shipments[0].selectedIdx]?.service ?? ""
+                }`.trim()
+              : `${shipments.length} shipments`,
+        }
+      : {}
   );
   const subtotal = totals.subtotalCents;
   const freight = totals.freightCents;
@@ -141,6 +254,32 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   async function createOrder() {
     setBusy(true);
     setError("");
+    const freightBreakdown =
+      haveSelectedRates
+        ? shipments.map((s) => {
+            const rate = s.rates[s.selectedIdx];
+            return {
+              supplierId: s.supplierId,
+              supplierName: s.supplierName,
+              originZip: s.originZip,
+              carrier: rate?.carrier || "Carrier",
+              service: rate?.service || "Standard",
+              cents: rate?.cents || 0,
+              etaDays: rate?.etaDays ?? null,
+            };
+          })
+        : undefined;
+    const topCarrier =
+      shipments.length === 1
+        ? shipments[0].rates[shipments[0].selectedIdx]?.carrier
+        : haveSelectedRates
+          ? "Multiple carriers"
+          : null;
+    const topService =
+      shipments.length === 1
+        ? shipments[0].rates[shipments[0].selectedIdx]?.service
+        : null;
+
     const res = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -149,6 +288,10 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
         buyerName: name,
         buyerEmail: email,
         shipTo,
+        freightBreakdown,
+        freightCarrier: topCarrier,
+        freightService: topService,
+        freightSurcharges: surcharges,
       }),
     });
     const data = await res.json();
@@ -390,6 +533,168 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
                     required
                   />
                 </div>
+
+                {destZip && (
+                  <div className="form-row">
+                    <label>Freight</label>
+                    {shipments.length === 0 && !freightLoading && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={refreshFreightQuote}
+                      >
+                        Get freight rates for ZIP {destZip}
+                      </button>
+                    )}
+                    {freightLoading && (
+                      <div className="muted-text" style={{ fontSize: 13 }}>
+                        Loading carrier rates…
+                      </div>
+                    )}
+                    {shipments.length > 0 && (
+                      <div>
+                        {shipments.map((s, sIdx) => (
+                          <div key={s.supplierId} style={{ marginBottom: 12 }}>
+                            <div
+                              className="muted-text"
+                              style={{ fontSize: 12.5, marginBottom: 4 }}
+                            >
+                              <strong style={{ color: "var(--ink)" }}>
+                                {s.supplierName}
+                              </strong>
+                              {s.originCity && s.originState
+                                ? ` ships from ${s.originCity}, ${s.originState} ${s.originZip}`
+                                : ""}
+                            </div>
+                            {s.rates.length === 0 ? (
+                              <div className="muted-text" style={{ fontSize: 12.5 }}>
+                                {s.fallbackReason ||
+                                  "No live rates available; flat-rate ground applies."}
+                              </div>
+                            ) : (
+                              <div className="freight-options">
+                                {s.rates.slice(0, 3).map((r, rIdx) => (
+                                  <label
+                                    key={r.rateId || rIdx}
+                                    className={
+                                      "freight-option" +
+                                      (s.selectedIdx === rIdx ? " is-selected" : "")
+                                    }
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`rate-${s.supplierId}`}
+                                      checked={s.selectedIdx === rIdx}
+                                      onChange={() => {
+                                        setShipments((prev) => {
+                                          const next = [...prev];
+                                          next[sIdx] = { ...next[sIdx], selectedIdx: rIdx };
+                                          return next;
+                                        });
+                                      }}
+                                    />
+                                    <div className="freight-option-label">
+                                      <div className="freight-option-name">
+                                        {r.carrier} {r.service}
+                                      </div>
+                                      <div className="freight-option-meta">
+                                        {r.etaDays != null
+                                          ? `${r.etaDays} business day${r.etaDays === 1 ? "" : "s"}`
+                                          : "ETA: by carrier"}
+                                      </div>
+                                    </div>
+                                    <div className="freight-option-price">
+                                      {formatCents(r.cents)}
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={refreshFreightQuote}
+                          disabled={freightLoading}
+                          style={{ fontSize: 12 }}
+                        >
+                          Refresh rates
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="form-row">
+                  <label>Freight surcharges</label>
+                  <div className="surcharge-list">
+                    <label className="surcharge-row">
+                      <input
+                        type="checkbox"
+                        checked={surcharges.liftgate}
+                        onChange={(e) =>
+                          setSurcharges((s) => ({ ...s, liftgate: e.target.checked }))
+                        }
+                      />
+                      <span className="surcharge-row-name">
+                        Liftgate at delivery
+                        <span
+                          className="muted-text"
+                          style={{ fontSize: 12, marginLeft: 6 }}
+                        >
+                          for docks without forklift access
+                        </span>
+                      </span>
+                      <span className="surcharge-row-price">+$150</span>
+                    </label>
+                    <label className="surcharge-row">
+                      <input
+                        type="checkbox"
+                        checked={surcharges.residential}
+                        onChange={(e) =>
+                          setSurcharges((s) => ({
+                            ...s,
+                            residential: e.target.checked,
+                          }))
+                        }
+                      />
+                      <span className="surcharge-row-name">
+                        Residential delivery
+                        <span
+                          className="muted-text"
+                          style={{ fontSize: 12, marginLeft: 6 }}
+                        >
+                          home or non-commercial address
+                        </span>
+                      </span>
+                      <span className="surcharge-row-price">+$75</span>
+                    </label>
+                    <label className="surcharge-row">
+                      <input
+                        type="checkbox"
+                        checked={surcharges.insideDelivery}
+                        onChange={(e) =>
+                          setSurcharges((s) => ({
+                            ...s,
+                            insideDelivery: e.target.checked,
+                          }))
+                        }
+                      />
+                      <span className="surcharge-row-name">
+                        Inside delivery
+                        <span
+                          className="muted-text"
+                          style={{ fontSize: 12, marginLeft: 6 }}
+                        >
+                          carrier brings the freight indoors
+                        </span>
+                      </span>
+                      <span className="surcharge-row-price">+$200</span>
+                    </label>
+                  </div>
+                </div>
+
                 <button className="btn btn-primary btn-block" disabled={busy}>
                   {busy ? "Creating order…" : "Continue to payment"}
                 </button>
