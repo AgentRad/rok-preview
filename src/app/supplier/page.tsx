@@ -454,9 +454,23 @@ export default async function SupplierDashboard() {
                           </td>
                           <td className="num">{formatCents(mineTotal)}</td>
                           <td className="num">
-                            {o.status === "PAID" && canFulfill && (
-                              <FulfillButton orderId={o.id} />
-                            )}
+                            {/* Show the Mark shipped form only on PAID
+                                orders that haven't already been shipped or
+                                delivered. After this we hand off to /ops
+                                for the Delivered transition. */}
+                            {o.status === "PAID" &&
+                              o.shipmentStage !== "Shipped" &&
+                              o.shipmentStage !== "Delivered" &&
+                              canFulfill && <FulfillButton orderId={o.id} />}
+                            {o.status === "PAID" &&
+                              o.shipmentStage === "Shipped" && (
+                                <span
+                                  className="muted-text"
+                                  style={{ fontSize: 12 }}
+                                >
+                                  Shipped {o.carrier ?? ""} {o.trackingCode ?? ""}
+                                </span>
+                              )}
                           </td>
                         </tr>
                       );

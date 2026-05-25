@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { sendOrderDelivered, sendOrderShipped } from "@/lib/email";
-import { ensurePayoutsForOrder } from "@/lib/payouts";
+import { sendOrderDelivered } from "@/lib/email";
+import { markOrderShipped } from "@/lib/shipping";
 
 const STAGES = ["Processing", "Shipped", "Delivered"] as const;
 type Stage = (typeof STAGES)[number];
@@ -39,25 +39,14 @@ export async function POST(
   }
 
   if (stage === "Shipped") {
-    const carrier = body?.carrier?.trim();
-    const trackingCode = body?.trackingCode?.trim();
-    if (!carrier || !trackingCode) {
-      return NextResponse.json(
-        { error: "Carrier and tracking code are required to mark shipped." },
-        { status: 400 }
-      );
+    const result = await markOrderShipped(
+      id,
+      body?.carrier ?? "",
+      body?.trackingCode ?? ""
+    );
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    const updated = await prisma.order.update({
-      where: { id },
-      data: { shipmentStage: "Shipped", carrier, trackingCode },
-      include: { items: true },
-    });
-    sendOrderShipped(updated).catch((err) =>
-      console.error("[email] order-shipped failed:", err)
-    );
-    ensurePayoutsForOrder(id).catch((err) =>
-      console.error("[payouts] create-on-dispatch failed:", err)
-    );
   } else if (stage === "Delivered") {
     const updated = await prisma.order.update({
       where: { id },
