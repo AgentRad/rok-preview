@@ -35,16 +35,18 @@ export default async function OrderPage({
 }) {
   const { id } = await params;
   const sp = (await searchParams) ?? {};
-  let order = await prisma.order.findUnique({
+  const orderInclude = {
+    items: { include: { product: { include: { supplier: true } } } },
+    returns: { orderBy: { createdAt: "desc" as const } },
+    messages: { orderBy: { createdAt: "asc" as const } },
+    reviews: { select: { productId: true, rating: true, createdAt: true } },
+  };
+  const initial = await prisma.order.findUnique({
     where: { id },
-    include: {
-      items: { include: { product: { include: { supplier: true } } } },
-      returns: { orderBy: { createdAt: "desc" } },
-      messages: { orderBy: { createdAt: "asc" } },
-      reviews: { select: { productId: true, rating: true, createdAt: true } },
-    },
+    include: orderInclude,
   });
-  if (!order) notFound();
+  if (!initial) notFound();
+  let order = initial;
 
   // Webhook-independent reconciliation: when the buyer returns from Stripe
   // with ?paid=1 in the URL but the order is still PENDING (the webhook may
@@ -55,20 +57,15 @@ export default async function OrderPage({
     try {
       const result = await reconcileOrderFromStripe(order.id);
       if (result.paid) {
-        order = await prisma.order.findUnique({
+        const reloaded = await prisma.order.findUnique({
           where: { id },
-          include: {
-            items: { include: { product: { include: { supplier: true } } } },
-            returns: { orderBy: { createdAt: "desc" } },
-            messages: { orderBy: { createdAt: "asc" } },
-            reviews: { select: { productId: true, rating: true, createdAt: true } },
-          },
+          include: orderInclude,
         });
-        if (!order) notFound();
+        if (reloaded) order = reloaded;
       }
     } catch (e) {
-      // Reconciliation failed; render the page as PENDING and surface a
-      // hint to the buyer below. The webhook will catch up in time.
+      // Reconciliation failed; render the page as PENDING. The webhook
+      // will catch up in time.
       console.error("[order] Stripe reconcile failed:", e);
     }
   }
