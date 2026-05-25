@@ -18,6 +18,7 @@ import Link from "next/link";
 import SupplierProductManager from "@/components/SupplierProductManager";
 import CatalogCsvImport from "@/components/CatalogCsvImport";
 import SupplierTeam from "@/components/SupplierTeam";
+import SupplierLogoUploader from "@/components/SupplierLogoUploader";
 import SupplierChecklist, {
   type SupplierChecklistItem,
 } from "@/components/SupplierChecklist";
@@ -125,6 +126,7 @@ export default async function SupplierDashboard() {
       key: "logo",
       label: "Add a company logo",
       done: !!supplier.logoUrl,
+      href: "/supplier#profile",
       note: "Shows next to your name on product cards and listings.",
     },
     {
@@ -201,6 +203,18 @@ export default async function SupplierDashboard() {
           />
 
           <SupplierChecklist items={checklist} />
+
+          <div id="profile" className="card">
+            <div className="card-head">
+              <h2>Profile</h2>
+            </div>
+            <div className="card-body">
+              <SupplierLogoUploader
+                initialLogoUrl={supplier.logoUrl}
+                supplierName={supplier.name}
+              />
+            </div>
+          </div>
 
           {showCatalog && (
             <SupplierProductManager

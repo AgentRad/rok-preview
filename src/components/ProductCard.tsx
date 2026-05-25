@@ -15,14 +15,20 @@ export type CardProduct = {
   etaDays: number;
   stock: number;
   quoteOnly: boolean;
-  supplier: { name: string; rating: number };
+  imageCount?: number;
+  _count?: { images?: number };
+  supplier: { name: string; rating: number; logoUrl?: string | null };
 };
 
 export default function ProductCard({ product }: { product: CardProduct }) {
+  const imageCount = product.imageCount ?? product._count?.images ?? 0;
   return (
     <Link className="product-card" href={`/product/${product.sku}`}>
       <div className="product-thumb">
         <span className="thumb-badge">{product.category}</span>
+        {imageCount > 1 ? (
+          <span className="thumb-count">+{imageCount - 1}</span>
+        ) : null}
         <ProductImage
           imageUrl={product.imageUrl}
           icon={product.icon}
@@ -49,7 +55,15 @@ export default function ProductCard({ product }: { product: CardProduct }) {
               <span className="dot stock-out">Backorder</span>
             )}
           </div>
-          <div className="product-sub">
+          <div className="product-sub product-supplier">
+            {product.supplier.logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                className="supplier-logo-inline"
+                src={product.supplier.logoUrl}
+                alt=""
+              />
+            )}
             <span>Sold by {product.supplier.name}</span>
           </div>
         </div>

@@ -171,7 +171,15 @@ export default async function ProductPage({
                 </div>
                 <div className="buybox-row">
                   <span>Sold &amp; fulfilled by</span>
-                  <span className="v">
+                  <span className="v" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {product.supplier.logoUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        className="supplier-logo-inline"
+                        src={product.supplier.logoUrl}
+                        alt=""
+                      />
+                    )}
                     {product.supplier.name}{" "}
                     {supplierRating.kind === "computed" ? (
                       <>★ {supplierRating.average.toFixed(1)} ({supplierRating.count})</>

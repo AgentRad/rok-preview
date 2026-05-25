@@ -68,7 +68,7 @@ export default async function HomePage() {
     prisma.supplier.count({ where: { status: "APPROVED" } }),
     prisma.product.findMany({
       where: { active: true, stock: { gt: 0 } },
-      include: { supplier: true },
+      include: { supplier: true, _count: { select: { images: true } } },
       orderBy: { createdAt: "asc" },
       take: 8,
     }),

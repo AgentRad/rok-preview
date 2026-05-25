@@ -93,7 +93,7 @@ export default async function CatalogPage({
     const [list, count] = await Promise.all([
       prisma.product.findMany({
         where,
-        include: { supplier: true },
+        include: { supplier: true, _count: { select: { images: true } } },
         orderBy: ORDER[sort] || ORDER.featured,
       }),
       prisma.product.count({ where }),
