@@ -65,7 +65,14 @@ export default function MessageThread({
             <li key={m.id} className="thread-message">
               <div className="thread-meta">
                 <strong style={{ fontSize: 13.5 }}>{m.senderName}</strong>
-                <span className="muted-text" style={{ fontSize: 11.5 }}>
+                <span
+                  className="muted-text"
+                  style={{ fontSize: 11.5 }}
+                  // Locale-dependent date string; server-side uses Node locale,
+                  // client renders with browser locale. Suppress the hydration
+                  // diff: the text content is semantically equivalent.
+                  suppressHydrationWarning
+                >
                   {m.senderRole.toLowerCase()} ·{" "}
                   {new Date(m.createdAt).toLocaleString()}
                 </span>

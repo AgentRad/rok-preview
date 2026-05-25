@@ -62,6 +62,11 @@ export async function markOrderPaid(
         status: "PAID",
         paidAt: new Date(),
         paymentMethod,
+        // Seed the shipment stage at payment time. Without this the order
+        // sits with shipmentStage = "" until Mark Shipped runs, and the
+        // buyer's timeline visually skips the Processing dot. Only set
+        // when the order is freshly PAID and not yet further along.
+        shipmentStage: "Processing",
         ...(paypalOrderId ? { paypalOrderId } : {}),
         ...taxUpdate,
       },

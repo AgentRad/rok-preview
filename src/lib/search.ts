@@ -16,43 +16,88 @@ export function isAISearchEnabled(): boolean {
 }
 
 /* ---------- heuristic fallback (no API key) ---------- */
-// Maps intents / applications / synonyms to catalog vocabulary.
+// Maps intents / applications / synonyms to catalog vocabulary. Pull this
+// hard when adding queries that should recall well: single-word category
+// terms ("motor", "switchgear", "transformer") need to fan out to all the
+// product families that buyer is plausibly looking at.
 const EXPANSIONS: Record<string, string[]> = {
-  transformer: ["transformer", "pad-mount", "distribution", "kva"],
-  breaker: ["breaker", "vacuum", "switchgear", "circuit"],
-  switchgear: ["switchgear", "breaker", "vacuum"],
-  cutout: ["cutout", "fused", "fuse"],
-  relay: ["relay", "protection", "feeder", "sel"],
-  protection: ["relay", "protection", "feeder"],
-  conductor: ["conductor", "acsr", "overhead", "cable", "wire"],
-  cable: ["cable", "conductor", "urd", "underground", "wire"],
+  // Transformers
+  transformer: ["transformer", "pad-mount", "distribution", "kva", "auto", "dry-type"],
+  kva: ["transformer", "kva"],
+  "pad-mount": ["transformer", "pad-mount"],
+  padmount: ["transformer", "pad-mount"],
+  // Switching / breakers / motor control
+  breaker: ["breaker", "vacuum", "switchgear", "circuit", "mccb", "molded"],
+  switchgear: ["switchgear", "breaker", "vacuum", "mcc", "panelboard", "disconnect"],
+  cutout: ["cutout", "fused", "fuse", "loadbreak"],
+  fuse: ["fuse", "fused", "cutout", "current-limiting"],
+  mcc: ["mcc", "motor", "control", "center", "starter"],
+  motor: ["motor", "mcc", "starter", "control", "contactor", "protection", "relay"],
+  contactor: ["contactor", "motor", "starter"],
+  starter: ["starter", "motor", "mcc"],
+  disconnect: ["disconnect", "switch", "switchgear"],
+  panelboard: ["panelboard", "panel", "switchgear", "circuit"],
+  // Relays / protection
+  relay: ["relay", "protection", "feeder", "sel", "differential", "overcurrent"],
+  protection: ["relay", "protection", "feeder", "differential", "overcurrent"],
+  recloser: ["recloser", "relay", "protection", "vacuum"],
+  feeder: ["relay", "conductor", "breaker", "protection"],
+  // Conductors / cable
+  conductor: ["conductor", "acsr", "aaac", "overhead", "cable", "wire"],
+  cable: ["cable", "conductor", "urd", "underground", "wire", "service"],
   wire: ["wire", "conductor", "cable"],
-  insulator: ["insulator", "polymer", "suspension"],
-  meter: ["meter", "metering", "smart", "revenue", "ami"],
-  generator: ["generator", "standby", "genset", "backup"],
+  acsr: ["acsr", "conductor", "overhead"],
+  // Line hardware
+  insulator: ["insulator", "polymer", "suspension", "pin"],
+  crossarm: ["crossarm", "fiberglass", "line", "hardware"],
+  deadend: ["deadend", "clamp", "suspension"],
+  // Metering
+  meter: ["meter", "metering", "smart", "revenue", "ami", "smart-meter"],
+  metering: ["meter", "metering", "smart", "revenue"],
+  ct: ["ct", "current", "transformer", "metering"],
+  ami: ["ami", "meter", "smart"],
+  // Generators / ATS
+  generator: ["generator", "standby", "genset", "backup", "diesel"],
   genset: ["generator", "standby", "backup"],
-  backup: ["generator", "standby", "battery", "storage"],
-  ats: ["transfer", "ats", "automatic"],
-  solar: ["solar", "pv", "module", "panel", "photovoltaic"],
+  diesel: ["diesel", "generator", "standby"],
+  backup: ["generator", "standby", "battery", "storage", "ups"],
+  ats: ["transfer", "ats", "automatic", "switch"],
+  // Solar / inverters / storage
+  solar: ["solar", "pv", "module", "panel", "photovoltaic", "inverter", "microinverter"],
   pv: ["solar", "pv", "module"],
+  module: ["module", "solar", "pv", "panel"],
   panel: ["solar", "pv", "module"],
-  inverter: ["inverter", "string", "solar"],
-  battery: ["battery", "storage", "lfp", "bess"],
-  storage: ["battery", "storage", "bess"],
-  ground: ["ground", "grounding", "earth", "rod"],
+  inverter: ["inverter", "string", "solar", "microinverter", "hybrid"],
+  microinverter: ["microinverter", "inverter", "solar"],
+  racking: ["racking", "rail", "solar", "mount"],
+  battery: ["battery", "storage", "lfp", "bess", "cell"],
+  storage: ["battery", "storage", "bess", "ess"],
+  bess: ["bess", "battery", "storage", "ess"],
+  ess: ["ess", "storage", "battery"],
+  // Grounding / surge
+  ground: ["ground", "grounding", "earth", "rod", "clamp", "bond"],
   grounding: ["ground", "grounding", "rod"],
+  rod: ["rod", "ground", "grounding"],
   surge: ["surge", "arrester", "lightning"],
   arrester: ["surge", "arrester"],
-  scada: ["controller", "rtac", "automation", "scada"],
+  // SCADA / controls
+  scada: ["controller", "rtac", "rtu", "automation", "scada"],
+  rtu: ["rtu", "scada", "automation"],
+  rtac: ["rtac", "scada", "controller"],
   controller: ["controller", "rtac", "automation"],
+  automation: ["automation", "scada", "controller", "rtu"],
+  // Safety / PPE
   "arc-flash": ["arc-flash", "ppe", "safety"],
-  ppe: ["arc-flash", "ppe", "safety"],
-  // applications
+  ppe: ["arc-flash", "ppe", "safety", "gloves"],
+  gloves: ["gloves", "rubber", "ppe", "safety"],
+  voltage: ["voltage", "detector", "tester", "ppe"],
+  // Applications
   substation: ["transformer", "breaker", "switchgear", "relay", "insulator"],
-  feeder: ["relay", "conductor", "breaker"],
   overhead: ["conductor", "acsr", "insulator", "cutout"],
   underground: ["cable", "urd", "transformer"],
   outage: ["generator", "standby", "battery", "storage"],
+  utility: ["transformer", "cable", "conductor", "insulator", "meter"],
+  industrial: ["mcc", "breaker", "motor", "panelboard"],
 };
 
 const STOPWORDS = new Set([
@@ -124,8 +169,28 @@ const SYSTEM = `You are the search engine for PartsPort, an industrial parts and
 marketplace. A buyer describes what they need, by part name, specification,
 manufacturer, or the problem/application they are solving. Using only the catalog
 provided, return the SKUs that genuinely fit the need, best match first. Understand
-intent, synonyms, applications, and specs. Only include SKUs that are reasonable
-matches; omit irrelevant ones. If nothing in the catalog fits, return an empty list.
+intent, synonyms, applications, and specs.
+
+Recall guidance (important for industrial spec searches):
+- When the buyer names a rating (e.g. "75 kVA transformer", "15 kV breaker", "100 A
+  cutout"), return both exact-rating matches AND the adjacent typical ratings (the
+  next size up and the next size down within the same product family). Industrial
+  buyers often round to nearest standard size; they want to compare options.
+- When the buyer types a single GENERIC word (e.g. "motor", "transformer",
+  "switchgear", "relay", "solar", "cable"), interpret it as a category query and
+  return EVERY plausibly-matching SKU in the catalog, not just exact-name hits.
+  Examples:
+    "motor"    -> motor control centers, motor protection relays, starters,
+                  contactors, feeder protection relays
+    "solar"    -> PV modules, microinverters, string inverters, racking
+    "cable"    -> URD, MV-105, service-entrance, control cable, conductors
+  Single-word queries should typically return 5-15 results, not 1.
+- When the buyer names a category but not a brand, return options across multiple
+  manufacturers so the buyer can compare price and lead time.
+- Aim for 5 to 12 results when the catalog supports it. Single-result returns are
+  usually wrong unless the query is a SKU or a very specific brand-and-model match.
+- Only return ZERO results when nothing in the catalog plausibly serves the need.
+
 Keep "interpretation" to one plain sentence.`;
 
 async function aiRank(
@@ -215,13 +280,113 @@ export async function runSearch(query: string): Promise<SearchResult> {
   if (isAISearchEnabled()) {
     const ai = await aiRank(q, products);
     if (ai) {
-      return { interpretation: ai.interpretation, products: ai.products, ai: true };
+      // Recall floor: if the AI returned fewer than RECALL_FLOOR results, pad
+      // with heuristic same-category matches that the AI didn't pick. The AI's
+      // top result still ranks first; padding extends the tail. Industrial
+      // buyers want to compare, single-result returns frustrate them.
+      const padded = padToFloor(ai.products, q, products);
+      return {
+        interpretation: ai.interpretation,
+        products: padded,
+        ai: true,
+      };
     }
   }
 
+  // Heuristic-only path gets the same floor pad (already returns category
+  // matches sorted by relevance, but if the score threshold left under 5,
+  // we'd rather show a few weak matches than show nothing useful).
+  const ranked = heuristicRank(q, products);
+  const padded = padToFloor(ranked, q, products);
   return {
     interpretation: `Showing parts matched to “${q}”.`,
-    products: heuristicRank(q, products),
+    products: padded,
     ai: false,
   };
+}
+
+const RECALL_FLOOR = 5;
+
+/**
+ * Ensure the result list has at least RECALL_FLOOR entries when the catalog
+ * has enough plausibly-relevant items. Three tiers, applied in order:
+ *
+ *   1. Same-category fill: any product whose category matches one of the
+ *      primary results' categories.
+ *   2. Heuristic fill: keyword-rank the whole catalog against the query
+ *      and pull non-duplicates. Catches synonym hits via EXPANSIONS.
+ *   3. Fuzzy global fill: substring-score every active product against
+ *      query tokens over (name + manufacturer + description). Last
+ *      resort that ALWAYS finds something when the catalog has products,
+ *      so the floor is no longer silently violated for queries like
+ *      "meter" (one category, only 4 SKUs) or "lithium" (no EXPANSIONS
+ *      entry, "lithium" only appears in 2 product descriptions).
+ *
+ * If after all three tiers we're still under the floor, log a warning so
+ * future regressions surface in production logs instead of silently
+ * shrinking the result page. Padding never invents entries; the floor is
+ * capped at the catalog size.
+ */
+function padToFloor(
+  primary: SearchProduct[],
+  query: string,
+  all: SearchProduct[]
+): SearchProduct[] {
+  if (primary.length >= RECALL_FLOOR) return primary;
+  const target = Math.min(RECALL_FLOOR, all.length);
+  const seen = new Set(primary.map((p) => p.sku));
+
+  // Tier 1: same-category fill.
+  const cats = new Set(primary.map((p) => p.category));
+  for (const p of all) {
+    if (primary.length >= target) break;
+    if (seen.has(p.sku) || !cats.has(p.category)) continue;
+    primary.push(p);
+    seen.add(p.sku);
+  }
+  // Tier 2: keyword-ranked heuristic over the catalog (uses EXPANSIONS).
+  if (primary.length < target) {
+    const heuristic = heuristicRank(query, all).filter((p) => !seen.has(p.sku));
+    for (const p of heuristic) {
+      if (primary.length >= target) break;
+      primary.push(p);
+      seen.add(p.sku);
+    }
+  }
+  // Tier 3: fuzzy substring scan over name + manufacturer + description.
+  // This is the catch-all: queries with no EXPANSIONS entry and no
+  // single-category match still find SOMETHING relevant if the term
+  // appears anywhere in product copy.
+  if (primary.length < target) {
+    const tokens = tokenize(query);
+    const fuzzy = all
+      .filter((p) => !seen.has(p.sku))
+      .map((p) => {
+        const hay = `${p.name} ${p.manufacturer} ${p.description ?? ""}`.toLowerCase();
+        let score = 0;
+        for (const t of tokens) if (hay.includes(t)) score += 1;
+        return { p, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+    for (const { p } of fuzzy) {
+      if (primary.length >= target) break;
+      primary.push(p);
+      seen.add(p.sku);
+    }
+  }
+  // Telemetry: catalog has enough products but we still couldn't fill.
+  // Logged as a warning so a real regression surfaces in production logs.
+  if (primary.length < target) {
+    console.warn(
+      "[search] recall floor unmet:",
+      JSON.stringify({
+        query,
+        returned: primary.length,
+        target,
+        catalogSize: all.length,
+      })
+    );
+  }
+  return primary;
 }

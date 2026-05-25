@@ -308,7 +308,11 @@ export async function getManufacturerAttention(
 export async function getAdminAttention(): Promise<AttentionItem[]> {
   const items: AttentionItem[] = [];
 
-  const [pendingApps, openReturns, duePayouts, lateShipments, pendingInvites] =
+  // Admin attention is platform-level operations: applications, returns,
+  // payouts, late shipments. Supplier-team chores (pending team invites,
+  // catalog completeness, etc.) belong on the supplier's own dashboard and
+  // were dropped from here to stop the cross-leakage.
+  const [pendingApps, openReturns, duePayouts, lateShipments] =
     await Promise.all([
       prisma.supplierApplication.findMany({
         where: { status: "PENDING" },
@@ -331,9 +335,6 @@ export async function getAdminAttention(): Promise<AttentionItem[]> {
         orderBy: { paidAt: "asc" },
         take: 5,
         select: { id: true, reference: true, carrier: true, paidAt: true },
-      }),
-      prisma.supplierInvite.count({
-        where: { acceptedAt: null, expiresAt: { gt: new Date() } },
       }),
     ]);
 
@@ -385,18 +386,6 @@ export async function getAdminAttention(): Promise<AttentionItem[]> {
       actionHref: `/orders/${o.id}`,
       severity: "urgent",
       createdAt: o.paidAt ?? undefined,
-    });
-  }
-
-  if (pendingInvites > 0) {
-    items.push({
-      id: `invites-pending`,
-      kind: "team-invites",
-      title: `${pendingInvites} team invite${pendingInvites === 1 ? "" : "s"} not yet accepted`,
-      body: `Suppliers invited a teammate who hasn't joined yet. Nothing to do unless one is asking for help.`,
-      actionLabel: "View",
-      actionHref: `/admin`,
-      severity: "info",
     });
   }
 

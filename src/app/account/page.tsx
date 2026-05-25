@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
@@ -20,6 +21,11 @@ const STATUS_CLASS: Record<string, string> = {
 
 export default async function AccountPage() {
   const user = await requireUser();
+  // /account is the buyer's home. Suppliers and OEMs land on their own
+  // dashboards instead - admin stays here so they can use it as a buyer
+  // surrogate during testing.
+  if (user.role === "SUPPLIER") redirect("/supplier");
+  if (user.role === "MANUFACTURER") redirect("/oem");
   const [orders, attention, addresses] = await Promise.all([
     prisma.order.findMany({
       where: { buyerId: user.id },

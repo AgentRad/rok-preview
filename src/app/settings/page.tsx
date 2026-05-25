@@ -33,7 +33,9 @@ export default async function SettingsPage() {
         <div className="page-pad narrow">
           <h1 className="page-title">Settings</h1>
           <p className="page-sub">
-            Signed in as {user.name} · {user.email} · {user.role.toLowerCase()}
+            Signed in as {user.name} · {user.email} ·{" "}
+            {/* Title-case the role enum so "BUYER" doesn't render as "buyer". */}
+            {user.role.charAt(0) + user.role.slice(1).toLowerCase()}
           </p>
 
           <div className="card" style={{ marginTop: 24 }}>

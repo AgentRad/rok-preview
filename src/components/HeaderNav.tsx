@@ -67,21 +67,33 @@ export default function HeaderNav({ user }: { user: NavUser }) {
         <div className={"nav-links" + (mobileOpen ? " open" : "")}>
           <Link href="/catalog" onClick={() => setMobileOpen(false)}>Catalog</Link>
           <Link href="/how-it-works" onClick={() => setMobileOpen(false)}>How it works</Link>
-          <Link href="/suppliers" onClick={() => setMobileOpen(false)}>For suppliers</Link>
+          {/* Hide the "For X" recruitment links for users who are already that role. */}
+          {user?.role !== "SUPPLIER" && (
+            <Link href="/suppliers" onClick={() => setMobileOpen(false)}>For suppliers</Link>
+          )}
+          {user?.role !== "MANUFACTURER" && (
+            <Link href="/manufacturers" onClick={() => setMobileOpen(false)}>For manufacturers</Link>
+          )}
           {dash && (
             <Link href={dash.href} onClick={() => setMobileOpen(false)}>
               {dash.label}
             </Link>
           )}
-          <Link href="/cart" className="nav-cart" onClick={() => setMobileOpen(false)}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9" cy="20" r="1.5" />
-              <circle cx="18" cy="20" r="1.5" />
-              <path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.5L23 7H6" />
-            </svg>
-            Cart
-            {count > 0 && <span className="cart-count">{count}</span>}
-          </Link>
+          {/* Cart is for buyers and anonymous shoppers. Suppliers, OEMs,
+              and admins don't transact through it (the page redirects
+              non-buyers out; admins use 'Manage as' impersonation for
+              buyer support, not their admin account to shop). */}
+          {(!user || user.role === "BUYER") && (
+            <Link href="/cart" className="nav-cart" onClick={() => setMobileOpen(false)}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="20" r="1.5" />
+                <circle cx="18" cy="20" r="1.5" />
+                <path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.5L23 7H6" />
+              </svg>
+              Cart
+              {count > 0 && <span className="cart-count">{count}</span>}
+            </Link>
+          )}
 
           {user ? (
             <div className="nav-user" ref={menuRef}>

@@ -277,24 +277,103 @@ async function main() {
     });
   }
 
+  // --- Backfill any Shipped/Delivered orders that are missing carrier or
+  // trackingCode (can happen when a test path advances an order through
+  // /ops without filling in the fields). Without these the buyer's order
+  // page hides the tracking card on first login. ---
+  const ordersMissingTracking = await prisma.order.findMany({
+    where: {
+      shipmentStage: { in: ["Shipped", "Delivered"] },
+      OR: [
+        { carrier: null },
+        { carrier: "" },
+        { trackingCode: null },
+        { trackingCode: "" },
+      ],
+    },
+    select: { id: true, reference: true, carrier: true, trackingCode: true },
+  });
+  for (let i = 0; i < ordersMissingTracking.length; i++) {
+    const o = ordersMissingTracking[i];
+    await prisma.order.update({
+      where: { id: o.id },
+      data: {
+        carrier: o.carrier || (i % 2 === 0 ? "FedEx Freight" : "UPS"),
+        trackingCode:
+          o.trackingCode ||
+          `1Z${Math.random().toString(36).toUpperCase().slice(2, 8)}${(1000 + i).toString().padStart(4, "0")}`,
+      },
+    });
+  }
+  if (ordersMissingTracking.length > 0) {
+    console.log(
+      "Seed: backfilled carrier/tracking on",
+      ordersMissingTracking.length,
+      "Shipped/Delivered orders that were missing it."
+    );
+  }
+
+  // --- Demo supplier applications. Idempotent: only seed when zero PENDING
+  // applications exist, so admin can demo the approve/reject workflow. ---
+  const pendingApps = await prisma.supplierApplication.count({
+    where: { status: "PENDING" },
+  });
+  if (pendingApps === 0) {
+    await prisma.supplierApplication.createMany({
+      data: [
+        {
+          companyName: "Northern Lattice Power Systems",
+          contactName: "Maya Hernandez",
+          email: "maya@northernlatticepower.example",
+          website: "https://northernlatticepower.example",
+          category: "Transformers",
+          yearsTrading: "18",
+          certs: "ISO 9001:2015, IEEE C57 compliant, authorized Howard distributor",
+          message:
+            "Pad-mount transformers and substation gear for upper-midwest co-ops. We've been quoting through the channel for years and would like the demand visibility PartsPort offers.",
+          status: "PENDING",
+        },
+        {
+          companyName: "Coastline Switchgear & Supply",
+          contactName: "Devon Park",
+          email: "devon@coastlineswitch.example",
+          website: "https://coastlineswitch.example",
+          category: "Switchgear & Breakers",
+          yearsTrading: "11",
+          certs: "ISO 9001:2015, ANSI C37 type-tested, NETA-certified field service",
+          message:
+            "Specialize in medium-voltage switchgear retrofits for municipal utilities along the Eastern Seaboard. Looking to add a digital sales channel.",
+          status: "PENDING",
+        },
+        {
+          companyName: "HighPlains Renewables Distributors",
+          contactName: "Jamie Sokolov",
+          email: "jamie@highplainsrenew.example",
+          website: "https://highplainsrenew.example",
+          category: "Solar & Inverters",
+          yearsTrading: "7",
+          certs: "ISO 9001:2015, NABCEP partner, Enphase + SMA authorized",
+          message:
+            "Commercial PV and storage components, stocked in Denver and Albuquerque. Would like to test PartsPort for buyers in the lower-volume long tail we can't cover with our outside-sales team.",
+          status: "PENDING",
+        },
+      ],
+    });
+  }
+
   // --- Demo orders + RFQs for the buyer demo account. Idempotent: skip if
   // the buyer already has any orders / quotes seeded. ---
   const buyer = await prisma.user.findUnique({
     where: { email: "buyer@partsport.example" },
   });
   if (buyer) {
-    const existingOrderCount = await prisma.order.count({
-      where: { buyerId: buyer.id },
-    });
-    if (existingOrderCount === 0) {
-      await seedDemoOrders(buyer);
-    }
-    const existingQuoteCount = await prisma.quoteRequest.count({
-      where: { buyerId: buyer.id },
-    });
-    if (existingQuoteCount === 0) {
-      await seedDemoQuotes(buyer);
-    }
+    // Per-state top-up. Previously gated on existingOrderCount === 0, which
+    // skipped EVERYTHING when the buyer had any test orders (and the test
+    // teams routinely create PENDING orders by clicking through Buy). Now
+    // we top up each state independently so the demo can always show a
+    // Shipped order with tracking and a Delivered order ready for review.
+    await seedDemoOrders(buyer);
+    await seedDemoQuotes(buyer);
   }
 
   console.log(
@@ -326,9 +405,12 @@ async function getProductBySku(sku) {
 
 async function seedDemoOrders(buyer) {
   // Order A: small PENDING order so the buyer can immediately test the
-  // payment flow on /orders/[id].
+  // payment flow on /orders/[id]. Skip if any PENDING order already exists.
+  const hasPending = await prisma.order.count({
+    where: { buyerId: buyer.id, status: "PENDING" },
+  });
   const pendingProd = await getProductBySku("SAF-AFK12");
-  if (pendingProd) {
+  if (hasPending === 0 && pendingProd) {
     const subtotal = pendingProd.priceCents * 2;
     const fee = Math.round((subtotal * FEE_BPS) / 10000);
     const total = subtotal + fee;
@@ -364,9 +446,16 @@ async function seedDemoOrders(buyer) {
 
   // Order B: PAID and currently Shipped with a carrier and tracking code, so
   // the buyer can test the timeline, the tracking link, and the in-thread
-  // messaging flow.
+  // messaging flow. Skip if any Shipped order already exists for the buyer.
+  const hasShipped = await prisma.order.count({
+    where: {
+      buyerId: buyer.id,
+      status: "PAID",
+      shipmentStage: "Shipped",
+    },
+  });
   const shippedProd = await getProductBySku("RLY-SEL751");
-  if (shippedProd) {
+  if (hasShipped === 0 && shippedProd) {
     const subtotal = shippedProd.priceCents * 1;
     const fee = Math.round((subtotal * FEE_BPS) / 10000);
     const total = subtotal + fee;
@@ -438,9 +527,15 @@ async function seedDemoOrders(buyer) {
   }
 
   // Order C: FULFILLED so the buyer can post a review and (if needed)
-  // open a return.
+  // open a return. Skip if any FULFILLED/Delivered order already exists.
+  const hasDelivered = await prisma.order.count({
+    where: {
+      buyerId: buyer.id,
+      OR: [{ status: "FULFILLED" }, { shipmentStage: "Delivered" }],
+    },
+  });
   const deliveredProd = await getProductBySku("LNH-INS15P");
-  if (deliveredProd) {
+  if (hasDelivered === 0 && deliveredProd) {
     const subtotal = deliveredProd.priceCents * 12;
     const fee = Math.round((subtotal * FEE_BPS) / 10000);
     const total = subtotal + fee;
@@ -502,9 +597,13 @@ async function seedDemoOrders(buyer) {
 }
 
 async function seedDemoQuotes(buyer) {
-  // Quote 1: OPEN (awaiting supplier response).
+  // Quote 1: OPEN (awaiting supplier response). Skip if buyer already has
+  // any OPEN quote.
+  const hasOpen = await prisma.quoteRequest.count({
+    where: { buyerId: buyer.id, status: "OPEN" },
+  });
   const openProd = await getProductBySku("TXF-PM75");
-  if (openProd) {
+  if (hasOpen === 0 && openProd) {
     await prisma.quoteRequest.create({
       data: {
         reference: refCode("RFQ"),
@@ -521,8 +620,12 @@ async function seedDemoQuotes(buyer) {
     });
   }
   // Quote 2: QUOTED (supplier has responded, waiting on buyer accept).
+  // Skip if buyer already has any QUOTED quote.
+  const hasQuoted = await prisma.quoteRequest.count({
+    where: { buyerId: buyer.id, status: "QUOTED" },
+  });
   const quotedProd = await getProductBySku("GEN-DIESEL100");
-  if (quotedProd) {
+  if (hasQuoted === 0 && quotedProd) {
     const created = await prisma.quoteRequest.create({
       data: {
         reference: refCode("RFQ"),

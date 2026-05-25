@@ -20,12 +20,19 @@ type SearchParams = {
 
 const PAGE_SIZE = 24;
 
-const ORDER: Record<string, Prisma.ProductOrderByWithRelationInput> = {
+// Featured uses an array sort: shoppable (instant-checkout) items first,
+// then quote-only items below. First-time buyers click a tile expecting to
+// shop; landing them on "Request a quote" tiles felt like a dead end. Newer
+// listings break ties within each group.
+const ORDER: Record<
+  string,
+  Prisma.ProductOrderByWithRelationInput | Prisma.ProductOrderByWithRelationInput[]
+> = {
   "price-asc": { priceCents: "asc" },
   "price-desc": { priceCents: "desc" },
   eta: { etaDays: "asc" },
   rating: { supplier: { rating: "desc" } },
-  featured: { createdAt: "asc" },
+  featured: [{ quoteOnly: "asc" }, { createdAt: "asc" }],
 };
 
 /** Compact page list: 1, 2, …, current-1, current, current+1, …, last */

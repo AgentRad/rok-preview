@@ -28,6 +28,9 @@ export default function SupplierAdminRow({ supplier }: { supplier: AdminSupplier
   const [website, setWebsite] = useState(supplier.website);
   const [description, setDescription] = useState(supplier.description);
   const [certifications, setCertifications] = useState(supplier.certifications);
+  const [status, setStatus] = useState(supplier.status);
+  const [rating, setRating] = useState(supplier.rating);
+  const [onTimeRate, setOnTimeRate] = useState(supplier.onTimeRate);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -44,6 +47,9 @@ export default function SupplierAdminRow({ supplier }: { supplier: AdminSupplier
           website,
           description,
           certifications,
+          status,
+          rating,
+          onTimeRate,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -128,6 +134,41 @@ export default function SupplierAdminRow({ supplier }: { supplier: AdminSupplier
                 value={certifications}
                 onChange={(e) => setCertifications(e.target.value)}
               />
+            </div>
+            <div className="form-row three">
+              <div>
+                <label>Status</label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                >
+                  <option value="PENDING">PENDING</option>
+                  <option value="APPROVED">APPROVED (verified)</option>
+                  <option value="SUSPENDED">SUSPENDED</option>
+                </select>
+              </div>
+              <div>
+                <label>Rating (0-5)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={0.1}
+                  value={rating}
+                  onChange={(e) => setRating(Number(e.target.value))}
+                />
+              </div>
+              <div>
+                <label>On-time %</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={onTimeRate}
+                  onChange={(e) => setOnTimeRate(Number(e.target.value))}
+                />
+              </div>
             </div>
             <div className="row-gap" style={{ marginTop: 8 }}>
               <button className="btn btn-primary btn-sm" disabled={busy}>

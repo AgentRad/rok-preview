@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { sendOrderDelivered, sendOrderShipped } from "@/lib/email";
-import { ensurePayoutsForOrder } from "@/lib/payouts";
+import { sendOrderDelivered } from "@/lib/email";
+import { markOrderShipped } from "@/lib/shipping";
 
 const STAGES = ["Processing", "Shipped", "Delivered"] as const;
 type Stage = (typeof STAGES)[number];
@@ -39,26 +39,30 @@ export async function POST(
   }
 
   if (stage === "Shipped") {
-    const carrier = body?.carrier?.trim();
-    const trackingCode = body?.trackingCode?.trim();
-    if (!carrier || !trackingCode) {
+    const result = await markOrderShipped(
+      id,
+      body?.carrier ?? "",
+      body?.trackingCode ?? ""
+    );
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+  } else if (stage === "Delivered") {
+    // Refuse to skip Shipped on the way to Delivered. The buyer's order
+    // page renders the tracking card and the shipped-email is what tells
+    // the buyer to expect the delivery in the first place. If admin tries
+    // to flip a PAID order straight to Delivered, force them to mark
+    // Shipped first (which collects carrier + tracking via the shared
+    // markOrderShipped helper).
+    if (!order.carrier || !order.trackingCode) {
       return NextResponse.json(
-        { error: "Carrier and tracking code are required to mark shipped." },
+        {
+          error:
+            "Mark this order Shipped first (with a carrier and tracking number) before flipping to Delivered.",
+        },
         { status: 400 }
       );
     }
-    const updated = await prisma.order.update({
-      where: { id },
-      data: { shipmentStage: "Shipped", carrier, trackingCode },
-      include: { items: true },
-    });
-    sendOrderShipped(updated).catch((err) =>
-      console.error("[email] order-shipped failed:", err)
-    );
-    ensurePayoutsForOrder(id).catch((err) =>
-      console.error("[payouts] create-on-dispatch failed:", err)
-    );
-  } else if (stage === "Delivered") {
     const updated = await prisma.order.update({
       where: { id },
       data: { shipmentStage: "Delivered", status: "FULFILLED" },

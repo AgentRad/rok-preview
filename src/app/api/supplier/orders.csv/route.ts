@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canRunExports, getActiveSupplierContext } from "@/lib/supplier-access";
+import { localDateStamp } from "@/lib/date-fns";
+import { manufacturerSlug } from "@/lib/manufacturer-slug";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +23,7 @@ function dollars(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user || (user.role !== "SUPPLIER" && user.role !== "ADMIN")) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
@@ -107,8 +109,14 @@ export async function GET() {
   }
 
   const csv = lines.join("\r\n") + "\r\n";
-  const today = new Date().toISOString().slice(0, 10);
-  const name = supplier ? `partsport-orders-${supplier.name.replace(/\W+/g, "-").toLowerCase()}-${today}.csv` : `partsport-orders-${today}.csv`;
+  const today = localDateStamp(req);
+  // Unicode-aware supplier-name slug. The old `replace(/\W+/g, "-")` stripped
+  // accents and CJK to empty, producing filenames like "partsport-orders---2026..."
+  // The shared manufacturerSlug helper normalizes diacritics first.
+  const slug = supplier ? manufacturerSlug(supplier.name) || "supplier" : "";
+  const name = supplier
+    ? `partsport-orders-${slug}-${today}.csv`
+    : `partsport-orders-${today}.csv`;
   return new NextResponse(csv, {
     status: 200,
     headers: {

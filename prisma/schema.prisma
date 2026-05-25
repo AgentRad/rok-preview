@@ -76,6 +76,10 @@ model User {
   name                String
   role                Role     @default(BUYER)
   manufacturerName    String?
+  manufacturerTagline String   @default("")
+  manufacturerBio     String   @default("")
+  manufacturerLogoUrl String?
+  manufacturerWebsite String   @default("")
   totpSecret          String?
   totpEnabledAt       DateTime?
   totpBackupCodes     Json?

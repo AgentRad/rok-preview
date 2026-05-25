@@ -1,0 +1,135 @@
+{
+  "steps": [
+    {
+      "step": "Login",
+      "status": "PASS",
+      "note": "landed at https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/oem"
+    },
+    {
+      "step": "/oem dashboard",
+      "status": "PASS",
+      "note": "h1=\"Siemens\""
+    },
+    {
+      "step": "KPIs captured",
+      "status": "INFO",
+      "note": "LISTINGS ON PARTSPORT | 3 | across your product lines // AUTHORIZED DISTRIBUTORS | 2 | carrying your brand // UNITS SOLD | 0 | $0.00 through the platform // OPEN QUOTE REQUESTS | 0 | buyers asking for your equipment // "
+    },
+    {
+      "step": "Demand signals table",
+      "status": "INFO",
+      "note": "13 rows"
+    },
+    {
+      "step": "Authorized distributors section visible",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "step": "Storefront-related links on /oem",
+      "status": "INFO",
+      "note": "Manufacturer dashboard -> /oem ; For manufacturers -> /manufacturers"
+    },
+    {
+      "step": "Header nav",
+      "status": "INFO",
+      "note": "PartsPort | INDUSTRIAL MARKETPLACE | Catalog | How it works | For suppliers | Manufacturer dashboard | Cart | M | Morgan"
+    },
+    {
+      "step": "/manufacturers shows Siemens",
+      "status": "FAIL",
+      "note": "link=null"
+    },
+    {
+      "step": "Siemens storefront link",
+      "status": "FAIL",
+      "note": "no link found on /manufacturers"
+    },
+    {
+      "step": "Access /supplier",
+      "status": "SEALED",
+      "note": "status=200 -> https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/ | \"FREE BUYER ACCOUNTS · VETTED SUPPLIERS ONLY · DELIVERY HANDLED END TO END ARE YOU A SUPPLIER? APPLY TO SELL → PartsPort INDUSTRIAL MARKETPLACE Catalog How it works For suppliers Manufacturer dashboard\""
+    },
+    {
+      "step": "Access /admin",
+      "status": "SEALED",
+      "note": "status=200 -> https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/ | \"FREE BUYER ACCOUNTS · VETTED SUPPLIERS ONLY · DELIVERY HANDLED END TO END ARE YOU A SUPPLIER? APPLY TO SELL → PartsPort INDUSTRIAL MARKETPLACE Catalog How it works For suppliers Manufacturer dashboard\""
+    },
+    {
+      "step": "Access /cart",
+      "status": "ALLOWED-BUG",
+      "note": "status=200 -> https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/cart | \"FREE BUYER ACCOUNTS · VETTED SUPPLIERS ONLY · DELIVERY HANDLED END TO END ARE YOU A SUPPLIER? APPLY TO SELL → PartsPort INDUSTRIAL MARKETPLACE Catalog How it works For suppliers Manufacturer dashboard\""
+    },
+    {
+      "step": "Access /checkout",
+      "status": "ALLOWED-BUG",
+      "note": "status=200 -> https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/checkout | \"FREE BUYER ACCOUNTS · VETTED SUPPLIERS ONLY · DELIVERY HANDLED END TO END ARE YOU A SUPPLIER? APPLY TO SELL → PartsPort INDUSTRIAL MARKETPLACE Catalog How it works For suppliers Manufacturer dashboard\""
+    },
+    {
+      "step": "Access /ops",
+      "status": "SEALED",
+      "note": "status=200 -> https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/ | \"FREE BUYER ACCOUNTS · VETTED SUPPLIERS ONLY · DELIVERY HANDLED END TO END ARE YOU A SUPPLIER? APPLY TO SELL → PartsPort INDUSTRIAL MARKETPLACE Catalog How it works For suppliers Manufacturer dashboard\""
+    },
+    {
+      "step": "/account",
+      "status": "INFO",
+      "note": "len=321; first=My orders |  | Signed in as Morgan Reed · oem@partsport.example · Account settings → |  | TODAY | You are caught up. |  | No payments due, no quotes waiting, no shipments arriving today. Browse the catalog to find "
+    },
+    {
+      "step": "/settings",
+      "status": "INFO",
+      "note": "status=200 url=https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/settings"
+    },
+    {
+      "step": "Edit storefront affordance on /oem",
+      "status": "MISSING",
+      "note": "count=0"
+    },
+    {
+      "step": "OEM header nav items",
+      "status": "INFO",
+      "note": ""
+    },
+    {
+      "step": "OEM can view /catalog",
+      "status": "INFO",
+      "note": "url=https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/catalog"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "failedRequests": [
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/oem?_rsc=ak96a — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/oem?_rsc=cnjrf — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/how-it-works?_rsc=rrass — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/oem?_rsc=rrass — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/suppliers?_rsc=rrass — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/how-it-works?_rsc=1ld0r — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/suppliers?_rsc=1ld0r — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/cart?_rsc=1ld0r — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/oem?_rsc=tnvx4 — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/register?_rsc=tnvx4 — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/oem?_rsc=1ld0r — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/oem?_rsc=4wi9r — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/suppliers?_rsc=4wi9r — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/cart?_rsc=2hegu — net::ERR_ABORTED",
+    "GET https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app/product/MTR-RIVA?_rsc=2hegu — net::ERR_ABORTED"
+  ],
+  "kpiText": "LISTINGS ON PARTSPORT | 3 | across your product lines\nAUTHORIZED DISTRIBUTORS | 2 | carrying your brand\nUNITS SOLD | 0 | $0.00 through the platform\nOPEN QUOTE REQUESTS | 0 | buyers asking for your equipment\n",
+  "searchTerms": [
+    "/admin\t6",
+    "circuit breaker\t2",
+    "transformer\t2",
+    "bolts\t2",
+    "standby generator\t1",
+    "protective relay\t1",
+    "500 kva transformer\t1",
+    "breaker\t1",
+    "15 kV Vacuum Circuit Breaker\nSWG-VCB15\n\tSwitchgear & Breakers\tVoltworks Switchgear\t$12,900.00\t3",
+    "3VA Molded Case Circuit Breaker, 250 A\nSWG-3VA-250\n\tSwitchgear & Breakers\tVoltworks Switchgear\t$680.00\t140"
+  ],
+  "storefrontLinks": [
+    "Manufacturer dashboard -> /oem",
+    "For manufacturers -> /manufacturers"
+  ]
+}

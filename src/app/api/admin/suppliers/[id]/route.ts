@@ -35,6 +35,8 @@ export async function PATCH(
     website?: string;
     description?: string;
     status?: "PENDING" | "APPROVED" | "SUSPENDED";
+    rating?: number;
+    onTimeRate?: number;
   } = {};
   if (typeof body.name === "string" && body.name.trim()) data.name = body.name.trim();
   if (typeof body.contactEmail === "string" && body.contactEmail.trim()) {
@@ -51,12 +53,56 @@ export async function PATCH(
   if (typeof body.description === "string") {
     data.description = body.description.trim();
   }
-  if (
-    body.status === "PENDING" ||
-    body.status === "APPROVED" ||
-    body.status === "SUSPENDED"
-  ) {
-    data.status = body.status;
+  // Status: validate AND reject. Previously we silently dropped invalid
+  // statuses, which made the API lie about what it persisted. UI guards
+  // through a select but the API should be honest too.
+  if (body.status !== undefined) {
+    if (
+      body.status === "PENDING" ||
+      body.status === "APPROVED" ||
+      body.status === "SUSPENDED"
+    ) {
+      data.status = body.status;
+    } else {
+      return NextResponse.json(
+        {
+          error: `Invalid status "${String(body.status)}". Must be PENDING, APPROVED, or SUSPENDED.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+  if (body.rating !== undefined) {
+    if (
+      typeof body.rating === "number" &&
+      Number.isFinite(body.rating) &&
+      body.rating >= 0 &&
+      body.rating <= 5
+    ) {
+      data.rating = body.rating;
+    } else {
+      return NextResponse.json(
+        { error: `Invalid rating "${String(body.rating)}". Must be 0 to 5.` },
+        { status: 400 }
+      );
+    }
+  }
+  if (body.onTimeRate !== undefined) {
+    if (
+      typeof body.onTimeRate === "number" &&
+      Number.isFinite(body.onTimeRate) &&
+      body.onTimeRate >= 0 &&
+      body.onTimeRate <= 100
+    ) {
+      data.onTimeRate = body.onTimeRate;
+    } else {
+      return NextResponse.json(
+        {
+          error: `Invalid onTimeRate "${String(body.onTimeRate)}". Must be 0 to 100.`,
+        },
+        { status: 400 }
+      );
+    }
   }
 
   const updated = await prisma.supplier.update({ where: { id }, data });

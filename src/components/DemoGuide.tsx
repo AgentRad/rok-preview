@@ -14,6 +14,31 @@ export default function DemoGuide() {
     setReady(true);
   }, []);
 
+  // Escape dismisses; clicking anywhere in the underlying page also dismisses
+  // (the overlay itself is pointer-events:none, so it never traps clicks).
+  // The first scroll, wheel, or touchmove dismisses too, so the buyer who
+  // came to shop gets out of the guide by simply doing what they came to do.
+  // Listening on `scroll` alone missed cases where the page hadn't scrolled
+  // yet (short pages, header pinned) but the user had already wheeled 500px.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    const dismiss = () => close();
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", dismiss, { passive: true });
+    window.addEventListener("wheel", dismiss, { passive: true });
+    window.addEventListener("touchmove", dismiss, { passive: true });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", dismiss);
+      window.removeEventListener("wheel", dismiss);
+      window.removeEventListener("touchmove", dismiss);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   function close() {
     setOpen(false);
     localStorage.setItem(KEY, "1");
@@ -37,13 +62,11 @@ export default function DemoGuide() {
   }
 
   return (
-    <div className="dg-overlay" onClick={close}>
+    <div className="dg-overlay" aria-hidden="true">
       <div
         className="demo-guide"
         role="dialog"
-        aria-modal="true"
         aria-label="Demo guide"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="dg-head">
           <strong>Exploring the PartsPort prototype</strong>

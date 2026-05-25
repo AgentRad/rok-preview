@@ -1,0 +1,3 @@
+Invoice No,Customer,Email,Date,Item,SKU,Supplier,Qty,Rate,Amount,Status
+INV-PP-ZN9WTY,Jordan Buyer,buyer@partsport.example,2026-05-25,75 kVA Pad-Mount Distribution Transformer,TXF-PM75,Substation Components Co.,1,8450.00,8450.00,PAID
+INV-PP-ZN9WTY,Jordan Buyer,buyer@partsport.example,2026-05-25,PartsPort platform fee,PP-FEE,PartsPort,1,507.00,507.00,PAID

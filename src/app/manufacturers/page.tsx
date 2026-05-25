@@ -1,9 +1,72 @@
 import Link from "next/link";
+import { prisma } from "@/lib/db";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ManufacturerForm from "@/components/ManufacturerForm";
+import { manufacturerSlug } from "@/lib/manufacturer-slug";
 
 export const dynamic = "force-dynamic";
+
+type LiveBrand = {
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  tagline: string;
+  productCount: number;
+  /** True when an OEM (MANUFACTURER) user has registered this brand. */
+  claimed: boolean;
+};
+
+async function getLiveBrands(): Promise<LiveBrand[]> {
+  // Brands are any (a) MANUFACTURER user with a name set, plus (b) any
+  // manufacturer string that appears on an active Product. We dedupe by name.
+  const [oems, productGroups] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: "MANUFACTURER", manufacturerName: { not: null } },
+      select: {
+        manufacturerName: true,
+        manufacturerTagline: true,
+        manufacturerLogoUrl: true,
+      },
+    }),
+    prisma.product.groupBy({
+      by: ["manufacturer"],
+      where: { active: true },
+      _count: { _all: true },
+    }),
+  ]);
+  const counts = new Map<string, number>();
+  for (const g of productGroups) counts.set(g.manufacturer, g._count._all);
+  // Build the OEM-backed brands first (these get custom logo + tagline)
+  const byName = new Map<string, LiveBrand>();
+  for (const o of oems) {
+    if (!o.manufacturerName) continue;
+    byName.set(o.manufacturerName, {
+      name: o.manufacturerName,
+      slug: manufacturerSlug(o.manufacturerName),
+      logoUrl: o.manufacturerLogoUrl,
+      tagline: o.manufacturerTagline,
+      productCount: counts.get(o.manufacturerName) ?? 0,
+      claimed: true,
+    });
+  }
+  // Add product-only brands (no OEM user yet) so the page reflects the real catalog
+  for (const [name, count] of counts) {
+    if (!byName.has(name)) {
+      byName.set(name, {
+        name,
+        slug: manufacturerSlug(name),
+        logoUrl: null,
+        tagline: "",
+        productCount: count,
+        claimed: false,
+      });
+    }
+  }
+  return [...byName.values()]
+    .filter((b) => b.productCount > 0)
+    .sort((a, b) => b.productCount - a.productCount);
+}
 
 const VALUE = [
   {
@@ -32,7 +95,8 @@ const VALUE = [
   },
 ];
 
-export default function ManufacturersPage() {
+export default async function ManufacturersPage() {
+  const brands = await getLiveBrands();
   return (
     <>
       <SiteHeader />
@@ -82,6 +146,58 @@ export default function ManufacturersPage() {
             </div>
           </div>
         </section>
+
+        {brands.length > 0 && (
+          <section className="section">
+            <div className="wrap">
+              <div className="section-head center">
+                <span className="eyebrow">Brands</span>
+                <h2>{brands.length} manufacturer{brands.length === 1 ? "" : "s"} on PartsPort</h2>
+                <p>Each storefront verified, each distributor vetted, each search routed back as demand signal.</p>
+              </div>
+              <div className="brand-grid">
+                {brands.map((b) => (
+                  <Link
+                    key={b.slug}
+                    href={`/manufacturers/${b.slug}`}
+                    className={
+                      "brand-card" + (b.claimed ? " is-claimed" : "")
+                    }
+                  >
+                    <div className="brand-card-logo">
+                      {b.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={b.logoUrl} alt={`${b.name} logo`} />
+                      ) : (
+                        <div className="brand-card-placeholder">
+                          {b.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="brand-card-name">
+                        {b.name}
+                        {b.claimed && (
+                          <span className="brand-claimed" title="Verified manufacturer presence">
+                            ✓ Claimed
+                          </span>
+                        )}
+                      </div>
+                      {b.tagline ? (
+                        <div className="brand-card-tagline">{b.tagline}</div>
+                      ) : (
+                        <div className="brand-card-tagline muted-text">
+                          {b.productCount} listing{b.productCount === 1 ? "" : "s"}
+                          {!b.claimed && " · storefront unclaimed"}
+                        </div>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         <section className="section alt">
           <div className="wrap">

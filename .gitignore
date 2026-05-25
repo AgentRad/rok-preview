@@ -9,3 +9,20 @@ node_modules/
 .next/
 next-env.d.ts
 *.tsbuildinfo
+.env*
+test-runs/
+
+# Testing team artifacts that spill into repo root (probe scripts,
+# screenshots, result JSON, output dumps). Belt-and-suspenders alongside
+# the test-runs/ ignore in case the testers run scripts in repo root.
+/anon-*
+/buyer-*
+/supplier-*
+/admin-*
+/oem-*
+/*-test.mjs
+/*-test-result.json
+/*-probe.mjs
+/*-result.json
+/*-out.txt
+/*-out[0-9].txt

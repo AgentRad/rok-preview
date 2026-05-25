@@ -3,7 +3,10 @@ import { requireRole } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import AttentionFeed from "@/components/AttentionFeed";
+import OemProfileEditor from "@/components/OemProfileEditor";
 import { getManufacturerAttention } from "@/lib/attention";
+import { manufacturerSlug } from "@/lib/manufacturer-slug";
+import { isBlobConfigured } from "@/lib/blob-config";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -48,8 +51,42 @@ export default async function OemDashboard() {
     prisma.quoteRequest.findMany({
       where: { product: { manufacturer: brand } },
     }),
-    prisma.searchEvent.findMany({ orderBy: { createdAt: "desc" }, take: 80 }),
+    // Brand-scoped demand only. Previously this fetched ALL search events
+    // across the marketplace, which leaked every buyer's queries to every
+    // OEM. Now we only return searches that mention this OEM's brand by
+    // name (case-insensitive contains). Category-level demand expansion
+    // happens client-side below by filtering through the OEM's own
+    // product categories, so OEMs also see "75 kVA transformer" style
+    // queries even when their name wasn't typed.
+    prisma.searchEvent.findMany({
+      where: { query: { contains: brand, mode: "insensitive" } },
+      orderBy: { createdAt: "desc" },
+      take: 80,
+    }),
   ]);
+
+  // Category-scoped second pass: pull recent searches that match a category
+  // this OEM actually has products in. Combined with the brand-name pass
+  // above, this gives the OEM useful demand intelligence without exposing
+  // unrelated searches from other manufacturers' segments.
+  const ownCategories = Array.from(new Set(products.map((p) => p.category)));
+  const categorySearches = ownCategories.length
+    ? await prisma.searchEvent.findMany({
+        where: {
+          OR: ownCategories.map((c) => ({
+            query: { contains: c, mode: "insensitive" as const },
+          })),
+        },
+        orderBy: { createdAt: "desc" },
+        take: 80,
+      })
+    : [];
+  // Merge + dedupe by id; sort by recency.
+  const merged = new Map<string, (typeof searches)[number]>();
+  for (const s of [...searches, ...categorySearches]) merged.set(s.id, s);
+  const brandRelevantSearches = Array.from(merged.values()).sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+  );
 
   const unitsSold = orderItems.reduce((s, i) => s + i.qty, 0);
   const gmv = orderItems.reduce((s, i) => s + i.unitPriceCents * i.qty, 0);
@@ -74,7 +111,7 @@ export default async function OemDashboard() {
   const distributors = [...distMap.values()].sort((a, b) => b.count - a.count);
 
   const demand = new Map<string, number>();
-  for (const s of searches) {
+  for (const s of brandRelevantSearches) {
     const k = s.query.trim().toLowerCase();
     if (k) demand.set(k, (demand.get(k) || 0) + 1);
   }
@@ -100,6 +137,25 @@ export default async function OemDashboard() {
             emptyBody="Buyer searches mentioning your brand will surface here as soon as they hit the platform."
             emptyAction={{ label: "View demand details", href: "/oem#demand" }}
           />
+
+          <div className="card" id="storefront">
+            <div className="card-head">
+              <h2>Public storefront</h2>
+            </div>
+            <div className="card-body">
+              <OemProfileEditor
+                brand={brand}
+                slug={manufacturerSlug(brand)}
+                blobConfigured={isBlobConfigured()}
+                initial={{
+                  tagline: user.manufacturerTagline,
+                  bio: user.manufacturerBio,
+                  website: user.manufacturerWebsite,
+                  logoUrl: user.manufacturerLogoUrl,
+                }}
+              />
+            </div>
+          </div>
 
           <div className="kpi-grid">
             <div className="kpi">

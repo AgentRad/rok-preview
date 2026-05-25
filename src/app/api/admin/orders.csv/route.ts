@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { localDateStamp } from "@/lib/date-fns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ function dollars(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user || user.role !== "ADMIN") {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
@@ -78,7 +79,7 @@ export async function GET() {
   }
 
   const csv = lines.join("\r\n") + "\r\n";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStamp(req);
   return new NextResponse(csv, {
     status: 200,
     headers: {

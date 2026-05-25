@@ -1,0 +1,52 @@
+Siemens
+
+Manufacturer dashboard: your demand, distributors, and sales on PartsPort. Every order routes to an authorized distributor, with zero channel conflict.
+
+TODAY
+No new demand signals.
+
+Buyer searches mentioning your brand will surface here as soon as they hit the platform.
+
+View demand details
+LISTINGS ON PARTSPORT
+3
+across your product lines
+AUTHORIZED DISTRIBUTORS
+2
+carrying your brand
+UNITS SOLD
+0
+$0.00 through the platform
+OPEN QUOTE REQUESTS
+0
+buyers asking for your equipment
+What buyers are searching for
+SEARCH TERM	TIMES SEARCHED
+/admin	6
+circuit breaker	2
+transformer	2
+bolts	2
+standby generator	1
+protective relay	1
+500 kva transformer	1
+breaker	1
+Live demand intelligence: what utilities and contractors are looking for, before it reaches your distributors.
+Your products on PartsPort
+PRODUCT	CATEGORY	LISTED BY	LIST PRICE	STOCK
+
+15 kV Vacuum Circuit Breaker
+SWG-VCB15
+	Switchgear & Breakers	Voltworks Switchgear	$12,900.00	3
+
+3VA Molded Case Circuit Breaker, 250 A
+SWG-3VA-250
+	Switchgear & Breakers	Voltworks Switchgear	$680.00	140
+
+SIPROTEC 5 Feeder Protection Relay
+RLY-SIPRO5
+	Protective Relays	Relay & Protection Partners	$4,250.00	9
+Authorized distributors
+DISTRIBUTOR	RATING	YOUR PRODUCTS CARRIED
+Voltworks Switchgear	★ 4.8	2
+Relay & Protection Partners	★ 4.9	1
+Only verified, authorized distributors can list your brand, so counterfeit and gray-market listings are kept off the platform.

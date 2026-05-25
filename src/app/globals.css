@@ -723,6 +723,161 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   font-size: 12px;
 }
 .image-url-toggle { margin-top: 4px; }
+/* ---------- Manufacturer storefront ---------- */
+.mfr-hero { background: var(--surface); border-bottom: 1px solid var(--line); }
+.mfr-hero .wrap { padding: 56px 32px 48px; }
+.mfr-hero-grid {
+  display: grid; grid-template-columns: 140px 1fr; gap: 32px; align-items: center;
+}
+@media (max-width: 720px) {
+  .mfr-hero-grid { grid-template-columns: 1fr; gap: 20px; }
+}
+.mfr-hero-mark {
+  width: 140px; height: 140px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-2); overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.mfr-hero-mark img { width: 100%; height: 100%; object-fit: contain; padding: 12px; }
+.mfr-hero-placeholder {
+  font-family: var(--mono); font-size: 42px; font-weight: 500;
+  color: var(--steel); letter-spacing: -.02em;
+}
+.mfr-hero h1 {
+  font-size: clamp(34px, 5vw, 56px); font-weight: 300;
+  letter-spacing: -.035em; line-height: 1.05; margin-top: 8px;
+}
+.mfr-tagline {
+  margin-top: 14px; font-size: 17px; color: var(--steel); max-width: 56ch;
+  line-height: 1.5;
+}
+.mfr-hero-meta {
+  margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap;
+  font-size: 14px; color: var(--steel); align-items: center;
+}
+.mfr-hero-meta strong { color: var(--ink); font-weight: 600; }
+.mfr-hero-meta a { color: var(--blue); text-decoration: none; font-weight: 500; }
+.mfr-hero-meta a:hover { text-decoration: underline; }
+.mfr-bio { max-width: 720px; font-size: 16px; line-height: 1.65; color: var(--ink-soft); }
+.mfr-bio p { margin: 0; white-space: pre-line; }
+
+.mfr-dist-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+.mfr-dist-card {
+  display: flex; gap: 14px; align-items: center;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 14px;
+}
+.mfr-dist-logo {
+  width: 56px; height: 56px; flex-shrink: 0;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface-2); overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.mfr-dist-logo img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.mfr-dist-placeholder {
+  font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--steel);
+}
+/* Claim CTA shown on unclaimed (stub) storefronts */
+.claim-cta {
+  margin-top: 24px; padding: 16px 18px;
+  background: var(--surface); border: 1px dashed var(--ink);
+  border-radius: var(--radius-sm);
+  display: flex; flex-direction: column; gap: 8px;
+  max-width: 56ch;
+}
+.claim-cta strong { font-size: 14px; font-weight: 600; }
+.claim-cta span { font-size: 13.5px; color: var(--steel); line-height: 1.5; }
+.claim-cta .btn { align-self: flex-start; margin-top: 4px; }
+.claim-callout {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 32px;
+  text-align: center; max-width: 720px; margin: 0 auto;
+}
+.claim-callout h3 {
+  font-size: 22px; font-weight: 500; letter-spacing: -.02em;
+}
+.claim-callout p {
+  margin: 12px auto 18px; max-width: 56ch; color: var(--steel);
+  font-size: 14.5px; line-height: 1.6;
+}
+
+.brand-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.brand-card {
+  display: flex; align-items: center; gap: 14px; padding: 14px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); text-decoration: none; color: inherit;
+  transition: border-color .15s, transform .15s;
+}
+.brand-card:hover { border-color: var(--ink); }
+.brand-card-logo {
+  width: 56px; height: 56px; flex-shrink: 0;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface-2); overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.brand-card-logo img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.brand-card-placeholder {
+  font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--steel);
+}
+.brand-card-name {
+  font-weight: 600; font-size: 15px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.brand-card-tagline { font-size: 12.5px; color: var(--steel); margin-top: 2px; }
+.brand-card.is-claimed { border-color: var(--ink-soft); }
+.brand-claimed {
+  font-size: 10px; font-weight: 600; letter-spacing: .04em;
+  color: var(--green); background: rgba(34, 122, 80, .08);
+  padding: 2px 7px; border-radius: 100px;
+  text-transform: none;
+}
+
+/* ---------- OEM profile editor ---------- */
+.oem-editor { display: flex; flex-direction: column; gap: 18px; }
+.oem-editor-head { padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.oem-editor-grid {
+  display: grid; grid-template-columns: 200px 1fr; gap: 28px;
+}
+@media (max-width: 720px) {
+  .oem-editor-grid { grid-template-columns: 1fr; gap: 18px; }
+}
+.oem-editor-logo { display: flex; flex-direction: column; align-items: flex-start; }
+.oem-editor-fields { display: flex; flex-direction: column; gap: 14px; }
+.oem-field { display: flex; flex-direction: column; gap: 5px; }
+.oem-field-label {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--steel); font-weight: 600;
+}
+.oem-field input, .oem-field textarea {
+  font: inherit; font-size: 14.5px; padding: 9px 12px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink);
+  resize: vertical;
+}
+.oem-field input:focus, .oem-field textarea:focus {
+  outline: none; border-color: var(--ink);
+}
+.oem-field-help { font-size: 12px; color: var(--steel-light); }
+
+/* Inline carrier + tracking form on supplier 'Mark shipped' button */
+.fulfill-form {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  justify-content: flex-end;
+}
+.fulfill-form input[type="text"] {
+  font: inherit; font-size: 12.5px; padding: 5px 8px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink);
+  width: 130px;
+}
+.fulfill-form input[type="text"]:focus { outline: none; border-color: var(--ink); }
+
 .logo-uploader { display: flex; gap: 18px; align-items: flex-start; }
 .logo-specs {
   list-style: none; padding: 12px 14px; margin: 14px 0 0;
@@ -920,6 +1075,8 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 /* ---------- Forms ---------- */
 .form-row { margin-bottom: 18px; }
 .form-row.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-row.three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+@media (max-width: 600px) { .form-row.three { grid-template-columns: 1fr; } }
 .form-row label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 7px; font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--steel); }
 .form-row input, .form-row select, .form-row textarea {
   width: 100%; font-family: var(--sans); font-size: 14.5px; padding: 11px 13px;
@@ -1153,16 +1310,25 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   cursor: pointer; box-shadow: 0 8px 28px rgba(26, 25, 22, .22);
 }
 .demo-launch:hover { background: #000; }
+/* Non-blocking guide: overlay passes clicks through to the page below; only
+   the dialog box itself is interactive. No backdrop dim — the guide should
+   nudge, not gatekeep. Buyers can read it or ignore it without ever clicking
+   "Close". Escape, scroll, or the X button all dismiss. */
 .dg-overlay {
   position: fixed; inset: 0; z-index: 260;
-  background: rgba(22, 21, 15, .45);
-  display: flex; align-items: center; justify-content: center; padding: 20px;
+  display: flex; align-items: flex-end; justify-content: flex-end;
+  padding: 20px;
+  pointer-events: none;
 }
 .demo-guide {
-  width: 380px; max-width: 100%; max-height: 90vh; overflow-y: auto;
+  width: 380px; max-width: calc(100vw - 40px); max-height: 90vh; overflow-y: auto;
   background: var(--surface); border: 1px solid var(--line-strong);
   border-radius: var(--radius); box-shadow: 0 24px 60px rgba(26, 25, 22, .3);
   padding: 24px;
+  pointer-events: auto;
+}
+@media (min-width: 720px) {
+  .dg-overlay { align-items: center; justify-content: center; }
 }
 .dg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .dg-head strong { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
@@ -1233,6 +1399,19 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .invoice-doc {
   background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
   padding: 56px 56px 48px; box-shadow: 0 4px 24px rgba(0,0,0,.04);
+  position: relative;
+}
+/* If a code path ever renders an invoice for an unpaid order, the DRAFT
+   watermark makes it obvious it's not a real receipt. Today the PENDING
+   path doesn't reach the invoice doc, but this guards against regression. */
+.invoice-doc.draft::before {
+  content: "DRAFT";
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18vw; font-weight: 800; letter-spacing: .02em;
+  color: rgba(176, 38, 38, .08); pointer-events: none;
+  transform: rotate(-20deg);
+  z-index: 1;
 }
 .invoice-head {
   display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap;
