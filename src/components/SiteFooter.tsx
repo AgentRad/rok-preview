@@ -48,7 +48,17 @@ export default function SiteFooter() {
         </div>
         <div className="footer-bottom">
           <span>© 2026 PartsPort, Inc. All rights reserved.</span>
-          <span>Terms of Service · Privacy Policy · Supplier Agreement</span>
+          <span className="footer-legal-links">
+            <Link href="/legal/terms">Terms of Service</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/legal/privacy">Privacy Policy</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/legal/acceptable-use">Acceptable Use</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/legal/returns">Returns</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/legal/supplier-agreement">Supplier Agreement</Link>
+          </span>
         </div>
       </div>
     </footer>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import DemoGuide from "@/components/DemoGuide";
+import CookieConsent from "@/components/CookieConsent";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rok-preview.vercel.app"),
@@ -43,6 +44,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        <CookieConsent />
         {process.env.VERCEL_ENV !== "production" && <DemoGuide />}
       </body>
     </html>
