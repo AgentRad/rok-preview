@@ -13,6 +13,8 @@ type LiveBrand = {
   logoUrl: string | null;
   tagline: string;
   productCount: number;
+  /** True when an OEM (MANUFACTURER) user has registered this brand. */
+  claimed: boolean;
 };
 
 async function getLiveBrands(): Promise<LiveBrand[]> {
@@ -45,6 +47,7 @@ async function getLiveBrands(): Promise<LiveBrand[]> {
       logoUrl: o.manufacturerLogoUrl,
       tagline: o.manufacturerTagline,
       productCount: counts.get(o.manufacturerName) ?? 0,
+      claimed: true,
     });
   }
   // Add product-only brands (no OEM user yet) so the page reflects the real catalog
@@ -56,6 +59,7 @@ async function getLiveBrands(): Promise<LiveBrand[]> {
         logoUrl: null,
         tagline: "",
         productCount: count,
+        claimed: false,
       });
     }
   }
@@ -156,7 +160,9 @@ export default async function ManufacturersPage() {
                   <Link
                     key={b.slug}
                     href={`/manufacturers/${b.slug}`}
-                    className="brand-card"
+                    className={
+                      "brand-card" + (b.claimed ? " is-claimed" : "")
+                    }
                   >
                     <div className="brand-card-logo">
                       {b.logoUrl ? (
@@ -168,13 +174,21 @@ export default async function ManufacturersPage() {
                         </div>
                       )}
                     </div>
-                    <div>
-                      <div className="brand-card-name">{b.name}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="brand-card-name">
+                        {b.name}
+                        {b.claimed && (
+                          <span className="brand-claimed" title="Verified manufacturer presence">
+                            ✓ Claimed
+                          </span>
+                        )}
+                      </div>
                       {b.tagline ? (
                         <div className="brand-card-tagline">{b.tagline}</div>
                       ) : (
                         <div className="brand-card-tagline muted-text">
                           {b.productCount} listing{b.productCount === 1 ? "" : "s"}
+                          {!b.claimed && " · storefront unclaimed"}
                         </div>
                       )}
                     </div>

@@ -48,6 +48,21 @@ export async function POST(
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
   } else if (stage === "Delivered") {
+    // Refuse to skip Shipped on the way to Delivered. The buyer's order
+    // page renders the tracking card and the shipped-email is what tells
+    // the buyer to expect the delivery in the first place. If admin tries
+    // to flip a PAID order straight to Delivered, force them to mark
+    // Shipped first (which collects carrier + tracking via the shared
+    // markOrderShipped helper).
+    if (!order.carrier || !order.trackingCode) {
+      return NextResponse.json(
+        {
+          error:
+            "Mark this order Shipped first (with a carrier and tracking number) before flipping to Delivered.",
+        },
+        { status: 400 }
+      );
+    }
     const updated = await prisma.order.update({
       where: { id },
       data: { shipmentStage: "Delivered", status: "FULFILLED" },

@@ -277,6 +277,42 @@ async function main() {
     });
   }
 
+  // --- Backfill any Shipped/Delivered orders that are missing carrier or
+  // trackingCode (can happen when a test path advances an order through
+  // /ops without filling in the fields). Without these the buyer's order
+  // page hides the tracking card on first login. ---
+  const ordersMissingTracking = await prisma.order.findMany({
+    where: {
+      shipmentStage: { in: ["Shipped", "Delivered"] },
+      OR: [
+        { carrier: null },
+        { carrier: "" },
+        { trackingCode: null },
+        { trackingCode: "" },
+      ],
+    },
+    select: { id: true, reference: true, carrier: true, trackingCode: true },
+  });
+  for (let i = 0; i < ordersMissingTracking.length; i++) {
+    const o = ordersMissingTracking[i];
+    await prisma.order.update({
+      where: { id: o.id },
+      data: {
+        carrier: o.carrier || (i % 2 === 0 ? "FedEx Freight" : "UPS"),
+        trackingCode:
+          o.trackingCode ||
+          `1Z${Math.random().toString(36).toUpperCase().slice(2, 8)}${(1000 + i).toString().padStart(4, "0")}`,
+      },
+    });
+  }
+  if (ordersMissingTracking.length > 0) {
+    console.log(
+      "Seed: backfilled carrier/tracking on",
+      ordersMissingTracking.length,
+      "Shipped/Delivered orders that were missing it."
+    );
+  }
+
   // --- Demo supplier applications. Idempotent: only seed when zero PENDING
   // applications exist, so admin can demo the approve/reject workflow. ---
   const pendingApps = await prisma.supplierApplication.count({

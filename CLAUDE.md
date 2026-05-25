@@ -78,9 +78,11 @@ system. No em dashes in any copy.
   `npm i resend`, gate on `RESEND_API_KEY`, no-op when absent. Send order confirmation,
   order shipped (with tracking), supplier-application result, password reset. Add a
   password-reset flow (`PasswordResetToken` model + request/reset pages).
-- **F. Stripe payments** (owner has a Stripe account; keys not yet in Vercel). Hosted
-  Stripe Checkout, card + ACH. Routes `/api/stripe/create-session` and
-  `/api/stripe/webhook`. Gate on `STRIPE_SECRET_KEY`, keep demo fallback.
+- **F. Stripe payments** (SHIPPED: keys live in Vercel, Stripe Tax enabled).
+  Hosted Stripe Checkout, card + ACH. Routes `/api/payments/create-session`
+  and `/api/payments/webhook` (provider-agnostic abstraction at
+  `src/lib/payments.ts` — adding another processor swaps a driver).
+  Gate on `STRIPE_SECRET_KEY`, demo fallback kicks in when missing.
 - **G. Supplier payouts** (no account). `Payout` model; create on dispatch; show on
   `/supplier`; admin marks paid from `/ops`.
 - **H. Catalog at scale** (no account). Pagination + brand/manufacturer filter on
@@ -98,8 +100,9 @@ endpoints, per-page SEO metadata.
 - Vercel env vars set: `ANTHROPIC_API_KEY`, `SESSION_SECRET`, `RESEND_API_KEY`. Still
   needed when those phases land: `STRIPE_SECRET_KEY`,
   `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`.
-- Stripe: owner has an account; in test mode get the keys, create a webhook pointing at
-  `<deploy-url>/api/stripe/webhook`, copy the signing secret, enable ACH.
+- Stripe: webhook points at `<deploy-url>/api/payments/webhook` (NOT
+  `/api/stripe/webhook` — the route lives under the processor-agnostic
+  `/api/payments/*` namespace).
 - Product photos: owner supplies; image URLs go on listings.
 - A rename of the product/brand is planned for later.
 
