@@ -280,13 +280,63 @@ export async function runSearch(query: string): Promise<SearchResult> {
   if (isAISearchEnabled()) {
     const ai = await aiRank(q, products);
     if (ai) {
-      return { interpretation: ai.interpretation, products: ai.products, ai: true };
+      // Recall floor: if the AI returned fewer than RECALL_FLOOR results, pad
+      // with heuristic same-category matches that the AI didn't pick. The AI's
+      // top result still ranks first; padding extends the tail. Industrial
+      // buyers want to compare, single-result returns frustrate them.
+      const padded = padToFloor(ai.products, q, products);
+      return {
+        interpretation: ai.interpretation,
+        products: padded,
+        ai: true,
+      };
     }
   }
 
+  // Heuristic-only path gets the same floor pad (already returns category
+  // matches sorted by relevance, but if the score threshold left under 5,
+  // we'd rather show a few weak matches than show nothing useful).
+  const ranked = heuristicRank(q, products);
+  const padded = padToFloor(ranked, q, products);
   return {
     interpretation: `Showing parts matched to “${q}”.`,
-    products: heuristicRank(q, products),
+    products: padded,
     ai: false,
   };
+}
+
+const RECALL_FLOOR = 5;
+
+/**
+ * Ensure the result list has at least RECALL_FLOOR entries when the catalog
+ * has enough plausibly-relevant items. Pads with same-category items the
+ * primary ranker didn't pick. Used for both AI and heuristic paths.
+ */
+function padToFloor(
+  primary: SearchProduct[],
+  query: string,
+  all: SearchProduct[]
+): SearchProduct[] {
+  if (primary.length >= RECALL_FLOOR) return primary;
+  const seen = new Set(primary.map((p) => p.sku));
+  // First, try same-category as the primary results.
+  const cats = new Set(primary.map((p) => p.category));
+  const sameCat = all.filter(
+    (p) => !seen.has(p.sku) && cats.has(p.category)
+  );
+  for (const p of sameCat) {
+    if (primary.length >= RECALL_FLOOR) break;
+    primary.push(p);
+    seen.add(p.sku);
+  }
+  // Still short: pad with heuristic-ranked candidates that share any term.
+  if (primary.length < RECALL_FLOOR) {
+    const heuristic = heuristicRank(query, all).filter((p) => !seen.has(p.sku));
+    for (const p of heuristic) {
+      if (primary.length >= RECALL_FLOOR) break;
+      primary.push(p);
+      seen.add(p.sku);
+    }
+  }
+  return primary;
 }
