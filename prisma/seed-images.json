@@ -1,0 +1,16 @@
+{
+  "_README": "Map of product SKU -> ordered list of public image URLs. Owner pastes URLs here (from thradd.com or other licensed sources). Seeder is idempotent: it skips any SKU that already has ProductImage rows. To force a refresh, manually delete the existing ProductImage rows for that SKU first.",
+
+  "TXF-PM75": [],
+  "SWG-VCB15": [],
+  "SWG-CUT100": [],
+  "RLY-SEL751": [],
+  "CND-ACSR795": [],
+  "CBL-URD10": [],
+  "LNH-INS15P": [],
+  "MTR-RIVA": [],
+  "GEN-PROT48": [],
+  "ATS-200A": [],
+  "PV-QC410": [],
+  "INV-STP50": []
+}

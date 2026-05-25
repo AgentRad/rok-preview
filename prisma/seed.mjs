@@ -1,7 +1,11 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const prisma = new PrismaClient();
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const SUPPLIERS = [
   { name: "Gridline Power Supply", contactEmail: "sales@gridlinepower.example", rating: 4.8, reviews: 164, onTimeRate: 98.3, certifications: "ISO 9001:2015, UL-recognized components" },
@@ -71,6 +75,62 @@ async function main() {
         active: true,
       },
     });
+  }
+
+  // Seed real product photos from seed-images.json (idempotent: skips any
+  // product that already has ProductImage rows).
+  try {
+    const raw = await readFile(join(__dirname, "seed-images.json"), "utf-8");
+    const mapping = JSON.parse(raw);
+    let inserted = 0;
+    let skippedHadImages = 0;
+    let skippedNoUrls = 0;
+    for (const [sku, urls] of Object.entries(mapping)) {
+      if (sku.startsWith("_")) continue;
+      if (!Array.isArray(urls) || urls.length === 0) {
+        skippedNoUrls++;
+        continue;
+      }
+      const product = await prisma.product.findUnique({ where: { sku } });
+      if (!product) continue;
+      const existing = await prisma.productImage.count({
+        where: { productId: product.id },
+      });
+      if (existing > 0) {
+        skippedHadImages++;
+        continue;
+      }
+      for (let i = 0; i < urls.length; i++) {
+        const url = String(urls[i]).trim();
+        if (!url) continue;
+        await prisma.productImage.create({
+          data: { productId: product.id, url, position: i },
+        });
+      }
+      // Sync the legacy single-image field with the primary.
+      if (urls[0]) {
+        await prisma.product.update({
+          where: { id: product.id },
+          data: { imageUrl: String(urls[0]).trim() },
+        });
+      }
+      inserted++;
+    }
+    console.log(
+      "Seed images:",
+      inserted,
+      "products got images,",
+      skippedHadImages,
+      "already had images,",
+      skippedNoUrls,
+      "had no URLs in seed-images.json"
+    );
+  } catch (e) {
+    console.warn(
+      "Skipping seed-images.json (",
+      e?.message || e,
+      "). The site will use line-art fallbacks for products without images."
+    );
   }
 
   const pw = await bcrypt.hash("demo1234", 10);
