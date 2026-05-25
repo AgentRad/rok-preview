@@ -103,18 +103,18 @@ export default async function OrderInvoicePage({
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div className="invoice-meta-label">Invoice</div>
-              <div style={{ fontWeight: 800, fontSize: 18 }}>
+              <div className="invoice-doc-label">Invoice</div>
+              <div style={{ fontWeight: 700, fontSize: 24, letterSpacing: "-.02em" }}>
                 {invoice.number}
               </div>
-              <div className="muted-text" style={{ fontSize: 12.5 }}>
+              <div className="muted-text" style={{ fontSize: 12.5, marginTop: 2 }}>
                 Issued {invoice.issuedAt.toLocaleDateString()}
               </div>
               <div
                 className={
                   "badge " + (INVOICE_STATUS_CLASS[invoice.status] || "")
                 }
-                style={{ marginTop: 6 }}
+                style={{ marginTop: 8 }}
               >
                 {invoice.status}
               </div>
@@ -218,7 +218,7 @@ export default async function OrderInvoicePage({
               <span>{formatCents(invoice.subtotalCents)}</span>
             </div>
             <div className="summary-line">
-              <span>Freight</span>
+              <span>Freight &amp; handling</span>
               <span>{formatCents(invoice.freightCents)}</span>
             </div>
             <div className="summary-line">
@@ -232,18 +232,45 @@ export default async function OrderInvoicePage({
               <span>{formatCents(invoice.taxCents)}</span>
             </div>
             <div className="summary-line total">
-              <span>Total</span>
+              <span>Total due</span>
               <span>{formatCents(invoice.totalCents)}</span>
+            </div>
+
+            <div className="invoice-formula">
+              <strong>Total math:</strong>
+              <br />
+              {formatCents(invoice.subtotalCents)} subtotal
+              <br />
+              + {formatCents(invoice.freightCents)} freight
+              <br />
+              + {formatCents(invoice.feeCents)} platform fee (
+              {(order.feeRateBps / 100).toFixed(order.feeRateBps % 100 === 0 ? 0 : 1)}%
+              )
+              <br />
+              + {formatCents(invoice.taxCents)} sales tax
+              <br />
+              = <strong>{formatCents(invoice.totalCents)}</strong>
             </div>
           </div>
 
+          <div className="invoice-payto">
+            <div className="invoice-payto-label">Remit to / Questions</div>
+            <div style={{ fontWeight: 600 }}>PartsPort, Inc.</div>
+            <div className="muted-text">
+              The Industrial Parts Marketplace
+              <br />
+              support@partsport.agentgaming.gg
+            </div>
+          </div>
+
+          <p className="invoice-thanks">Thank you for your order.</p>
+
           <div className="invoice-footer">
             <p className="muted-text" style={{ fontSize: 12.5 }}>
-              PartsPort holds payment and releases the part price to the
-              supplier on dispatch, retaining the platform fee. Sales tax is
-              remitted to the relevant state. This invoice covers the
-              marketplace transaction. Questions:
-              support@partsport.agentgaming.gg
+              PartsPort collects payment, holds funds in escrow, and releases
+              the part price to the supplier on dispatch, retaining the
+              platform fee. Sales tax is remitted to the relevant state. This
+              invoice covers the marketplace transaction.
             </p>
           </div>
         </div>

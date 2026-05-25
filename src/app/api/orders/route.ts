@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
-import { effectiveBps, feeFor } from "@/lib/money";
+import { computeOrderTotals } from "@/lib/order-totals";
 import { sendOrderConfirmation } from "@/lib/email";
-import { isStripeTaxConfigured } from "@/lib/stripe-tax";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -32,12 +31,11 @@ export async function POST(req: Request) {
   const bySku = new Map(products.map((p) => [p.sku, p]));
 
   const orderItems = [];
-  let subtotal = 0;
+  const lines = [];
   for (const it of items) {
     const p = bySku.get(String(it.sku));
     const qty = Math.max(1, Math.floor(Number(it.qty) || 0));
     if (!p) continue;
-    subtotal += p.priceCents * qty;
     orderItems.push({
       productId: p.id,
       nameSnapshot: p.name,
@@ -45,6 +43,11 @@ export async function POST(req: Request) {
       supplierName: p.supplier.name,
       unitPriceCents: p.priceCents,
       qty,
+    });
+    lines.push({
+      unitPriceCents: p.priceCents,
+      qty,
+      quoteOnly: p.quoteOnly,
     });
   }
   if (orderItems.length === 0) {
@@ -54,10 +57,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const freight = 0;
-  const fee = feeFor(subtotal);
-  const tax = 0;
-  const total = subtotal + freight + fee + tax;
+  // Single source of truth for the order math. See src/lib/order-totals.ts.
+  // Tax stays 0 here; Stripe Tax snapshots it back in markOrderPaid.
+  const totals = computeOrderTotals(lines);
   const user = await getCurrentUser();
 
   const order = await prisma.order.create({
@@ -68,12 +70,12 @@ export async function POST(req: Request) {
       buyerName,
       buyerEmail,
       shipTo,
-      subtotalCents: subtotal,
-      freightCents: freight,
-      feeCents: fee,
-      taxCents: tax,
-      totalCents: total,
-      feeRateBps: effectiveBps(subtotal),
+      subtotalCents: totals.subtotalCents,
+      freightCents: totals.freightCents,
+      feeCents: totals.feeCents,
+      taxCents: totals.taxCents,
+      totalCents: totals.totalCents,
+      feeRateBps: totals.feeRateBps,
       items: { create: orderItems },
     },
     include: { items: true },
@@ -87,10 +89,10 @@ export async function POST(req: Request) {
     ok: true,
     orderId: order.id,
     reference: order.reference,
-    subtotalCents: subtotal,
-    freightCents: freight,
-    feeCents: fee,
-    taxCents: tax,
-    totalCents: total,
+    subtotalCents: totals.subtotalCents,
+    freightCents: totals.freightCents,
+    feeCents: totals.feeCents,
+    taxCents: totals.taxCents,
+    totalCents: totals.totalCents,
   });
 }

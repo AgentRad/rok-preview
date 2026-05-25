@@ -6,6 +6,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PayOrder from "@/components/PayOrder";
 import CancelOrderButton from "@/components/CancelOrderButton";
+import ConfirmReceiptButton from "@/components/ConfirmReceiptButton";
 import ReturnRequestForm from "@/components/ReturnRequestForm";
 import MessageThread from "@/components/MessageThread";
 import { formatCents } from "@/lib/money";
@@ -186,6 +187,15 @@ export default async function OrderPage({
                 note any damage on the carrier delivery receipt before signing.
                 Report claims within the window in the supplier agreement.
               </p>
+              {isBuyer && order.shipmentStage === "Shipped" && (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+                  <div style={{ fontSize: 13.5, marginBottom: 8 }}>
+                    Already received your shipment? Confirm it below so the
+                    review window opens and the order closes out.
+                  </div>
+                  <ConfirmReceiptButton orderId={order.id} />
+                </div>
+              )}
             </div>
           )}
 

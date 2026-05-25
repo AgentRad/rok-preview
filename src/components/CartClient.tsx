@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import ProductImage from "./ProductImage";
 import { getCart, setQty, onCartChange, type CartLine } from "@/lib/cart";
-import { formatCents, feeFor, FEE_RATE_LABEL } from "@/lib/money";
+import { formatCents, FEE_RATE_LABEL } from "@/lib/money";
+import { computeOrderTotals } from "@/lib/order-totals";
 
 type LookupProduct = {
   sku: string;
@@ -16,6 +17,7 @@ type LookupProduct = {
   priceCents: number;
   etaDays: number;
   stock: number;
+  quoteOnly: boolean;
   supplierName: string;
 };
 
@@ -50,11 +52,14 @@ export default function CartClient() {
   }, [refresh]);
 
   const valid = lines.filter((l) => products[l.sku]);
-  const subtotal = valid.reduce(
-    (s, l) => s + products[l.sku].priceCents * l.qty,
-    0
+  const totals = computeOrderTotals(
+    valid.map((l) => ({
+      unitPriceCents: products[l.sku].priceCents,
+      qty: l.qty,
+      quoteOnly: products[l.sku].quoteOnly,
+    }))
   );
-  const fee = feeFor(subtotal);
+  const { subtotalCents: subtotal, freightCents, freight, feeCents: fee, totalCents } = totals;
 
   if (loading) {
     return <p className="muted-text">Loading your cart…</p>;
@@ -128,8 +133,13 @@ export default function CartClient() {
             <span>{formatCents(subtotal)}</span>
           </div>
           <div className="summary-line">
-            <span>Freight</span>
-            <span>{formatCents(0)}</span>
+            <span>
+              Freight
+              <span className="muted-text" style={{ fontSize: 11, marginLeft: 6 }}>
+                {freight.label}
+              </span>
+            </span>
+            <span>{freightCents > 0 ? formatCents(freightCents) : freight.basis === "FREIGHT_QUOTED" ? "TBD" : formatCents(0)}</span>
           </div>
           <div className="summary-line">
             <span>Marketplace fee ({FEE_RATE_LABEL})</span>
@@ -141,11 +151,12 @@ export default function CartClient() {
           </div>
           <div className="summary-line total">
             <span>Order total</span>
-            <span>{formatCents(subtotal + fee)}</span>
+            <span>{formatCents(totalCents)}</span>
           </div>
           <p className="muted-text" style={{ fontSize: 11.5, marginTop: 6 }}>
-            Freight and sales tax are calculated at checkout based on the
-            ship-to address and exemption status.
+            Sales tax is calculated at checkout based on ship-to address.
+            {freight.basis === "FREIGHT_QUOTED" &&
+              " This order includes large equipment; the supplier will quote LTL freight directly after the order is placed."}
           </p>
           <Link
             className="btn btn-primary btn-block"
