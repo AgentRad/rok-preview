@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ReorderButton from "@/components/ReorderButton";
+import AddressBook from "@/components/AddressBook";
 import AttentionFeed from "@/components/AttentionFeed";
 import { getBuyerAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
@@ -19,13 +20,19 @@ const STATUS_CLASS: Record<string, string> = {
 
 export default async function AccountPage() {
   const user = await requireUser();
-  const [orders, attention] = await Promise.all([
+  const [orders, attention, addresses] = await Promise.all([
     prisma.order.findMany({
       where: { buyerId: user.id },
       include: { items: true },
       orderBy: { createdAt: "desc" },
     }),
     getBuyerAttention(user.id),
+    user.role === "BUYER"
+      ? prisma.address.findMany({
+          where: { userId: user.id },
+          orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+        })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -129,6 +136,24 @@ export default async function AccountPage() {
               </div>
             )}
           </div>
+
+          {user.role === "BUYER" && (
+            <div className="card" style={{ marginTop: 24 }}>
+              <div className="card-head">
+                <h2>Delivery addresses</h2>
+                <Link
+                  href="/settings"
+                  className="muted-text"
+                  style={{ fontSize: 13, textDecoration: "none" }}
+                >
+                  Full account settings &rarr;
+                </Link>
+              </div>
+              <div className="card-body">
+                <AddressBook initial={addresses} />
+              </div>
+            </div>
+          )}
         </div>
       </main>
       <SiteFooter />

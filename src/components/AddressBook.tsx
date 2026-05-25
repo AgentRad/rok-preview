@@ -8,6 +8,8 @@ function TaxExemptRow({ address }: { address: Address }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [showUrlPaste, setShowUrlPaste] = useState(false);
+  const [urlDraft, setUrlDraft] = useState("");
   const status = address.taxExemptStatus;
   const url = address.taxExemptCertificateUrl;
 
@@ -26,6 +28,29 @@ function TaxExemptRow({ address }: { address: Address }) {
         setError(data.error || "Upload failed.");
         return;
       }
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitUrl() {
+    if (!urlDraft.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/addresses/${address.id}/tax-exempt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlDraft.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not save the URL.");
+        return;
+      }
+      setUrlDraft("");
+      setShowUrlPaste(false);
       router.refresh();
     } finally {
       setBusy(false);
@@ -92,16 +117,47 @@ function TaxExemptRow({ address }: { address: Address }) {
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            className="link-btn"
-            onClick={() => fileInput.current?.click()}
-            disabled={busy}
-          >
-            {busy ? "Uploading…" : "Upload tax-exempt certificate"}
-          </button>
+          <>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => fileInput.current?.click()}
+              disabled={busy}
+            >
+              {busy ? "Uploading…" : "Upload tax-exempt certificate"}
+            </button>
+            {" · "}
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => setShowUrlPaste((s) => !s)}
+              disabled={busy}
+            >
+              {showUrlPaste ? "Hide URL option" : "Paste a URL"}
+            </button>
+          </>
         )}
       </div>
+      {showUrlPaste && !url && (
+        <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+          <input
+            type="url"
+            className="input-sm"
+            style={{ flex: 1 }}
+            placeholder="https://… link to your hosted certificate"
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={submitUrl}
+            disabled={busy || !urlDraft.trim()}
+          >
+            Save URL
+          </button>
+        </div>
+      )}
       {error && (
         <div className="alert alert-error" style={{ marginTop: 6 }}>
           {error}

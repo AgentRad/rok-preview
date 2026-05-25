@@ -6,6 +6,7 @@ import ReturnActions from "@/components/ReturnActions";
 import AddSupplierForm from "@/components/AddSupplierForm";
 import SupplierAdminRow from "@/components/SupplierAdminRow";
 import AttentionFeed from "@/components/AttentionFeed";
+import TaxExemptReview from "@/components/TaxExemptReview";
 import { getAdminAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
 
@@ -33,7 +34,7 @@ const STATUS_CLASS: Record<string, string> = {
 export default async function AdminConsole() {
   await requireRole("ADMIN");
 
-  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns, attention] =
+  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns, taxExemptAddresses, attention] =
     await Promise.all([
       prisma.order.findMany({
         include: { items: true },
@@ -68,6 +69,16 @@ export default async function AdminConsole() {
         include: { order: { select: { reference: true, buyerName: true } } },
         orderBy: [{ status: "asc" }, { createdAt: "desc" }],
         take: 12,
+      }),
+      prisma.address.findMany({
+        where: { taxExemptCertificateUrl: { not: null } },
+        include: { user: { select: { name: true, email: true } } },
+        orderBy: [
+          // PENDING float to the top; APPROVED / REJECTED below.
+          { taxExemptStatus: "asc" },
+          { createdAt: "desc" },
+        ],
+        take: 30,
       }),
       getAdminAttention(),
     ]);
@@ -320,6 +331,33 @@ export default async function AdminConsole() {
               </div>
             </div>
           )}
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Tax-exempt certificates</h2>
+              {taxExemptAddresses.filter((a) => a.taxExemptStatus === "PENDING").length > 0 && (
+                <span className="muted-text" style={{ fontSize: 13 }}>
+                  {taxExemptAddresses.filter((a) => a.taxExemptStatus === "PENDING").length} pending review
+                </span>
+              )}
+            </div>
+            <TaxExemptReview
+              rows={taxExemptAddresses.map((a) => ({
+                id: a.id,
+                certificateUrl: a.taxExemptCertificateUrl || "",
+                status: a.taxExemptStatus || "PENDING",
+                label: a.label,
+                recipient: a.recipient,
+                company: a.company,
+                city: a.city,
+                region: a.region,
+                postalCode: a.postalCode,
+                buyerName: a.user?.name || "",
+                buyerEmail: a.user?.email || "",
+                createdAt: a.createdAt.toISOString(),
+              }))}
+            />
+          </div>
 
           <div className="card">
             <div className="card-head">

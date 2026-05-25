@@ -16,22 +16,19 @@ const ALLOWED = new Set([
 
 /**
  * Buyers upload a resale or government-entity certificate against a saved
- * address. The certificate goes into Vercel Blob, the URL onto the Address,
- * status flips to PENDING. An admin reviews and sets APPROVED / REJECTED.
+ * address. Two paths:
+ *   - multipart/form-data with a `file` part: uploaded to Vercel Blob (when
+ *     BLOB_READ_WRITE_TOKEN is set).
+ *   - application/json with `{ url }`: skips Blob and just records the
+ *     hosted URL on the address (useful when Blob isn't configured, or for
+ *     buyers who already host their cert in their own DMS).
+ * Either way, status flips to PENDING. Admin reviews and sets APPROVED /
+ * REJECTED via the PATCH below.
  */
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return NextResponse.json(
-      {
-        error:
-          "File uploads are not configured. Add a Vercel Blob store and BLOB_READ_WRITE_TOKEN will auto-populate.",
-      },
-      { status: 503 }
-    );
-  }
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
@@ -44,6 +41,44 @@ export async function POST(
     return NextResponse.json({ error: "Address not found." }, { status: 404 });
   }
 
+  const contentType = req.headers.get("content-type") || "";
+
+  // ---- URL-paste fallback (JSON) ----------------------------------------
+  if (contentType.includes("application/json")) {
+    const body = await req.json().catch(() => ({}));
+    const url = String(body.url || "").trim();
+    if (!url) {
+      return NextResponse.json(
+        { error: "Provide a certificate URL." },
+        { status: 400 }
+      );
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return NextResponse.json(
+        { error: "URL must start with https:// or http://." },
+        { status: 400 }
+      );
+    }
+    await prisma.address.update({
+      where: { id },
+      data: {
+        taxExemptCertificateUrl: url,
+        taxExemptStatus: "PENDING",
+      },
+    });
+    return NextResponse.json({ ok: true, url, status: "PENDING" });
+  }
+
+  // ---- File upload via Vercel Blob -------------------------------------
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return NextResponse.json(
+      {
+        error:
+          "File uploads are not configured. Either add a Vercel Blob store (BLOB_READ_WRITE_TOKEN auto-populates) or paste a hosted certificate URL instead.",
+      },
+      { status: 503 }
+    );
+  }
   const form = await req.formData().catch(() => null);
   if (!form) {
     return NextResponse.json({ error: "Invalid upload payload." }, { status: 400 });
