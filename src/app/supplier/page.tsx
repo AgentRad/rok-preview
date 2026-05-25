@@ -309,6 +309,11 @@ export default async function SupplierDashboard({
                 stock: p.stock,
                 active: p.active,
                 imageUrl: p.imageUrl,
+                weightLbs: p.weightLbs,
+                freightClass: p.freightClass,
+                lengthIn: p.lengthIn,
+                widthIn: p.widthIn,
+                heightIn: p.heightIn,
               }))}
             />
           )}

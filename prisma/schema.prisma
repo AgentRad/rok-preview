@@ -320,6 +320,18 @@ model Product {
   quoteOnly     Boolean        @default(false)
   description   String
   specs         Json
+  // Freight inputs. Populated by the supplier on the listing form (and by
+  // bulk CSV import where present). When weight + dims + freightClass are
+  // all set on every line of an order, real-rate Shippo quotes light up;
+  // otherwise the deterministic fallback in lib/freight.ts takes over.
+  // freightClass values follow NMFC (50, 55, 60, 65, 70, 77.5, 85, 92.5,
+  // 100, 110, 125, 150, 175, 200, 250, 300, 400, 500); stored as a string
+  // because the codes aren't sequential integers.
+  weightLbs     Float?
+  freightClass  String?
+  lengthIn      Float?
+  widthIn       Float?
+  heightIn      Float?
   supplier      Supplier       @relation(fields: [supplierId], references: [id])
   supplierId    String
   active        Boolean        @default(true)

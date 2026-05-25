@@ -46,6 +46,11 @@ export async function PATCH(
     stock?: number;
     active?: boolean;
     imageUrl?: string | null;
+    weightLbs?: number | null;
+    lengthIn?: number | null;
+    widthIn?: number | null;
+    heightIn?: number | null;
+    freightClass?: string | null;
   } = {};
   if (b.price !== undefined && Number(b.price) > 0) {
     data.priceCents = dollarsToCents(Number(b.price));
@@ -58,6 +63,26 @@ export async function PATCH(
   }
   if (b.imageUrl !== undefined) {
     data.imageUrl = String(b.imageUrl || "").trim() || null;
+  }
+  // Freight inputs: clearable to null when the supplier blanks the field
+  // (so they can correct a wrong value), positive numbers otherwise.
+  const parseDimUpdate = (v: unknown): number | null | undefined => {
+    if (v === undefined) return undefined;
+    if (v === null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const wl = parseDimUpdate(b.weightLbs);
+  if (wl !== undefined) data.weightLbs = wl;
+  const li = parseDimUpdate(b.lengthIn);
+  if (li !== undefined) data.lengthIn = li;
+  const wi = parseDimUpdate(b.widthIn);
+  if (wi !== undefined) data.widthIn = wi;
+  const hi = parseDimUpdate(b.heightIn);
+  if (hi !== undefined) data.heightIn = hi;
+  if (b.freightClass !== undefined) {
+    const fc = typeof b.freightClass === "string" ? b.freightClass.trim() : "";
+    data.freightClass = fc || null;
   }
   await prisma.product.update({ where: { id }, data });
   return NextResponse.json({ ok: true });

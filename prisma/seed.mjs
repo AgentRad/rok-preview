@@ -183,6 +183,36 @@ async function main() {
     });
   }
 
+  // Polish 9: backfill freight dims on a handful of representative SKUs
+  // so the freight widget has real numbers to work with on the demo
+  // platform. Per-SKU per-field independent check: if the value is
+  // already set (admin or supplier edited it after seed), leave it alone.
+  const FREIGHT_DIMS = {
+    "GND-ROD58":     { weightLbs: 3.2,   freightClass: "70",  lengthIn: 96,  widthIn: 1,   heightIn: 1 },
+    "SAF-AFK40":     { weightLbs: 14,    freightClass: "85",  lengthIn: 28,  widthIn: 22,  heightIn: 8 },
+    "MTR-FOC":       { weightLbs: 4.5,   freightClass: "92.5",lengthIn: 14,  widthIn: 11,  heightIn: 11 },
+    "RLY-SEL751":    { weightLbs: 11,    freightClass: "92.5",lengthIn: 18,  widthIn: 12,  heightIn: 8 },
+    "SWG-VCB15":     { weightLbs: 480,   freightClass: "150", lengthIn: 60,  widthIn: 30,  heightIn: 56 },
+    "TXF-PM75":      { weightLbs: 1850,  freightClass: "85",  lengthIn: 68,  widthIn: 52,  heightIn: 58 },
+    "GEN-PROT48":    { weightLbs: 920,   freightClass: "85",  lengthIn: 72,  widthIn: 32,  heightIn: 38 },
+    "CND-ACSR795":   { weightLbs: 1.05,  freightClass: "60",  lengthIn: 1,   widthIn: 1,   heightIn: 1 },
+    "ESS-MOD5":      { weightLbs: 110,   freightClass: "92.5",lengthIn: 30,  widthIn: 18,  heightIn: 10 },
+    "PV-QC410":      { weightLbs: 47,    freightClass: "100", lengthIn: 73,  widthIn: 41,  heightIn: 1.5 },
+  };
+  for (const [sku, dims] of Object.entries(FREIGHT_DIMS)) {
+    const existing = await prisma.product.findUnique({ where: { sku } });
+    if (!existing) continue;
+    const update = {};
+    if (existing.weightLbs == null && dims.weightLbs != null) update.weightLbs = dims.weightLbs;
+    if (!existing.freightClass && dims.freightClass) update.freightClass = dims.freightClass;
+    if (existing.lengthIn == null && dims.lengthIn != null) update.lengthIn = dims.lengthIn;
+    if (existing.widthIn == null && dims.widthIn != null) update.widthIn = dims.widthIn;
+    if (existing.heightIn == null && dims.heightIn != null) update.heightIn = dims.heightIn;
+    if (Object.keys(update).length > 0) {
+      await prisma.product.update({ where: { sku }, data: update });
+    }
+  }
+
   // Seed real product photos from seed-images.json. Idempotent top-up:
   // - URLs already in the DB are left alone (preserves any supplier-uploaded
   //   images that were positioned after the seeded ones).
