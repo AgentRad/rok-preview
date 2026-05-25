@@ -177,6 +177,21 @@ model Supplier {
   logoUrl        String?
   website        String         @default("")
   description    String         @default("")
+  // Go-live gate. Defaults to false. The supplier's products are filtered
+  // out of the public catalog, the home page, brand storefronts, search,
+  // and the sitemap until an admin flips this to true (typically after the
+  // 10-item onboarding checklist passes: legal docs approved, bank info
+  // on file, at least one product). See lib/supplier-access.ts.
+  publicVisible  Boolean        @default(false)
+  // Payout method summary. PartsPort does NOT store full account or routing
+  // numbers; suppliers send those via secure channel and admin flips the
+  // status to ON_FILE once received.
+  bankInfoStatus     String    @default("MISSING") // MISSING | PENDING | ON_FILE | REJECTED
+  bankInfoLast4      String?
+  bankInfoType       String?   // CHECKING | SAVINGS
+  bankInfoBankName   String?
+  bankInfoNote       String    @default("")
+  bankInfoUpdatedAt  DateTime?
   user           User?          @relation(fields: [userId], references: [id])
   userId         String?        @unique
   products       Product[]
@@ -184,7 +199,28 @@ model Supplier {
   payouts        Payout[]
   members        SupplierMember[]
   invites        SupplierInvite[]
+  documents      SupplierDocument[]
   createdAt      DateTime       @default(now())
+}
+
+model SupplierDocument {
+  id          String   @id @default(cuid())
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId  String
+  // SUPPLIER_AGREEMENT | W9 | INSURANCE_COI | OTHER. Kept as a string so we
+  // can introduce new kinds without a schema migration; the API rejects
+  // unknown values.
+  kind        String
+  filename    String
+  url         String
+  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewNote  String   @default("")
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  uploadedAt  DateTime @default(now())
+
+  @@index([supplierId])
+  @@index([status])
 }
 
 model SupplierMember {

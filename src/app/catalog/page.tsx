@@ -7,6 +7,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductCard from "@/components/ProductCard";
 import CatalogSort from "@/components/CatalogSort";
+import { publicProductFilter } from "@/lib/supplier-access";
 
 export const dynamic = "force-dynamic";
 
@@ -81,16 +82,21 @@ export default async function CatalogPage({
   const inStock = sp.instock === "1";
   const requestedPage = Math.max(1, parseInt(sp.page || "1", 10) || 1);
 
+  const publicFilter = publicProductFilter();
   const [grouped, manufacturers] = await Promise.all([
     prisma.product.groupBy({
       by: ["category"],
-      where: { active: true },
+      where: { active: true, ...publicFilter },
       _count: true,
       orderBy: { category: "asc" },
     }),
     prisma.product.groupBy({
       by: ["manufacturer"],
-      where: { active: true, ...(cat ? { category: cat } : {}) },
+      where: {
+        active: true,
+        ...publicFilter,
+        ...(cat ? { category: cat } : {}),
+      },
       _count: true,
       orderBy: { manufacturer: "asc" },
     }),
@@ -114,7 +120,7 @@ export default async function CatalogPage({
     allProducts = sortInMemory(allProducts, sort);
     totalCount = allProducts.length;
   } else {
-    const where: Prisma.ProductWhereInput = { active: true };
+    const where: Prisma.ProductWhereInput = { active: true, ...publicFilter };
     if (cat) where.category = cat;
     if (mfr) where.manufacturer = mfr;
     if (inStock) where.stock = { gt: 0 };

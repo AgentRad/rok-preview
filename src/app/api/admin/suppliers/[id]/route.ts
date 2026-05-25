@@ -37,6 +37,7 @@ export async function PATCH(
     status?: "PENDING" | "APPROVED" | "SUSPENDED";
     rating?: number;
     onTimeRate?: number;
+    publicVisible?: boolean;
   } = {};
   if (typeof body.name === "string" && body.name.trim()) data.name = body.name.trim();
   if (typeof body.contactEmail === "string" && body.contactEmail.trim()) {
@@ -86,6 +87,15 @@ export async function PATCH(
         { status: 400 }
       );
     }
+  }
+  if (body.publicVisible !== undefined) {
+    if (typeof body.publicVisible !== "boolean") {
+      return NextResponse.json(
+        { error: "publicVisible must be a boolean." },
+        { status: 400 }
+      );
+    }
+    data.publicVisible = body.publicVisible;
   }
   if (body.onTimeRate !== undefined) {
     if (

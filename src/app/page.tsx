@@ -7,6 +7,7 @@ import ProductCard from "@/components/ProductCard";
 import { getCurrentUser } from "@/lib/auth";
 import HeroSearch from "@/components/HeroSearch";
 import { FEE_RATE_BPS, FEE_RATE_LABEL, formatCents } from "@/lib/money";
+import { publicProductFilter, publicSupplierFilter } from "@/lib/supplier-access";
 
 export const dynamic = "force-dynamic";
 
@@ -65,10 +66,10 @@ const COMPARE: { label: string; off: string; on: string }[] = [
 
 export default async function HomePage() {
   const [productCount, supplierCount, featured, viewer] = await Promise.all([
-    prisma.product.count({ where: { active: true } }),
-    prisma.supplier.count({ where: { status: "APPROVED" } }),
+    prisma.product.count({ where: { active: true, ...publicProductFilter() } }),
+    prisma.supplier.count({ where: publicSupplierFilter() }),
     prisma.product.findMany({
-      where: { active: true, stock: { gt: 0 } },
+      where: { active: true, stock: { gt: 0 }, ...publicProductFilter() },
       include: { supplier: true, _count: { select: { images: true } } },
       orderBy: { createdAt: "asc" },
       take: 8,

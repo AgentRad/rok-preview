@@ -7,6 +7,7 @@ import AddSupplierForm from "@/components/AddSupplierForm";
 import SupplierAdminRow from "@/components/SupplierAdminRow";
 import AttentionFeed from "@/components/AttentionFeed";
 import TaxExemptReview from "@/components/TaxExemptReview";
+import SupplierDocsReview from "@/components/SupplierDocsReview";
 import { getAdminAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
 
@@ -34,7 +35,7 @@ const STATUS_CLASS: Record<string, string> = {
 export default async function AdminConsole() {
   await requireRole("ADMIN");
 
-  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns, taxExemptAddresses, attention] =
+  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns, taxExemptAddresses, supplierDocs, attention] =
     await Promise.all([
       prisma.order.findMany({
         include: { items: true },
@@ -79,6 +80,12 @@ export default async function AdminConsole() {
           { createdAt: "desc" },
         ],
         take: 30,
+      }),
+      prisma.supplierDocument.findMany({
+        include: { supplier: { select: { name: true } } },
+        // PENDING float to the top so admin sees what needs review first.
+        orderBy: [{ status: "asc" }, { uploadedAt: "desc" }],
+        take: 60,
       }),
       getAdminAttention(),
     ]);
@@ -334,6 +341,35 @@ export default async function AdminConsole() {
 
           <div className="card">
             <div className="card-head">
+              <h2>Supplier documents review</h2>
+              {supplierDocs.filter((d) => d.status === "PENDING").length > 0 && (
+                <span className="muted-text" style={{ fontSize: 13 }}>
+                  {supplierDocs.filter((d) => d.status === "PENDING").length}{" "}
+                  pending review
+                </span>
+              )}
+            </div>
+            <SupplierDocsReview
+              rows={supplierDocs.map((d) => ({
+                id: d.id,
+                supplierId: d.supplierId,
+                supplierName: d.supplier.name,
+                kind: d.kind,
+                filename: d.filename,
+                url: d.url,
+                status: d.status,
+                reviewNote: d.reviewNote,
+                uploadedAt: d.uploadedAt.toISOString(),
+                reviewedAt: d.reviewedAt
+                  ? d.reviewedAt.toISOString()
+                  : null,
+                reviewedBy: d.reviewedBy,
+              }))}
+            />
+          </div>
+
+          <div className="card">
+            <div className="card-head">
               <h2>Tax-exempt certificates</h2>
               {taxExemptAddresses.filter((a) => a.taxExemptStatus === "PENDING").length > 0 && (
                 <span className="muted-text" style={{ fontSize: 13 }}>
@@ -449,6 +485,12 @@ export default async function AdminConsole() {
                         rating: s.rating,
                         onTimeRate: s.onTimeRate,
                         productCount: s._count.products,
+                        publicVisible: s.publicVisible,
+                        bankInfoStatus: s.bankInfoStatus,
+                        bankInfoLast4: s.bankInfoLast4,
+                        bankInfoBankName: s.bankInfoBankName,
+                        bankInfoType: s.bankInfoType,
+                        bankInfoNote: s.bankInfoNote,
                       }}
                     />
                   ))}

@@ -6,6 +6,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductCard from "@/components/ProductCard";
 import { manufacturerSlug } from "@/lib/manufacturer-slug";
+import { publicProductFilter } from "@/lib/supplier-access";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,7 @@ async function resolveBrand(slug: string): Promise<ResolvedBrand | null> {
   }
   // Fall back: any manufacturer string that appears on an active product.
   const productMfrs = await prisma.product.findMany({
-    where: { active: true },
+    where: { active: true, ...publicProductFilter() },
     select: { manufacturer: true },
     distinct: ["manufacturer"],
   });
@@ -93,7 +94,7 @@ export default async function ManufacturerStorefront({
 
   // Products and their distributors (same for claimed + unclaimed).
   const products = await prisma.product.findMany({
-    where: { manufacturer: brand, active: true },
+    where: { manufacturer: brand, active: true, ...publicProductFilter() },
     include: {
       supplier: true,
       _count: { select: { images: true } },

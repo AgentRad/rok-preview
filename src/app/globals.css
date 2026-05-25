@@ -1623,6 +1623,68 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 }
 .checklist-note { font-size: 12.5px; color: var(--steel); margin-top: 2px; }
 
+/* ---------- Go-live readiness gauge ---------- */
+.go-live-bar {
+  height: 8px; border-radius: 999px; background: var(--bg);
+  border: 1px solid var(--line); overflow: hidden;
+}
+.go-live-bar-fill {
+  height: 100%; border-radius: 999px;
+  transition: width 280ms ease-out;
+}
+
+/* ---------- Supplier legal documents ---------- */
+.doc-slot-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+.doc-slot {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 14px 16px; background: var(--surface);
+}
+.doc-slot-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.doc-slot h3 { font-size: 15px; margin: 0; }
+.doc-slot-req {
+  font-size: 12px; font-weight: 500; color: var(--amber-deep);
+}
+.doc-slot-req.optional { color: var(--steel); }
+.doc-slot-help {
+  font-size: 12.5px; color: var(--steel); margin: 6px 0 10px;
+  line-height: 1.45;
+}
+.doc-list { list-style: none; padding: 0; margin: 0 0 10px; }
+.doc-row {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 8px 0; border-top: 1px solid var(--line);
+}
+.doc-row:first-child { border-top: 0; }
+.doc-link {
+  font-size: 13px; font-weight: 600; color: var(--blue);
+  text-decoration: none; word-break: break-all;
+}
+.doc-link:hover { text-decoration: underline; }
+.doc-meta { font-size: 11.5px; color: var(--steel); margin-top: 2px; }
+.doc-reject-note {
+  font-size: 12px; color: #b4431f; margin-top: 4px;
+  background: #fdf3ed; padding: 6px 8px; border-radius: 4px;
+}
+.doc-upload-row {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 8px;
+}
+.doc-url-row { display: flex; gap: 6px; }
+.doc-url-row input { flex: 1; font-size: 13px; }
+
+/* ---------- Admin supplier docs review ---------- */
+.admin-doc-actions {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.admin-doc-actions textarea {
+  width: 100%; font-size: 12.5px; min-height: 44px;
+}
+.admin-doc-actions .row-gap { gap: 4px; }
+
 /* ---------- Attention feed ---------- */
 .attention {
   background: var(--surface); border: 1px solid var(--line);

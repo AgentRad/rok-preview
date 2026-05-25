@@ -141,7 +141,20 @@ async function main() {
         rec = existing;
       }
     } else {
-      rec = await prisma.supplier.create({ data: { ...s, status: "APPROVED" } });
+      // Seeded demo suppliers are pre-onboarded: publicVisible so their
+      // products show on the catalog and bank info marked on file. Real
+      // suppliers (added via /admin AddSupplierForm or the application
+      // flow) start hidden and have to complete the onboarding checklist.
+      rec = await prisma.supplier.create({
+        data: {
+          ...s,
+          status: "APPROVED",
+          publicVisible: true,
+          bankInfoStatus: "ON_FILE",
+          bankInfoNote: "Seeded demo supplier.",
+          bankInfoUpdatedAt: new Date(),
+        },
+      });
     }
     supplierIds[s.name] = rec.id;
   }

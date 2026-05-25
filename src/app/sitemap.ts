@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/db";
 import { siteUrl } from "@/lib/site-url";
 import { manufacturerSlug } from "@/lib/manufacturer-slug";
+import { publicProductFilter } from "@/lib/supplier-access";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +31,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const [products, productManufacturers, oemUsers] = await Promise.all([
     prisma.product.findMany({
-      where: { active: true },
+      where: { active: true, ...publicProductFilter() },
       select: { sku: true, createdAt: true },
     }),
     prisma.product.findMany({
-      where: { active: true },
+      where: { active: true, ...publicProductFilter() },
       select: { manufacturer: true },
       distinct: ["manufacturer"],
     }),

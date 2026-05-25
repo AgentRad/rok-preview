@@ -29,6 +29,15 @@ export default async function ProductPage({
     },
   });
   if (!product || !product.active) notFound();
+  // Suppliers that haven't completed onboarding are hidden from buyers.
+  // Catalog already filters them out; this is the deep-link safety net so
+  // a stale URL doesn't expose an off-platform listing.
+  if (
+    product.supplier.status !== "APPROVED" ||
+    !product.supplier.publicVisible
+  ) {
+    notFound();
+  }
 
   const specs = product.specs as Record<string, string>;
   const inStock = product.stock > 0;

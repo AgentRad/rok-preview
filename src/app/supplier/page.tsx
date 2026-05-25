@@ -10,6 +10,7 @@ import {
   canViewOrders,
   canViewPayouts,
   canViewQuotes,
+  computeReadiness,
   getActiveSupplierContext,
 } from "@/lib/supplier-access";
 import SiteHeader from "@/components/SiteHeader";
@@ -19,10 +20,10 @@ import SupplierProductManager from "@/components/SupplierProductManager";
 import CatalogCsvImport from "@/components/CatalogCsvImport";
 import SupplierTeam from "@/components/SupplierTeam";
 import SupplierLogoUploader from "@/components/SupplierLogoUploader";
+import SupplierDocuments from "@/components/SupplierDocuments";
+import SupplierBankInfo from "@/components/SupplierBankInfo";
+import GoLiveGauge from "@/components/GoLiveGauge";
 import { isBlobConfigured } from "@/lib/blob-config";
-import SupplierChecklist, {
-  type SupplierChecklistItem,
-} from "@/components/SupplierChecklist";
 import FulfillButton from "@/components/FulfillButton";
 import QuoteResponder from "@/components/QuoteResponder";
 import ActingAsBanner from "@/components/ActingAsBanner";
@@ -80,7 +81,7 @@ export default async function SupplierDashboard() {
     );
   }
 
-  const [orders, quotes, payouts, attention] = await Promise.all([
+  const [orders, quotes, payouts, attention, documents] = await Promise.all([
     prisma.order.findMany({
       where: {
         items: { some: { product: { supplierId: supplier.id } } },
@@ -103,7 +104,24 @@ export default async function SupplierDashboard() {
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     }),
     getSupplierAttention(supplier.id),
+    prisma.supplierDocument.findMany({
+      where: { supplierId: supplier.id },
+      orderBy: [{ uploadedAt: "desc" }],
+    }),
   ]);
+
+  const readiness = computeReadiness(
+    {
+      status: supplier.status,
+      logoUrl: supplier.logoUrl,
+      description: supplier.description,
+      certifications: supplier.certifications,
+      website: supplier.website,
+      bankInfoStatus: supplier.bankInfoStatus,
+    },
+    documents.map((d) => ({ kind: d.kind, status: d.status })),
+    supplier.products.length
+  );
 
   const payoutsDue = payouts
     .filter((p) => p.status === "DUE")
@@ -122,51 +140,7 @@ export default async function SupplierDashboard() {
   const unitsInStock = supplier.products.reduce((s, p) => s + p.stock, 0);
   const openQuotes = quotes.filter((q) => q.status === "OPEN").length;
 
-  // Checklist reflects the supplier's actual operational readiness. Items
-  // already satisfied at sign-up (admin-approved status) count toward
-  // completion so the number isn't artificially low for working accounts.
-  const checklist: SupplierChecklistItem[] = [
-    {
-      key: "approved",
-      label: "Profile approved",
-      done: supplier.status === "APPROVED",
-      note:
-        supplier.status === "APPROVED"
-          ? "Verified by PartsPort. Buyers see the verified badge."
-          : "Approval is pending; you'll be notified by email.",
-    },
-    {
-      key: "logo",
-      label: "Add a company logo",
-      done: !!supplier.logoUrl,
-      href: "/supplier#profile",
-      note: "Shows next to your name on product cards, orders, and invoices.",
-    },
-    {
-      key: "description",
-      label: "Write a one-sentence description",
-      done: !!(supplier.description && supplier.description.trim()),
-      note: "Appears on your supplier profile.",
-    },
-    {
-      key: "certs",
-      label: "List certifications",
-      done: !!(supplier.certifications && supplier.certifications.trim()),
-      note: "ISO 9001, IEEE C57, authorized-distributor proofs, etc.",
-    },
-    {
-      key: "website",
-      label: "Add your website",
-      done: !!(supplier.website && supplier.website.trim()),
-      note: "Buyers tap through for credibility before placing big orders.",
-    },
-    {
-      key: "products",
-      label: "Publish at least one product",
-      done: supplier.products.length > 0,
-      note: "Paste a CSV in the import card or hand-enter your first part.",
-    },
-  ];
+  const blobOk = isBlobConfigured();
 
   return (
     <>
@@ -215,7 +189,10 @@ export default async function SupplierDashboard() {
             emptyAction={{ label: "Manage listings", href: "/supplier#listings" }}
           />
 
-          <SupplierChecklist items={checklist} />
+          <GoLiveGauge
+            readiness={readiness}
+            publicVisible={supplier.publicVisible}
+          />
 
           <div id="profile" className="card">
             <div className="card-head">
@@ -225,7 +202,50 @@ export default async function SupplierDashboard() {
               <SupplierLogoUploader
                 initialLogoUrl={supplier.logoUrl}
                 supplierName={supplier.name}
-                blobConfigured={isBlobConfigured()}
+                blobConfigured={blobOk}
+              />
+            </div>
+          </div>
+
+          <div id="legal" className="card">
+            <div className="card-head">
+              <h2>Legal documents</h2>
+            </div>
+            <div className="card-body">
+              <SupplierDocuments
+                blobConfigured={blobOk}
+                initialDocuments={documents.map((d) => ({
+                  id: d.id,
+                  kind: d.kind,
+                  filename: d.filename,
+                  url: d.url,
+                  status: d.status,
+                  reviewNote: d.reviewNote,
+                  uploadedAt: d.uploadedAt.toISOString(),
+                  reviewedAt: d.reviewedAt
+                    ? d.reviewedAt.toISOString()
+                    : null,
+                }))}
+              />
+            </div>
+          </div>
+
+          <div id="bank-info" className="card">
+            <div className="card-head">
+              <h2>Payout method</h2>
+            </div>
+            <div className="card-body">
+              <SupplierBankInfo
+                initial={{
+                  bankInfoStatus: supplier.bankInfoStatus,
+                  bankInfoLast4: supplier.bankInfoLast4,
+                  bankInfoType: supplier.bankInfoType,
+                  bankInfoBankName: supplier.bankInfoBankName,
+                  bankInfoNote: supplier.bankInfoNote,
+                  bankInfoUpdatedAt: supplier.bankInfoUpdatedAt
+                    ? supplier.bankInfoUpdatedAt.toISOString()
+                    : null,
+                }}
               />
             </div>
           </div>

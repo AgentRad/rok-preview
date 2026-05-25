@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Product, Supplier } from "@prisma/client";
 import { prisma } from "./db";
+import { publicProductFilter } from "./supplier-access";
 
 export type SearchProduct = Product & { supplier: Supplier };
 
@@ -253,7 +254,7 @@ export async function quickSearch(query: string): Promise<SearchProduct[]> {
   const q = query.trim();
   if (q.length < 2) return [];
   const products = await prisma.product.findMany({
-    where: { active: true },
+    where: { active: true, ...publicProductFilter() },
     include: { supplier: true },
   });
   return heuristicRank(q, products);
@@ -262,7 +263,7 @@ export async function quickSearch(query: string): Promise<SearchProduct[]> {
 /* ---------- entry point ---------- */
 export async function runSearch(query: string): Promise<SearchResult> {
   const products = await prisma.product.findMany({
-    where: { active: true },
+    where: { active: true, ...publicProductFilter() },
     include: { supplier: true },
   });
 
