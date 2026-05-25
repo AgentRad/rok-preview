@@ -130,3 +130,11 @@ I work with two kinds of chats besides this one:
 The orchestrator chat (the one running this brief) coordinates between them. Punch lists go from orchestrator → build chat. Verify prompts go from orchestrator → test chat. Findings come back from test chat → orchestrator → build chat as the next punch list.
 
 **Stop criteria for the loop:** when the test chat reports zero functional fails and only cosmetic/UX polish items, the platform is launch-ready. Ship it. Address remaining polish post-launch.
+
+## Product decisions (decided, do not re-litigate)
+
+These are intentional design choices. If a test chat or build chat flags them as bugs, point them at this section.
+
+**Guest checkout is allowed.** Anonymous users can complete checkout without an account. They enter name, email, shipping address, pay via Stripe, and receive an order confirmation email. This is by design and matches the "no account needed" theme that runs through CLAUDE.md. Logged-in buyers also get checkout (their orders tie to the user). Both paths must work. Do not gate /checkout or /api/orders POST behind login for buyer-role traffic. Do gate it against MANUFACTURER role per the "no channel conflict" rule.
+
+**Buyer companies upload their own logo.** B2B buyers (utilities, co-ops, EPCs) can fill in a Company profile on /settings — companyName + companyLogoUrl. That logo appears on checkout summary, order detail "Billed to" block, the printable invoice, and order emails. Snapshot the logo URL and company name onto the Order at creation time so historical invoices don't rewrite when the user updates their profile. Guest checkout users skip this — no logo means no logo, no degradation.
