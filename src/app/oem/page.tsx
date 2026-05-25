@@ -6,6 +6,7 @@ import AttentionFeed from "@/components/AttentionFeed";
 import OemProfileEditor from "@/components/OemProfileEditor";
 import { getManufacturerAttention } from "@/lib/attention";
 import { manufacturerSlug } from "@/lib/manufacturer-slug";
+import { isBlobConfigured } from "@/lib/blob-config";
 import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -145,6 +146,7 @@ export default async function OemDashboard() {
               <OemProfileEditor
                 brand={brand}
                 slug={manufacturerSlug(brand)}
+                blobConfigured={isBlobConfigured()}
                 initial={{
                   tagline: user.manufacturerTagline,
                   bio: user.manufacturerBio,

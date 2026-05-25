@@ -19,6 +19,7 @@ import SupplierProductManager from "@/components/SupplierProductManager";
 import CatalogCsvImport from "@/components/CatalogCsvImport";
 import SupplierTeam from "@/components/SupplierTeam";
 import SupplierLogoUploader from "@/components/SupplierLogoUploader";
+import { isBlobConfigured } from "@/lib/blob-config";
 import SupplierChecklist, {
   type SupplierChecklistItem,
 } from "@/components/SupplierChecklist";
@@ -224,6 +225,7 @@ export default async function SupplierDashboard() {
               <SupplierLogoUploader
                 initialLogoUrl={supplier.logoUrl}
                 supplierName={supplier.name}
+                blobConfigured={isBlobConfigured()}
               />
             </div>
           </div>

@@ -8,6 +8,7 @@ export default function OemProfileEditor({
   brand,
   slug,
   initial,
+  blobConfigured = true,
 }: {
   brand: string;
   slug: string;
@@ -17,6 +18,7 @@ export default function OemProfileEditor({
     website: string;
     logoUrl: string | null;
   };
+  blobConfigured?: boolean;
 }) {
   const router = useRouter();
   const [tagline, setTagline] = useState(initial.tagline);
@@ -140,7 +142,8 @@ export default function OemProfileEditor({
               type="button"
               className="btn btn-ghost btn-sm"
               onClick={() => fileInput.current?.click()}
-              disabled={busy}
+              disabled={busy || !blobConfigured}
+              title={!blobConfigured ? "Vercel Blob not configured" : undefined}
             >
               {logoUrl ? "Replace" : "Upload logo"}
             </button>
@@ -157,6 +160,13 @@ export default function OemProfileEditor({
           </div>
           <div className="muted-text" style={{ fontSize: 11.5, marginTop: 8 }}>
             SVG (best) or PNG, square, under 2 MB.
+            {!blobConfigured && (
+              <>
+                <br />
+                File uploads not enabled. Ask an admin to enable Vercel Blob,
+                or save a hosted URL via the profile API.
+              </>
+            )}
           </div>
         </div>
 

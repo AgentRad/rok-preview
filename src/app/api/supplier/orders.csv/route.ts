@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canRunExports, getActiveSupplierContext } from "@/lib/supplier-access";
 import { localDateStamp } from "@/lib/date-fns";
+import { manufacturerSlug } from "@/lib/manufacturer-slug";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,7 +110,13 @@ export async function GET(req: Request) {
 
   const csv = lines.join("\r\n") + "\r\n";
   const today = localDateStamp(req);
-  const name = supplier ? `partsport-orders-${supplier.name.replace(/\W+/g, "-").toLowerCase()}-${today}.csv` : `partsport-orders-${today}.csv`;
+  // Unicode-aware supplier-name slug. The old `replace(/\W+/g, "-")` stripped
+  // accents and CJK to empty, producing filenames like "partsport-orders---2026..."
+  // The shared manufacturerSlug helper normalizes diacritics first.
+  const slug = supplier ? manufacturerSlug(supplier.name) || "supplier" : "";
+  const name = supplier
+    ? `partsport-orders-${slug}-${today}.csv`
+    : `partsport-orders-${today}.csv`;
   return new NextResponse(csv, {
     status: 200,
     headers: {

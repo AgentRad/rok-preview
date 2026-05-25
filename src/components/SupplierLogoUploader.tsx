@@ -107,9 +107,14 @@ async function validateLogo(file: File): Promise<ValidationResult> {
 export default function SupplierLogoUploader({
   initialLogoUrl,
   supplierName,
+  blobConfigured = true,
 }: {
   initialLogoUrl: string | null;
   supplierName: string;
+  /** When false, the uploader disables the file picker and prompts the user
+   *  to paste a hosted URL instead. Avoids the awful UX of picking a file
+   *  only to get a 503. Comes from `isBlobConfigured()` server-side. */
+  blobConfigured?: boolean;
 }) {
   const router = useRouter();
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
@@ -223,12 +228,20 @@ export default function SupplierLogoUploader({
             e.target.value = "";
           }}
         />
+        {!blobConfigured && (
+          <div className="alert alert-info" style={{ marginTop: 10, fontSize: 13 }}>
+            File uploads aren&rsquo;t enabled on this deployment yet. Paste a
+            hosted logo URL on your profile instead, or ask an admin to enable
+            Vercel Blob.
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           <button
             type="button"
             className="btn btn-primary btn-sm"
             onClick={() => fileInput.current?.click()}
-            disabled={busy}
+            disabled={busy || !blobConfigured}
+            title={!blobConfigured ? "Vercel Blob not configured" : undefined}
           >
             {busy ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}
           </button>
