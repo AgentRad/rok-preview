@@ -26,3 +26,8 @@ test-runs/
 /*-result.json
 /*-out.txt
 /*-out[0-9].txt
+# Curl cookie jars (used during local API smoke tests). MUST NOT be committed:
+# they contain session JWTs that, if leaked, let anyone impersonate the user.
+/*.cookie-jar
+/jar.txt
+/cookies.txt
