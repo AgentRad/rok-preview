@@ -277,6 +277,54 @@ async function main() {
     });
   }
 
+  // --- Demo supplier applications. Idempotent: only seed when zero PENDING
+  // applications exist, so admin can demo the approve/reject workflow. ---
+  const pendingApps = await prisma.supplierApplication.count({
+    where: { status: "PENDING" },
+  });
+  if (pendingApps === 0) {
+    await prisma.supplierApplication.createMany({
+      data: [
+        {
+          companyName: "Northern Lattice Power Systems",
+          contactName: "Maya Hernandez",
+          email: "maya@northernlatticepower.example",
+          website: "https://northernlatticepower.example",
+          category: "Transformers",
+          yearsTrading: "18",
+          certs: "ISO 9001:2015, IEEE C57 compliant, authorized Howard distributor",
+          message:
+            "Pad-mount transformers and substation gear for upper-midwest co-ops. We've been quoting through the channel for years and would like the demand visibility PartsPort offers.",
+          status: "PENDING",
+        },
+        {
+          companyName: "Coastline Switchgear & Supply",
+          contactName: "Devon Park",
+          email: "devon@coastlineswitch.example",
+          website: "https://coastlineswitch.example",
+          category: "Switchgear & Breakers",
+          yearsTrading: "11",
+          certs: "ISO 9001:2015, ANSI C37 type-tested, NETA-certified field service",
+          message:
+            "Specialize in medium-voltage switchgear retrofits for municipal utilities along the Eastern Seaboard. Looking to add a digital sales channel.",
+          status: "PENDING",
+        },
+        {
+          companyName: "HighPlains Renewables Distributors",
+          contactName: "Jamie Sokolov",
+          email: "jamie@highplainsrenew.example",
+          website: "https://highplainsrenew.example",
+          category: "Solar & Inverters",
+          yearsTrading: "7",
+          certs: "ISO 9001:2015, NABCEP partner, Enphase + SMA authorized",
+          message:
+            "Commercial PV and storage components, stocked in Denver and Albuquerque. Would like to test PartsPort for buyers in the lower-volume long tail we can't cover with our outside-sales team.",
+          status: "PENDING",
+        },
+      ],
+    });
+  }
+
   // --- Demo orders + RFQs for the buyer demo account. Idempotent: skip if
   // the buyer already has any orders / quotes seeded. ---
   const buyer = await prisma.user.findUnique({

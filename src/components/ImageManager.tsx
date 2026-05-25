@@ -5,6 +5,25 @@ import { useRouter } from "next/navigation";
 
 type Image = { id: string; url: string; position: number };
 
+function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    // Use window.Image so the local type alias `Image` above doesn't shadow
+    // the HTMLImageElement constructor.
+    const img = new window.Image();
+    img.onload = () => {
+      const dim = { width: img.naturalWidth, height: img.naturalHeight };
+      URL.revokeObjectURL(url);
+      resolve(dim);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read image"));
+    };
+    img.src = url;
+  });
+}
+
 export default function ImageManager({ productId }: { productId: string }) {
   const router = useRouter();
   const [images, setImages] = useState<Image[]>([]);
@@ -31,8 +50,44 @@ export default function ImageManager({ productId }: { productId: string }) {
     if (list.length === 0) return;
     setUploading(true);
     setUploadError("");
+
+    // Client-side validation: every product image must be at least 400 x 400
+    // so it renders cleanly on catalog cards (220px tall) and the gallery
+    // (1:1 detail page). Reject tiny files before they hit Vercel Blob.
+    const MIN_DIM = 400;
+    const validated: File[] = [];
+    const rejected: string[] = [];
+    for (const f of list) {
+      if (f.type === "image/svg+xml") {
+        validated.push(f); // SVG = vector, skip dim check
+        continue;
+      }
+      if (f.size < 200) {
+        rejected.push(`${f.name}: under 200 bytes, likely empty.`);
+        continue;
+      }
+      try {
+        const dim = await readImageDimensions(f);
+        if (dim.width < MIN_DIM || dim.height < MIN_DIM) {
+          rejected.push(
+            `${f.name}: ${dim.width}x${dim.height}, minimum ${MIN_DIM}x${MIN_DIM}.`
+          );
+          continue;
+        }
+        validated.push(f);
+      } catch {
+        rejected.push(`${f.name}: could not read image.`);
+      }
+    }
+    if (rejected.length) {
+      setUploadError(rejected.join(" "));
+    }
+    if (validated.length === 0) {
+      setUploading(false);
+      return;
+    }
     const form = new FormData();
-    for (const f of list) form.append("files", f);
+    for (const f of validated) form.append("files", f);
     try {
       const res = await fetch(
         `/api/supplier/products/${productId}/images/upload`,

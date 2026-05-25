@@ -21,6 +21,11 @@ export default function PayOrder({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // When Stripe is configured but the create-session call fails (network,
+  // upstream Stripe error, mis-configured key), the buyer would otherwise
+  // be stranded with no path forward. Showing the demo-checkout fallback
+  // keeps the order completable while we investigate upstream.
+  const [stripeFailed, setStripeFailed] = useState(false);
 
   async function payDemo() {
     setBusy(true);
@@ -45,13 +50,15 @@ export default function PayOrder({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) {
-        setError(data.error || "Could not start checkout.");
+        setError(data.error || "Could not start hosted checkout.");
+        setStripeFailed(true);
         setBusy(false);
         return;
       }
       window.location.href = data.url;
     } catch {
-      setError("Could not start checkout.");
+      setError("Could not reach the payment provider.");
+      setStripeFailed(true);
       setBusy(false);
     }
   }
@@ -80,6 +87,22 @@ export default function PayOrder({
               Continues to a secure hosted checkout. ACH bank transfer is the
               default; card is available as a fallback.
             </p>
+            {stripeFailed && (
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+                <p className="muted-text" style={{ fontSize: 12.5, marginBottom: 8 }}>
+                  Card / ACH checkout had a hiccup. As a backup, you can place
+                  the order through our demo settlement path and we&rsquo;ll
+                  reconcile payment manually.
+                </p>
+                <button
+                  className="btn btn-ghost btn-sm btn-block"
+                  onClick={payDemo}
+                  disabled={busy}
+                >
+                  {busy ? "Processing…" : `Try demo checkout · ${formatCents(totalCents)}`}
+                </button>
+              </div>
+            )}
           </>
         ) : paypalClientId ? (
           <PayPalScriptProvider options={{ clientId: paypalClientId, currency: "USD" }}>

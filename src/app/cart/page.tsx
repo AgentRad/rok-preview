@@ -1,10 +1,17 @@
+import { redirect } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import CartClient from "@/components/CartClient";
+import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default function CartPage() {
+export default async function CartPage() {
+  // OEMs and suppliers don't shop here. Send them to their dashboards.
+  // Buyers (logged-in or anonymous) get the normal cart.
+  const user = await getCurrentUser();
+  if (user?.role === "MANUFACTURER") redirect("/oem");
+  if (user?.role === "SUPPLIER") redirect("/supplier");
   return (
     <>
       <SiteHeader />

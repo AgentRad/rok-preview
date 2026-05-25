@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import CheckoutClient from "@/components/CheckoutClient";
@@ -8,6 +9,10 @@ export const dynamic = "force-dynamic";
 
 export default async function CheckoutPage() {
   const user = await getCurrentUser();
+  // OEMs and suppliers cannot buy through the platform. Redirect to their
+  // dashboards rather than show a checkout that would never be valid.
+  if (user?.role === "MANUFACTURER") redirect("/oem");
+  if (user?.role === "SUPPLIER") redirect("/supplier");
   return (
     <>
       <SiteHeader />

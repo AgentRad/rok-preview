@@ -50,7 +50,13 @@ async function validateLogo(file: File): Promise<ValidationResult> {
     };
   }
   if (file.size < 200) {
-    return { ok: false, error: "File is empty or corrupted." };
+    // Either an empty file, a 1px transparent placeholder, or a stripped icon.
+    // Be specific so the supplier knows what to fix.
+    return {
+      ok: false,
+      error:
+        "File is unusually small (under 200 bytes). Export a real logo, not a placeholder.",
+    };
   }
   // SVG: skip pixel dimension check; vector scales.
   if (file.type === "image/svg+xml") {

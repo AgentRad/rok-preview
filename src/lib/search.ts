@@ -124,8 +124,19 @@ const SYSTEM = `You are the search engine for PartsPort, an industrial parts and
 marketplace. A buyer describes what they need, by part name, specification,
 manufacturer, or the problem/application they are solving. Using only the catalog
 provided, return the SKUs that genuinely fit the need, best match first. Understand
-intent, synonyms, applications, and specs. Only include SKUs that are reasonable
-matches; omit irrelevant ones. If nothing in the catalog fits, return an empty list.
+intent, synonyms, applications, and specs.
+
+Recall guidance (important for industrial spec searches):
+- When the buyer names a rating (e.g. "75 kVA transformer", "15 kV breaker", "100 A
+  cutout"), return both exact-rating matches AND the adjacent typical ratings (the
+  next size up and the next size down within the same product family). Industrial
+  buyers often round to nearest standard size; they want to compare options.
+- When the buyer names a category but not a brand, return options across multiple
+  manufacturers so the buyer can compare price and lead time.
+- Aim for 5 to 12 results when the catalog supports it. Single-result returns are
+  usually wrong unless the query is a SKU or a very specific brand-and-model match.
+- Only return ZERO results when nothing in the catalog plausibly serves the need.
+
 Keep "interpretation" to one plain sentence.`;
 
 async function aiRank(
