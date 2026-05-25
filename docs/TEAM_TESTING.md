@@ -140,6 +140,14 @@ These checks must run every round. Each one caught a real bug that previous roun
 
 **UI sees the truth.** After any state change, reload the page the user actually sees. A fix that updates the database but doesn't update the timeline / tracking card / status badge is incomplete. Verify the UI reflects the new state on first load, not after a refresh.
 
+**Trace fixes through all layers, not just the visible symptom.** A "fix" can land at one layer (database, service helper, API response, server render, client state) and be invisible at another. Real examples caught by the testing team:
+
+- An idempotent helper that correctly returns `{ alreadyShipped: true }` — but the route handler discards that field and returns hard-coded `{ ok: true }`. The fix worked at the service layer but the caller can't see it.
+- An API response that includes a `warning` field for mismatched OEM brand names — but the warning only lives in client `useState`, so it vanishes on reload. The fix worked at the API layer but not the persisted UI.
+- A search floor helper (`padToFloor`) that correctly pads results — but the expansion map doesn't include the query token, so the floor logic never fires for that query. The fix worked structurally but not for the specific input.
+
+When you verify a fix, walk the data through every layer: DB row → service → API response → server-rendered HTML → client-side state → user reload. If any layer drops or transforms the data wrong, the fix is partial.
+
 ## How findings should be reported
 
 Every finding needs three things or it's not actionable:
