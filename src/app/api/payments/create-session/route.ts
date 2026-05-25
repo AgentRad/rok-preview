@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getProvider } from "@/lib/payments";
 import { feeFor } from "@/lib/money";
+import { lookupTaxExemption } from "@/lib/stripe-tax";
 
 export const runtime = "nodejs";
 
@@ -35,17 +36,10 @@ export async function POST(req: Request) {
   }
 
   // Tax-exemption check: if the buyer has any APPROVED tax-exempt cert on
-  // a saved address, skip Stripe Tax computation entirely. We do not gate on
-  // which address they actually chose for this order yet (no address linkage
-  // on Order today); the flag is the buyer-wide signal. Tighten in a follow-up
-  // once Order.shippingAddressId exists.
-  let taxExempt = false;
-  if (order.buyerId) {
-    const exemptCert = await prisma.address.findFirst({
-      where: { userId: order.buyerId, taxExemptStatus: "APPROVED" },
-    });
-    taxExempt = !!exemptCert;
-  }
+  // a saved address, skip Stripe Tax computation entirely. Buyer-wide for
+  // now; tighten to per-shipping-address once Order.shippingAddressId
+  // exists. See src/lib/stripe-tax.ts for the full flow doc.
+  const { isExempt: taxExempt } = await lookupTaxExemption(order.buyerId);
 
   // Itemize the line items so Stripe Tax can compute per-jurisdiction.
   // The platform fee is charged as a separate line so it shows up on the

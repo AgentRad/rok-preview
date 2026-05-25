@@ -3,6 +3,7 @@ import { jwtVerify } from "jose";
 import { prisma } from "@/lib/db";
 import { createSession } from "@/lib/auth";
 import { hashBackupCode, verifyTotp } from "@/lib/totp";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,18 @@ const secret = new TextEncoder().encode(
  * single-use backup codes the user saved at enrollment).
  */
 export async function POST(req: Request) {
+  // Share the login bucket so an attacker can't bypass the password limit
+  // by hammering the 2FA endpoint with stolen tickets.
+  const limit = rateLimit("login", clientIp(req));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many sign-in attempts. Please wait a few minutes." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) },
+      }
+    );
+  }
   const body = await req.json().catch(() => ({}));
   const ticket = String(body.ticket || "");
   const code = String(body.code || "");

@@ -3,12 +3,18 @@ import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
 import { sendPasswordReset } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 const EXPIRES_MINUTES = 60;
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const limit = rateLimit("register", clientIp(req));
+  if (!limit.allowed) {
+    // Same generic response so we don't leak that we rate-limited a known email.
+    return NextResponse.json({ ok: true });
+  }
   const body = await req.json().catch(() => ({}));
   const email = String(body.email || "").toLowerCase().trim();
 

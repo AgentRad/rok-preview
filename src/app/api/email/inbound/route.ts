@@ -40,45 +40,109 @@ type ParsedInbound = {
   html: string;
 };
 
+/** Cap on what we'll save into the database, regardless of payload size. */
+const MAX_STORED_BODY = 4000;
+/** Cap on the inbound body we'll even parse, in chars. Anything beyond is */
+/** almost certainly an attachment-laden mega-thread, and we strip quoted */
+/** history anyway. */
+const MAX_PARSE_BODY = 200_000;
+
+/** Convert basic HTML to plain text. Best-effort, no full parser. */
+function htmlToText(html: string): string {
+  if (!html) return "";
+  return html
+    // Drop <style> and <script> blocks entirely
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    // Block-level breaks become newlines
+    .replace(/<\/(p|div|h[1-6]|li|tr|br|table)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    // Strip all other tags
+    .replace(/<[^>]+>/g, "")
+    // Decode common entities
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Collapse runs of blank lines
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function chooseProvider(req: Request): "resend" | "postmark" | "sendgrid" | null {
+  // Prefer the explicit env-configured provider. Fall back to a best-guess
+  // based on headers / content-type, so a wrong env var doesn't silently
+  // reject otherwise-valid traffic.
+  const envProvider = inboundProvider();
+  if (envProvider) return envProvider;
+  if (req.headers.get("x-postmark-webhook-token")) return "postmark";
+  if (req.headers.get("content-type")?.includes("multipart/form-data")) {
+    return "sendgrid";
+  }
+  return "resend";
+}
+
 async function parseBody(req: Request): Promise<ParsedInbound | null> {
-  const provider = inboundProvider();
-  const contentType = req.headers.get("content-type") || "";
+  const provider = chooseProvider(req);
+  if (!provider) return null;
+
   if (provider === "postmark") {
-    const body = await req.json().catch(() => null);
-    if (!body) return null;
+    const text = await req.text().catch(() => "");
+    if (!text || text.length > MAX_PARSE_BODY) return null;
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return null;
+    }
     const toFull = Array.isArray(body.ToFull) ? body.ToFull : [];
     const recipients: string[] = toFull
       .map((r: { Email?: string }) => (r?.Email ? String(r.Email) : ""))
       .filter(Boolean);
+    const fromFull = body.FromFull as { Email?: string } | undefined;
     return {
-      from: String(body.FromFull?.Email || body.From || "").trim(),
+      from: String(fromFull?.Email || body.From || "").trim(),
       recipients,
       subject: String(body.Subject || ""),
       text: String(body.TextBody || ""),
       html: String(body.HtmlBody || ""),
     };
   }
+
   if (provider === "sendgrid") {
     // SendGrid Inbound Parse posts multipart/form-data.
-    if (contentType.includes("multipart/form-data")) {
-      const form = await req.formData();
-      const toRaw = String(form.get("to") || "");
-      return {
-        from: String(form.get("from") || "").trim(),
-        recipients: toRaw.split(",").map((s) => s.trim()).filter(Boolean),
-        subject: String(form.get("subject") || ""),
-        text: String(form.get("text") || ""),
-        html: String(form.get("html") || ""),
-      };
+    if (!req.headers.get("content-type")?.includes("multipart/form-data")) {
+      return null;
     }
+    const form = await req.formData().catch(() => null);
+    if (!form) return null;
+    const toRaw = String(form.get("to") || "");
+    return {
+      from: String(form.get("from") || "").trim(),
+      recipients: toRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      subject: String(form.get("subject") || ""),
+      text: String(form.get("text") || ""),
+      html: String(form.get("html") || ""),
+    };
+  }
+
+  // Resend / generic JSON
+  const raw = await req.text().catch(() => "");
+  if (!raw || raw.length > MAX_PARSE_BODY) return null;
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(raw);
+  } catch {
     return null;
   }
-  // Default: Resend / generic JSON shape.
-  const body = await req.json().catch(() => null);
-  if (!body) return null;
   const to = body.to ?? body.To ?? "";
   const recipients: string[] = Array.isArray(to)
-    ? to.map((v: string) => String(v))
+    ? to.map((v: unknown) => String(v))
     : String(to)
         .split(",")
         .map((s) => s.trim())
@@ -143,6 +207,19 @@ function shouldBounce(senderEmail: string): boolean {
 }
 
 export async function POST(req: Request) {
+  try {
+    return await handleInbound(req);
+  } catch (err) {
+    console.error("[email][inbound] handler crashed:", err);
+    // Return 500 so the provider knows to retry, not a 200 ack.
+    return NextResponse.json(
+      { error: "Inbound handler failed; will be retried." },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleInbound(req: Request) {
   if (!isInboundConfigured()) {
     return NextResponse.json(
       { error: "Inbound email is not configured." },
@@ -202,7 +279,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ignored: "unknown sender" });
   }
 
-  const cleaned = stripQuotedReply(parsed.text || parsed.html || "");
+  // Prefer the plain-text part; fall back to HTML stripped to text. This
+  // matters for Outlook on the web, which sometimes sends only HTML.
+  const raw = parsed.text || htmlToText(parsed.html);
+  const cleaned = stripQuotedReply(raw).slice(0, MAX_STORED_BODY);
   if (!cleaned) {
     return NextResponse.json({ ok: true, ignored: "empty body" });
   }
@@ -238,7 +318,7 @@ export async function POST(req: Request) {
         senderName: user.name,
         senderEmail: user.email,
         senderRole: user.role,
-        body: cleaned.slice(0, 4000),
+        body: cleaned,
       },
     });
     // Fan out to the other people on the thread (mirrors POST /api/messages).
@@ -292,7 +372,7 @@ export async function POST(req: Request) {
       senderName: user.name,
       senderEmail: user.email,
       senderRole: user.role,
-      body: cleaned.slice(0, 4000),
+      body: cleaned,
     },
   });
   const recipients = new Set<string>();

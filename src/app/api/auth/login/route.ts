@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import { prisma } from "@/lib/db";
 import { verifyPassword, createSession } from "@/lib/auth";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,16 @@ const secret = new TextEncoder().encode(
 );
 
 export async function POST(req: Request) {
+  const limit = rateLimit("login", clientIp(req));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many sign-in attempts. Please wait a few minutes." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) },
+      }
+    );
+  }
   const { email, password } = await req.json().catch(() => ({}));
   const normalized = String(email || "").toLowerCase().trim();
   const user = await prisma.user.findUnique({ where: { email: normalized } });
