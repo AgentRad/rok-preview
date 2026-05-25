@@ -50,7 +50,10 @@ export async function POST(req: Request) {
   }
   if (file.size < 200) {
     return NextResponse.json(
-      { error: "File is empty or corrupted." },
+      {
+        error:
+          "File is unusually small (under 200 bytes). Export a real logo, not a placeholder.",
+      },
       { status: 400 }
     );
   }

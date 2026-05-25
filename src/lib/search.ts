@@ -16,43 +16,88 @@ export function isAISearchEnabled(): boolean {
 }
 
 /* ---------- heuristic fallback (no API key) ---------- */
-// Maps intents / applications / synonyms to catalog vocabulary.
+// Maps intents / applications / synonyms to catalog vocabulary. Pull this
+// hard when adding queries that should recall well: single-word category
+// terms ("motor", "switchgear", "transformer") need to fan out to all the
+// product families that buyer is plausibly looking at.
 const EXPANSIONS: Record<string, string[]> = {
-  transformer: ["transformer", "pad-mount", "distribution", "kva"],
-  breaker: ["breaker", "vacuum", "switchgear", "circuit"],
-  switchgear: ["switchgear", "breaker", "vacuum"],
-  cutout: ["cutout", "fused", "fuse"],
-  relay: ["relay", "protection", "feeder", "sel"],
-  protection: ["relay", "protection", "feeder"],
-  conductor: ["conductor", "acsr", "overhead", "cable", "wire"],
-  cable: ["cable", "conductor", "urd", "underground", "wire"],
+  // Transformers
+  transformer: ["transformer", "pad-mount", "distribution", "kva", "auto", "dry-type"],
+  kva: ["transformer", "kva"],
+  "pad-mount": ["transformer", "pad-mount"],
+  padmount: ["transformer", "pad-mount"],
+  // Switching / breakers / motor control
+  breaker: ["breaker", "vacuum", "switchgear", "circuit", "mccb", "molded"],
+  switchgear: ["switchgear", "breaker", "vacuum", "mcc", "panelboard", "disconnect"],
+  cutout: ["cutout", "fused", "fuse", "loadbreak"],
+  fuse: ["fuse", "fused", "cutout", "current-limiting"],
+  mcc: ["mcc", "motor", "control", "center", "starter"],
+  motor: ["motor", "mcc", "starter", "control", "contactor", "protection", "relay"],
+  contactor: ["contactor", "motor", "starter"],
+  starter: ["starter", "motor", "mcc"],
+  disconnect: ["disconnect", "switch", "switchgear"],
+  panelboard: ["panelboard", "panel", "switchgear", "circuit"],
+  // Relays / protection
+  relay: ["relay", "protection", "feeder", "sel", "differential", "overcurrent"],
+  protection: ["relay", "protection", "feeder", "differential", "overcurrent"],
+  recloser: ["recloser", "relay", "protection", "vacuum"],
+  feeder: ["relay", "conductor", "breaker", "protection"],
+  // Conductors / cable
+  conductor: ["conductor", "acsr", "aaac", "overhead", "cable", "wire"],
+  cable: ["cable", "conductor", "urd", "underground", "wire", "service"],
   wire: ["wire", "conductor", "cable"],
-  insulator: ["insulator", "polymer", "suspension"],
-  meter: ["meter", "metering", "smart", "revenue", "ami"],
-  generator: ["generator", "standby", "genset", "backup"],
+  acsr: ["acsr", "conductor", "overhead"],
+  // Line hardware
+  insulator: ["insulator", "polymer", "suspension", "pin"],
+  crossarm: ["crossarm", "fiberglass", "line", "hardware"],
+  deadend: ["deadend", "clamp", "suspension"],
+  // Metering
+  meter: ["meter", "metering", "smart", "revenue", "ami", "smart-meter"],
+  metering: ["meter", "metering", "smart", "revenue"],
+  ct: ["ct", "current", "transformer", "metering"],
+  ami: ["ami", "meter", "smart"],
+  // Generators / ATS
+  generator: ["generator", "standby", "genset", "backup", "diesel"],
   genset: ["generator", "standby", "backup"],
-  backup: ["generator", "standby", "battery", "storage"],
-  ats: ["transfer", "ats", "automatic"],
-  solar: ["solar", "pv", "module", "panel", "photovoltaic"],
+  diesel: ["diesel", "generator", "standby"],
+  backup: ["generator", "standby", "battery", "storage", "ups"],
+  ats: ["transfer", "ats", "automatic", "switch"],
+  // Solar / inverters / storage
+  solar: ["solar", "pv", "module", "panel", "photovoltaic", "inverter", "microinverter"],
   pv: ["solar", "pv", "module"],
+  module: ["module", "solar", "pv", "panel"],
   panel: ["solar", "pv", "module"],
-  inverter: ["inverter", "string", "solar"],
-  battery: ["battery", "storage", "lfp", "bess"],
-  storage: ["battery", "storage", "bess"],
-  ground: ["ground", "grounding", "earth", "rod"],
+  inverter: ["inverter", "string", "solar", "microinverter", "hybrid"],
+  microinverter: ["microinverter", "inverter", "solar"],
+  racking: ["racking", "rail", "solar", "mount"],
+  battery: ["battery", "storage", "lfp", "bess", "cell"],
+  storage: ["battery", "storage", "bess", "ess"],
+  bess: ["bess", "battery", "storage", "ess"],
+  ess: ["ess", "storage", "battery"],
+  // Grounding / surge
+  ground: ["ground", "grounding", "earth", "rod", "clamp", "bond"],
   grounding: ["ground", "grounding", "rod"],
+  rod: ["rod", "ground", "grounding"],
   surge: ["surge", "arrester", "lightning"],
   arrester: ["surge", "arrester"],
-  scada: ["controller", "rtac", "automation", "scada"],
+  // SCADA / controls
+  scada: ["controller", "rtac", "rtu", "automation", "scada"],
+  rtu: ["rtu", "scada", "automation"],
+  rtac: ["rtac", "scada", "controller"],
   controller: ["controller", "rtac", "automation"],
+  automation: ["automation", "scada", "controller", "rtu"],
+  // Safety / PPE
   "arc-flash": ["arc-flash", "ppe", "safety"],
-  ppe: ["arc-flash", "ppe", "safety"],
-  // applications
+  ppe: ["arc-flash", "ppe", "safety", "gloves"],
+  gloves: ["gloves", "rubber", "ppe", "safety"],
+  voltage: ["voltage", "detector", "tester", "ppe"],
+  // Applications
   substation: ["transformer", "breaker", "switchgear", "relay", "insulator"],
-  feeder: ["relay", "conductor", "breaker"],
   overhead: ["conductor", "acsr", "insulator", "cutout"],
   underground: ["cable", "urd", "transformer"],
   outage: ["generator", "standby", "battery", "storage"],
+  utility: ["transformer", "cable", "conductor", "insulator", "meter"],
+  industrial: ["mcc", "breaker", "motor", "panelboard"],
 };
 
 const STOPWORDS = new Set([
@@ -131,6 +176,15 @@ Recall guidance (important for industrial spec searches):
   cutout"), return both exact-rating matches AND the adjacent typical ratings (the
   next size up and the next size down within the same product family). Industrial
   buyers often round to nearest standard size; they want to compare options.
+- When the buyer types a single GENERIC word (e.g. "motor", "transformer",
+  "switchgear", "relay", "solar", "cable"), interpret it as a category query and
+  return EVERY plausibly-matching SKU in the catalog, not just exact-name hits.
+  Examples:
+    "motor"    -> motor control centers, motor protection relays, starters,
+                  contactors, feeder protection relays
+    "solar"    -> PV modules, microinverters, string inverters, racking
+    "cable"    -> URD, MV-105, service-entrance, control cable, conductors
+  Single-word queries should typically return 5-15 results, not 1.
 - When the buyer names a category but not a brand, return options across multiple
   manufacturers so the buyer can compare price and lead time.
 - Aim for 5 to 12 results when the catalog supports it. Single-result returns are
