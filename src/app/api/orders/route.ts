@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
 import { computeOrderTotals } from "@/lib/order-totals";
 import { sendOrderConfirmation } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { captureError } from "@/lib/observability";
 
 export async function POST(req: Request) {
   // Role gate: OEMs and Suppliers cannot place orders. Core platform rule:
@@ -150,9 +151,16 @@ export async function POST(req: Request) {
     include: { items: true },
   });
 
-  sendOrderConfirmation(order).catch((err) =>
-    console.error("[email] order confirmation failed:", err)
-  );
+  // Next 15 `after()` keeps the serverless function alive until the email
+  // actually sends, so a Vercel cold-start kill can't drop it. Replaces
+  // the previous fire-and-forget `.catch(...)` which broke on serverless.
+  after(async () => {
+    try {
+      await sendOrderConfirmation(order);
+    } catch (err) {
+      captureError(err, { subsystem: "email", op: "order-confirmation", orderId: order.id });
+    }
+  });
 
   return NextResponse.json({
     ok: true,

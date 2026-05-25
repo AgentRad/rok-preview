@@ -1,6 +1,8 @@
 import "server-only";
+import { after } from "next/server";
 import { prisma } from "./db";
 import { sendPaymentReceived } from "./email";
+import { captureError } from "./observability";
 
 export function generateReference(prefix = "PP"): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -83,9 +85,17 @@ export async function markOrderPaid(
       include: { items: true },
     });
     if (paidOrder) {
-      sendPaymentReceived(paidOrder).catch((err) =>
-        console.error("[email] payment-received failed:", err)
-      );
+      // after() keeps the serverless function alive past the response so
+      // the email is guaranteed to fire. markOrderPaid is called from the
+      // webhook handler and the success-page reconcile flow, both running
+      // inside a request context where after() is valid.
+      after(async () => {
+        try {
+          await sendPaymentReceived(paidOrder);
+        } catch (err) {
+          captureError(err, { subsystem: "email", op: "payment-received", orderId });
+        }
+      });
     }
   }
   return true;

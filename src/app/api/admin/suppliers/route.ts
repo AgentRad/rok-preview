@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import crypto from "node:crypto";
 import type { SupplierMemberRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
 import { sendSupplierWelcome, sendSupplierInvite } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
+import { captureError } from "@/lib/observability";
 
 const VALID_ROLES: SupplierMemberRole[] = [
   "OWNER",
@@ -121,14 +122,18 @@ export async function POST(req: Request) {
   });
 
   if (sendEmail) {
-    sendSupplierWelcome({
-      to: user.email,
-      contactName: user.name,
-      companyName: supplier.name,
-      tempPassword,
-    }).catch((err) =>
-      console.error("[email] supplier-welcome failed:", err)
-    );
+    after(async () => {
+      try {
+        await sendSupplierWelcome({
+          to: user.email,
+          contactName: user.name,
+          companyName: supplier.name,
+          tempPassword,
+        });
+      } catch (err) {
+        captureError(err, { subsystem: "email", op: "supplier-welcome", supplierId: supplier.id });
+      }
+    });
   }
 
   // Optional teammate invites at creation time. Existing PartsPort users are
@@ -169,15 +174,19 @@ export async function POST(req: Request) {
           }),
         ]);
       }
-      sendSupplierInvite({
-        to: email,
-        inviterName: me.name,
-        companyName: supplier.name,
-        acceptUrl: siteUrl(`/supplier`),
-        expiresDays: INVITE_DAYS,
-      }).catch((err) =>
-        console.error("[email] team-invite (existing) failed:", err)
-      );
+      after(async () => {
+        try {
+          await sendSupplierInvite({
+            to: email,
+            inviterName: me.name,
+            companyName: supplier.name,
+            acceptUrl: siteUrl(`/supplier`),
+            expiresDays: INVITE_DAYS,
+          });
+        } catch (err) {
+          captureError(err, { subsystem: "email", op: "team-invite-existing", email });
+        }
+      });
       inviteSummary.push({ email, role, status: "added" });
     } else {
       const raw = crypto.randomBytes(32).toString("base64url");
@@ -193,15 +202,19 @@ export async function POST(req: Request) {
           expiresAt,
         },
       });
-      sendSupplierInvite({
-        to: email,
-        inviterName: me.name,
-        companyName: supplier.name,
-        acceptUrl: siteUrl(`/invite/${raw}`),
-        expiresDays: INVITE_DAYS,
-      }).catch((err) =>
-        console.error("[email] team-invite (new) failed:", err)
-      );
+      after(async () => {
+        try {
+          await sendSupplierInvite({
+            to: email,
+            inviterName: me.name,
+            companyName: supplier.name,
+            acceptUrl: siteUrl(`/invite/${raw}`),
+            expiresDays: INVITE_DAYS,
+          });
+        } catch (err) {
+          captureError(err, { subsystem: "email", op: "team-invite-new", email });
+        }
+      });
       inviteSummary.push({ email, role, status: "invited" });
     }
   }

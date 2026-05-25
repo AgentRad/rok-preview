@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { sendOrderDelivered } from "@/lib/email";
 import { markOrderShipped } from "@/lib/shipping";
+import { captureError } from "@/lib/observability";
 
 const STAGES = ["Processing", "Shipped", "Delivered"] as const;
 type Stage = (typeof STAGES)[number];
@@ -69,9 +70,13 @@ export async function POST(
       data: { shipmentStage: "Delivered", status: "FULFILLED" },
       include: { items: true },
     });
-    sendOrderDelivered(updated).catch((err) =>
-      console.error("[email] order-delivered failed:", err)
-    );
+    after(async () => {
+      try {
+        await sendOrderDelivered(updated);
+      } catch (err) {
+        captureError(err, { subsystem: "email", op: "order-delivered", orderId: id });
+      }
+    });
   } else {
     await prisma.order.update({
       where: { id },

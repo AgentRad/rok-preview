@@ -64,7 +64,13 @@ export async function GET(req: Request) {
         data: { shipmentStage: "Delivered", status: "FULFILLED" },
         include: { items: true },
       });
-      sendOrderDelivered(updated).catch(() => {});
+      // Cron iterates orders synchronously; await so each email actually
+       // fires inside the function lifetime instead of racing the response.
+      try {
+        await sendOrderDelivered(updated);
+      } catch {
+        // Non-fatal: a missing email doesn't stop the rest of the batch.
+      }
       delivered++;
     } catch (e) {
       errors.push(`${c.reference}: ${e instanceof Error ? e.message : String(e)}`);

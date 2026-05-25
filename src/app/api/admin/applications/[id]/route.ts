@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
 import { sendApplicationStatus } from "@/lib/email";
 import { writeAuditLog } from "@/lib/audit";
+import { captureError } from "@/lib/observability";
 
 const TEMP_PASSWORD = "demo1234";
 
@@ -40,14 +41,18 @@ export async function POST(
       summary: `Rejected application from ${app.companyName} (${app.email})`,
       metadata: { category: app.category },
     });
-    sendApplicationStatus({
-      to: app.email,
-      contactName: app.contactName,
-      companyName: app.companyName,
-      approved: false,
-    }).catch((err) =>
-      console.error("[email] application-rejected failed:", err)
-    );
+    after(async () => {
+      try {
+        await sendApplicationStatus({
+          to: app.email,
+          contactName: app.contactName,
+          companyName: app.companyName,
+          approved: false,
+        });
+      } catch (err) {
+        captureError(err, { subsystem: "email", op: "application-rejected", applicationId: app.id });
+      }
+    });
     return NextResponse.json({ ok: true });
   }
 
@@ -107,15 +112,19 @@ export async function POST(
       summary: `Approved application from ${app.companyName} (${app.email}) as ${role}`,
       metadata: { category: app.category, role, userId: account.id },
     });
-    sendApplicationStatus({
-      to: app.email,
-      contactName: app.contactName,
-      companyName: app.companyName,
-      approved: true,
-      tempPassword: existingUser ? null : TEMP_PASSWORD,
-    }).catch((err) =>
-      console.error("[email] application-approved failed:", err)
-    );
+    after(async () => {
+      try {
+        await sendApplicationStatus({
+          to: app.email,
+          contactName: app.contactName,
+          companyName: app.companyName,
+          approved: true,
+          tempPassword: existingUser ? null : TEMP_PASSWORD,
+        });
+      } catch (err) {
+        captureError(err, { subsystem: "email", op: "application-approved", applicationId: app.id });
+      }
+    });
     return NextResponse.json({
       ok: true,
       loginEmail: app.email,

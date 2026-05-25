@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { sendOrderDelivered } from "@/lib/email";
+import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 
@@ -46,8 +47,12 @@ export async function POST(
     },
     include: { items: true },
   });
-  sendOrderDelivered(updated).catch((err) =>
-    console.error("[email] delivered notify failed:", err)
-  );
+  after(async () => {
+    try {
+      await sendOrderDelivered(updated);
+    } catch (err) {
+      captureError(err, { subsystem: "email", op: "delivered-notify", orderId: id });
+    }
+  });
   return NextResponse.json({ ok: true });
 }

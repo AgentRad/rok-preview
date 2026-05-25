@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import crypto from "node:crypto";
 import type { SupplierMemberRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -9,6 +9,7 @@ import {
 } from "@/lib/supplier-access";
 import { sendSupplierInvite } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
+import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 
@@ -114,15 +115,19 @@ export async function POST(req: Request) {
         data: { supplierId: ctx.supplier.id, userId: existing.id, role },
       }),
     ]);
-    sendSupplierInvite({
-      to: existing.email,
-      inviterName: user.name,
-      companyName: ctx.supplier.name,
-      acceptUrl: siteUrl(`/supplier`),
-      expiresDays: INVITE_DAYS,
-    }).catch((err) =>
-      console.error("[email] supplier-invite (existing user) failed:", err)
-    );
+    after(async () => {
+      try {
+        await sendSupplierInvite({
+          to: existing.email,
+          inviterName: user.name,
+          companyName: ctx.supplier.name,
+          acceptUrl: siteUrl(`/supplier`),
+          expiresDays: INVITE_DAYS,
+        });
+      } catch (err) {
+        captureError(err, { subsystem: "email", op: "supplier-invite-existing", email: existing.email });
+      }
+    });
     return NextResponse.json({ ok: true, added: "existing-user" });
   }
 
@@ -143,15 +148,19 @@ export async function POST(req: Request) {
   });
 
   const acceptUrl = siteUrl(`/invite/${raw}`);
-  sendSupplierInvite({
-    to: email,
-    inviterName: user.name,
-    companyName: ctx.supplier.name,
-    acceptUrl,
-    expiresDays: INVITE_DAYS,
-  }).catch((err) =>
-    console.error("[email] supplier-invite (new user) failed:", err)
-  );
+  after(async () => {
+    try {
+      await sendSupplierInvite({
+        to: email,
+        inviterName: user.name,
+        companyName: ctx.supplier.name,
+        acceptUrl,
+        expiresDays: INVITE_DAYS,
+      });
+    } catch (err) {
+      captureError(err, { subsystem: "email", op: "supplier-invite-new", email });
+    }
+  });
 
   return NextResponse.json({ ok: true, added: "pending-invite", expiresAt });
 }

@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
 import { sendRfqReceived } from "@/lib/email";
+import { captureError } from "@/lib/observability";
 
 export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
@@ -39,20 +40,24 @@ export async function POST(req: Request) {
     },
   });
 
-  sendRfqReceived({
-    id: quote.id,
-    reference: quote.reference,
-    buyerName: quote.buyerName,
-    buyerEmail: quote.buyerEmail,
-    qty: quote.qty,
-    message: quote.message,
-    productName: product.name,
-    productSku: product.sku,
-    supplierName: product.supplier.name,
-    supplierEmail: product.supplier.contactEmail,
-  }).catch((err) =>
-    console.error("[email] rfq-received failed:", err)
-  );
+  after(async () => {
+    try {
+      await sendRfqReceived({
+        id: quote.id,
+        reference: quote.reference,
+        buyerName: quote.buyerName,
+        buyerEmail: quote.buyerEmail,
+        qty: quote.qty,
+        message: quote.message,
+        productName: product.name,
+        productSku: product.sku,
+        supplierName: product.supplier.name,
+        supplierEmail: product.supplier.contactEmail,
+      });
+    } catch (err) {
+      captureError(err, { subsystem: "email", op: "rfq-received", quoteId: quote.id });
+    }
+  });
 
   return NextResponse.json({
     ok: true,

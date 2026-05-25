@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
@@ -7,6 +7,7 @@ import {
   canRespondToQuotes,
   userHasAccessToSupplier,
 } from "@/lib/supplier-access";
+import { captureError } from "@/lib/observability";
 
 export async function PATCH(
   req: Request,
@@ -88,19 +89,25 @@ export async function PATCH(
       },
       include: { product: { include: { supplier: true } } },
     });
-    sendQuoteReady({
-      id: updated.id,
-      reference: updated.reference,
-      buyerName: updated.buyerName,
-      buyerEmail: updated.buyerEmail,
-      qty: updated.qty,
-      message: updated.message,
-      productName: updated.product.name,
-      productSku: updated.product.sku,
-      supplierName: updated.product.supplier.name,
-      quotedUnitCents: updated.quotedUnitCents,
-      quoteNote: updated.quoteNote,
-    }).catch((err) => console.error("[email] quote-ready failed:", err));
+    after(async () => {
+      try {
+        await sendQuoteReady({
+          id: updated.id,
+          reference: updated.reference,
+          buyerName: updated.buyerName,
+          buyerEmail: updated.buyerEmail,
+          qty: updated.qty,
+          message: updated.message,
+          productName: updated.product.name,
+          productSku: updated.product.sku,
+          supplierName: updated.product.supplier.name,
+          quotedUnitCents: updated.quotedUnitCents,
+          quoteNote: updated.quoteNote,
+        });
+      } catch (err) {
+        captureError(err, { subsystem: "email", op: "quote-ready", quoteId: updated.id });
+      }
+    });
     return NextResponse.json({ ok: true });
   }
 
