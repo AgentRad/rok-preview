@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
-import {
-  getFreightRates,
-  isShippoConfigured,
-  surchargeCents,
-  type FreightSurcharges,
-} from "@/lib/freight";
+import { getFreightRates, isShippoConfigured } from "@/lib/freight-server";
+import { surchargeCents, type FreightSurcharges } from "@/lib/freight";
 
 export const runtime = "nodejs";
 

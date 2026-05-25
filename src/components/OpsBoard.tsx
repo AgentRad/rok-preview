@@ -40,6 +40,46 @@ export default function OpsBoard({ orders }: { orders: OpsOrder[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [ship, setShip] = useState<Record<string, { carrier: string; trackingCode: string }>>({});
+  const [labelMsg, setLabelMsg] = useState<Record<string, string>>({});
+
+  async function printLabel(orderId: string) {
+    setBusy(orderId);
+    setLabelMsg((m) => ({ ...m, [orderId]: "" }));
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/label`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLabelMsg((m) => ({
+          ...m,
+          [orderId]: data.error || "Could not print label.",
+        }));
+        return;
+      }
+      if (data.labelUrl) {
+        window.open(data.labelUrl, "_blank", "noopener,noreferrer");
+        // Auto-populate the carrier + tracking inputs from the label so
+        // the supplier hits Mark Shipped with one click.
+        if (data.carrier && data.trackingNumber) {
+          setShip((m) => ({
+            ...m,
+            [orderId]: {
+              carrier: data.carrier as string,
+              trackingCode: data.trackingNumber as string,
+            },
+          }));
+        }
+        setLabelMsg((m) => ({
+          ...m,
+          [orderId]: `Label printed via ${data.carrier || "Shippo"}.`,
+        }));
+        router.refresh();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function advance(
     id: string,
@@ -179,12 +219,29 @@ export default function OpsBoard({ orders }: { orders: OpsOrder[] }) {
                             style={{ width: 170 }}
                           />
                           <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={busy === o.id}
+                            onClick={() => printLabel(o.id)}
+                            title="Buy a label from Shippo and auto-fill the tracking number"
+                          >
+                            {busy === o.id ? "…" : "Print label"}
+                          </button>
+                          <button
                             className="btn btn-primary"
                             disabled={busy === o.id || !s.carrier.trim() || !s.trackingCode.trim()}
                             onClick={() => advance(o.id, "Shipped", s)}
                           >
                             {busy === o.id ? "Saving…" : "Mark shipped"}
                           </button>
+                          {labelMsg[o.id] && (
+                            <span
+                              className="muted-text"
+                              style={{ fontSize: 11.5, width: "100%" }}
+                            >
+                              {labelMsg[o.id]}
+                            </span>
+                          )}
                         </>
                       )}
 
