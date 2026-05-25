@@ -4,6 +4,7 @@ import { siteUrl } from "./site-url";
 import { trackingLink } from "./tracking";
 import { formatCents } from "./money";
 import { replyAddress, type ThreadKind } from "./inbound-email";
+import { captureError } from "./observability";
 
 type SendArgs = {
   to: string | string[];
@@ -44,7 +45,7 @@ async function send(
     });
     return { ok: true };
   } catch (err) {
-    console.error("[email] send failed:", err);
+    captureError(err, { subsystem: "email", subject: args.subject });
     return { ok: false };
   }
 }

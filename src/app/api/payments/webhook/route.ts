@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getProvider } from "@/lib/payments";
 import { markOrderPaid } from "@/lib/order-utils";
+import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 // Webhook signatures verify against the raw body. Next.js gives us the raw
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
   try {
     event = await provider.parseWebhookEvent({ body, signature });
   } catch (err) {
-    console.error("[payments] webhook signature failed:", err);
+    captureError(err, { subsystem: "payments", op: "webhook-verify" });
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 

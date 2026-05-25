@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -13,4 +15,17 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// Sentry wrapping. Source-map upload is gated on SENTRY_AUTH_TOKEN being
+// set; absent that, the wrapper is still applied but skips the upload step
+// so a preview deploy without the secret still builds cleanly.
+const sentryWebpackPluginOptions = {
+  silent: !process.env.SENTRY_AUTH_TOKEN,
+  org: process.env.SENTRY_ORG || "partsport",
+  project: process.env.SENTRY_PROJECT || "partsport-web",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  disableLogger: true,
+  hideSourceMaps: true,
+  widenClientFileUpload: true,
+};
+
+export default withSentryConfig(nextConfig, sentryWebpackPluginOptions);

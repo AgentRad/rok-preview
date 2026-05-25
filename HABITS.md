@@ -139,6 +139,14 @@ These are intentional design choices. If a test chat or build chat flags them as
 
 **Buyer companies upload their own logo.** B2B buyers (utilities, co-ops, EPCs) can fill in a Company profile on /settings — companyName + companyLogoUrl. That logo appears on checkout summary, order detail "Billed to" block, the printable invoice, and order emails. Snapshot the logo URL and company name onto the Order at creation time so historical invoices don't rewrite when the user updates their profile. Guest checkout users skip this — no logo means no logo, no degradation.
 
+## Owner-side setup (services that gate on env vars)
+
+When you flip these on, the code starts using them; absent, it gracefully no-ops or falls back. No code changes needed.
+
+**Sentry (error tracking).** Sign up at sentry.io (free tier is 5k events/month, fine for early launch). Create a project, copy the DSN, and add to Vercel: `SENTRY_DSN` (server) and `NEXT_PUBLIC_SENTRY_DSN` (browser, can be the same value). Optionally add `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` + `SENTRY_PROJECT` to upload sourcemaps on build for unminified traces. Redeploy. Verify by hitting a route that throws and checking the dashboard.
+
+**Upstash (production rate limiting).** Sign up at upstash.com (free tier is 10k commands/day). Create a Redis DB, copy `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`, paste both into Vercel, redeploy. Without these vars, rate limiting falls back to in-memory per-function-instance, which is fine for low traffic but stops being correct under load.
+
 ## Secret hygiene
 
 If a session token (JWT) or credential ever leaks into the repo — even briefly — the right reflex is to rotate the corresponding secret in Vercel and let the auto-redeploy kill all live sessions. `SESSION_SECRET` was rotated once already after a curl cookie jar (`jar.txt`) got committed and reverted within 90 seconds. The gitignore now covers `jar.txt`, `*.cookie-jar`, `cookies.txt`. If something similar happens, rotate the relevant secret immediately, push a no-op commit to force a fresh Vercel build (env-var changes don't always auto-redeploy), and write up what was exposed in the commit message that contains the rotation note.

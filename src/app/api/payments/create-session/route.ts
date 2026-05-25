@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getProvider, type CheckoutLineItem } from "@/lib/payments";
 import { feeFor } from "@/lib/money";
 import { lookupTaxExemption } from "@/lib/stripe-tax";
+import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: true, url: session.url });
   } catch (err) {
-    console.error("[payments] create-session failed:", err);
+    captureError(err, { subsystem: "payments", op: "create-session" });
     return NextResponse.json(
       { error: "Could not start checkout. Please try again." },
       { status: 502 }

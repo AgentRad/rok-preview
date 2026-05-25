@@ -14,6 +14,7 @@
     "@anthropic-ai/sdk": "^0.97.1",
     "@paypal/react-paypal-js": "^8.8.3",
     "@prisma/client": "^6.3.1",
+    "@sentry/nextjs": "^10.53.1",
     "@vercel/blob": "^2.4.0",
     "bcryptjs": "^2.4.3",
     "jose": "^5.9.6",
