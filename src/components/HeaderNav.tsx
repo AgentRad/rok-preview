@@ -79,15 +79,20 @@ export default function HeaderNav({ user }: { user: NavUser }) {
               {dash.label}
             </Link>
           )}
-          <Link href="/cart" className="nav-cart" onClick={() => setMobileOpen(false)}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9" cy="20" r="1.5" />
-              <circle cx="18" cy="20" r="1.5" />
-              <path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.5L23 7H6" />
-            </svg>
-            Cart
-            {count > 0 && <span className="cart-count">{count}</span>}
-          </Link>
+          {/* Cart is for buyers and anonymous shoppers. Suppliers and OEMs
+              don't transact through it (the page redirects them out), so
+              hiding the link matches the actual flow. */}
+          {user?.role !== "SUPPLIER" && user?.role !== "MANUFACTURER" && (
+            <Link href="/cart" className="nav-cart" onClick={() => setMobileOpen(false)}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="20" r="1.5" />
+                <circle cx="18" cy="20" r="1.5" />
+                <path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.5L23 7H6" />
+              </svg>
+              Cart
+              {count > 0 && <span className="cart-count">{count}</span>}
+            </Link>
+          )}
 
           {user ? (
             <div className="nav-user" ref={menuRef}>

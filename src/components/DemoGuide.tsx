@@ -16,19 +16,25 @@ export default function DemoGuide() {
 
   // Escape dismisses; clicking anywhere in the underlying page also dismisses
   // (the overlay itself is pointer-events:none, so it never traps clicks).
-  // The first scroll also dismisses, so the buyer who came to shop gets out
-  // of the guide by simply doing what they came to do.
+  // The first scroll, wheel, or touchmove dismisses too, so the buyer who
+  // came to shop gets out of the guide by simply doing what they came to do.
+  // Listening on `scroll` alone missed cases where the page hadn't scrolled
+  // yet (short pages, header pinned) but the user had already wheeled 500px.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
-    const onScroll = () => close();
+    const dismiss = () => close();
     window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scroll", dismiss, { passive: true });
+    window.addEventListener("wheel", dismiss, { passive: true });
+    window.addEventListener("touchmove", dismiss, { passive: true });
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scroll", dismiss);
+      window.removeEventListener("wheel", dismiss);
+      window.removeEventListener("touchmove", dismiss);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
