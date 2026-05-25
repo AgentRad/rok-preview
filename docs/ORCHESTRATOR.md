@@ -98,6 +98,28 @@ If the autonomous loop hits stop criteria, it posts a PR comment saying so and e
 
 If the autonomous loop crashes or gets stuck, Rad can resume the chat-based loop seamlessly — the docs in the repo brief any chat instantly.
 
+## Pre-launch polish roadmap (Polish 6 → 11)
+
+After Polish 5 verify hit stop criteria for the buy loop, Rad pointed out that "the buy loop works" is not the same as "production-ready." Real B2B launch needs infrastructure that the test team didn't catch because it didn't exist to test. Six more polish rounds before THRADD (the first real supplier) onboards:
+
+**Polish 6 — Supplier onboarding.** Legal docs upload + admin review, bank info collection (or Stripe Connect — see Polish 8), 10-item onboarding checklist that gates publicVisible. Required before any real supplier can transact.
+
+**Polish 7 — Trust + legal.** Legal page bodies (ToS, Privacy, Acceptable Use, Returns, Supplier Agreement) so footer links stop 404ing. Email verification on signup. Sentry error tracking. Audit log for admin mutations. Account recovery flows. Production rate limiting via Upstash Redis (not in-memory).
+
+**Polish 8 — Money operations.** Stripe Connect Express for automated supplier payouts. Real Stripe refund flow wired to the existing ReturnRequest admin approval. Reserve / holdback for chargebacks. Daily reconciliation cron Stripe ↔ PartsPort DB. Tax registration tracking. 1099 handling (via Stripe Connect). Profit dashboard.
+
+**Polish 9 — Real freight.** Product weight + dimensions + freight class. SupplierWarehouse model for origin zips. Shippo or EasyPost integration for real-time LTL freight rates. Multi-shipment splits when a cart spans suppliers. Freight surcharges (liftgate, residential, inside delivery). Label printing on dispatch.
+
+**Polish 10 — SEO + performance.** Per-page metadata + Open Graph. JSON-LD structured data on products and brands. Canonical URLs (fixes the sitemap host issue caught in Polish 5). Next.js Image component everywhere. Lighthouse ≥ 90 on all four categories.
+
+**Polish 11 — Analytics + a11y + mobile.** Admin analytics dashboard with GMV, conversion, top suppliers. Search analytics (zero-result queries). Email preference center + bounce/complaint handling. WCAG 2.1 AA accessibility audit + fixes. Mobile UX walkthrough.
+
+After Polish 11 verifies clean, the platform is production-grade. Then Rad works through the go-to-market checklist (owner-side accounts, legal entity, business insurance, sales outreach, etc.) and flips the live keys.
+
+Each polish round is a self-contained punch list. Rad pastes one round at a time to a fresh PartsPort build chat (swapping out the build chat every 60-80 commits to avoid context bloat). Orchestrator verifies after each round, writes the next punch list, swaps chats as needed.
+
+The full punch list text for each polish round was written in a single orchestrator response — search the conversation history or re-derive from this brief if needed.
+
 ## Project context
 
 PartsPort is a B2B industrial parts marketplace on `claude/industrial-marketplace-ROwAU`. Three user types beyond admin: buyers (free), suppliers/distributors (6% fee), OEMs/manufacturers (free, no direct sales). RFQ flow for big-ticket items. Stripe Checkout + Stripe Tax. Resend for email.
