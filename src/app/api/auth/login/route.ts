@@ -11,18 +11,36 @@ const secret = new TextEncoder().encode(
 );
 
 export async function POST(req: Request) {
-  const limit = rateLimit("login", clientIp(req));
-  if (!limit.allowed) {
+  const ip = clientIp(req);
+  const ipLimit = await rateLimit("login", ip);
+  if (!ipLimit.allowed) {
     return NextResponse.json(
-      { error: "Too many sign-in attempts. Please wait a few minutes." },
+      { error: "Too many sign-in attempts. Please wait a minute." },
       {
         status: 429,
-        headers: { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) },
+        headers: { "Retry-After": String(Math.ceil(ipLimit.retryAfterMs / 1000)) },
       }
     );
   }
   const { email, password } = await req.json().catch(() => ({}));
   const normalized = String(email || "").toLowerCase().trim();
+  // Per-(IP, email) limit catches the case where one IP rotates between
+  // many guessed emails: the per-IP bucket above keeps replenishing as
+  // the bot moves to the next address.
+  if (normalized) {
+    const pairLimit = await rateLimit("login:email", `${ip}|${normalized}`);
+    if (!pairLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many sign-in attempts for this email. Try again later." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil(pairLimit.retryAfterMs / 1000)),
+          },
+        }
+      );
+    }
+  }
   const user = await prisma.user.findUnique({ where: { email: normalized } });
   if (!user || !(await verifyPassword(String(password || ""), user.passwordHash))) {
     return NextResponse.json(

@@ -3,7 +3,7 @@ import { quickSearch } from "@/lib/search";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export async function GET(req: Request) {
-  const limit = rateLimit("search", clientIp(req));
+  const limit = await rateLimit("search", clientIp(req));
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Search rate limit exceeded. Please slow down." },

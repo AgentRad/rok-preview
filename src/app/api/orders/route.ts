@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
 import { computeOrderTotals } from "@/lib/order-totals";
 import { sendOrderConfirmation } from "@/lib/email";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   // Role gate: OEMs and Suppliers cannot place orders. Core platform rule:
@@ -30,6 +31,26 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
+  // Bot-throttle: 10 orders per hour per user (or per IP for guests).
+  // Legitimate buyers never hit this; credential-stuffing bots that get a
+  // session token would.
+  const rlKey = sessionUser ? `user:${sessionUser.id}` : `ip:${clientIp(req)}`;
+  const orderLimit = await rateLimit("order", rlKey);
+  if (!orderLimit.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "You've hit the order rate limit for now. Try again in an hour, or contact support if you need to place many orders quickly.",
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(orderLimit.retryAfterMs / 1000)),
+        },
+      }
+    );
+  }
+
   // Signed-in buyers must verify their email before placing orders. Guest
   // checkout (no session) is still allowed; the order email + invoice land
   // at whatever address they typed. The fraud risk for an unverified

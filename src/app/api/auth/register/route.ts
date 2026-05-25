@@ -5,7 +5,21 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { issueEmailVerification } from "@/lib/email-verification";
 
 export async function POST(req: Request) {
-  const limit = await rateLimit("register", clientIp(req));
+  const ip = clientIp(req);
+  // Burst limit: at most 1 registration per minute from one IP. Catches
+  // rapid-fire bot signup; humans never hit this.
+  const burst = await rateLimit("register:burst", ip);
+  if (!burst.allowed) {
+    return NextResponse.json(
+      { error: "Slow down. Wait a minute before trying again." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(burst.retryAfterMs / 1000)) },
+      }
+    );
+  }
+  // Hourly limit: 3 per hour per IP for the slower, more methodical bots.
+  const limit = await rateLimit("register", ip);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many sign-up attempts. Please try again later." },

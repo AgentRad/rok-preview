@@ -106,6 +106,8 @@ After Polish 5 verify hit stop criteria for the buy loop, Rad pointed out that "
 
 **Polish 7 — Trust + legal.** Legal page bodies (ToS, Privacy, Acceptable Use, Returns, Supplier Agreement) so footer links stop 404ing. Email verification on signup. Sentry error tracking. Audit log for admin mutations. Account recovery flows. Production rate limiting via Upstash Redis (not in-memory).
 
+After Polish 7 lands, the platform has a structured debugging surface that didn't exist before: `/admin/audit` shows every admin mutation (supplier approvals, document reviews, payout state changes, tax-exempt decisions, impersonation, bank-info changes) with actor, target, summary, and a JSON metadata bag. When a test chat reports "X is broken after Y did Z," the audit log is the first place to look. The data lives in the `AuditLog` table; the helper `writeAuditLog()` in `src/lib/audit.ts` is wired into every existing admin route. Polish 8 (refunds) and Polish 9 (freight) extend the same pattern as they add admin mutations.
+
 **Polish 8 — Money operations.** Stripe Connect Express for automated supplier payouts. Real Stripe refund flow wired to the existing ReturnRequest admin approval. Reserve / holdback for chargebacks. Daily reconciliation cron Stripe ↔ PartsPort DB. Tax registration tracking. 1099 handling (via Stripe Connect). Profit dashboard.
 
 **Polish 9 — Real freight.** Product weight + dimensions + freight class. SupplierWarehouse model for origin zips. Shippo or EasyPost integration for real-time LTL freight rates. Multi-shipment splits when a cart spans suppliers. Freight surcharges (liftgate, residential, inside delivery). Label printing on dispatch.

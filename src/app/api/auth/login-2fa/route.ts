@@ -19,7 +19,7 @@ const secret = new TextEncoder().encode(
 export async function POST(req: Request) {
   // Share the login bucket so an attacker can't bypass the password limit
   // by hammering the 2FA endpoint with stolen tickets.
-  const limit = rateLimit("login", clientIp(req));
+  const limit = await rateLimit("login", clientIp(req));
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many sign-in attempts. Please wait a few minutes." },
