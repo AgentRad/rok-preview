@@ -38,13 +38,31 @@ export type OrderTotals = {
 
 export function computeOrderTotals(
   items: OrderLine[],
-  opts: { taxCents?: number; feeRateBps?: number } = {}
+  opts: {
+    taxCents?: number;
+    feeRateBps?: number;
+    /**
+     * P9 freight override. When checkout passes a buyer-selected rate
+     * (real-rate Shippo quote, multi-shipment sum, or surcharge-bumped
+     * total), use that instead of the deterministic flat-rate fallback.
+     */
+    freightOverrideCents?: number;
+    freightOverrideLabel?: string;
+  } = {}
 ): OrderTotals {
   const subtotalCents = items.reduce(
     (s, i) => s + i.unitPriceCents * i.qty,
     0
   );
-  const freight = calculateFreight({ items, subtotalCents });
+  const fallback = calculateFreight({ items, subtotalCents });
+  const freight: FreightResult =
+    opts.freightOverrideCents != null
+      ? {
+          freightCents: opts.freightOverrideCents,
+          basis: "REAL_RATE",
+          label: opts.freightOverrideLabel || "Selected freight",
+        }
+      : fallback;
   const bps = opts.feeRateBps ?? FEE_RATE_BPS;
   const feeCents = feeFor(subtotalCents, bps);
   const taxCents = opts.taxCents ?? 0;

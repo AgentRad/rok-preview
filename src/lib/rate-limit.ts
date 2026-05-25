@@ -43,6 +43,9 @@ const BUCKETS: Record<string, Bucket> = {
   forgot: { capacity: 3, windowMs: 60 * 60_000 },
   search: { capacity: 30, windowMs: 60_000 },
   order: { capacity: 10, windowMs: 60 * 60_000 },
+  // Freight estimate hits Shippo per call; 1-per-10s is plenty for a
+  // buyer typing a ZIP, blocks bot harvest of quotes.
+  "freight-estimate": { capacity: 1, windowMs: 10_000 },
   generic: { capacity: 60, windowMs: 60_000 },
 };
 

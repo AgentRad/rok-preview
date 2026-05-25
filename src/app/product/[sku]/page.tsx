@@ -7,6 +7,7 @@ import SiteFooter from "@/components/SiteFooter";
 import ProductImage from "@/components/ProductImage";
 import ProductGallery from "@/components/ProductGallery";
 import AddToCart from "@/components/AddToCart";
+import FreightEstimateWidget from "@/components/FreightEstimateWidget";
 import RequestQuote from "@/components/RequestQuote";
 import Stars from "@/components/Stars";
 import WriteReview from "@/components/WriteReview";
@@ -24,7 +25,14 @@ export default async function ProductPage({
   const product = await prisma.product.findUnique({
     where: { sku },
     include: {
-      supplier: true,
+      supplier: {
+        include: {
+          warehouses: {
+            orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+            take: 1,
+          },
+        },
+      },
       images: { orderBy: { position: "asc" } },
     },
   });
@@ -243,6 +251,11 @@ export default async function ProductPage({
                     ? `Configured equipment is priced by a vetted supplier. The order, payment, and delivery all run through PartsPort, with a ${FEE_RATE_LABEL} marketplace fee included.`
                     : `PartsPort verifies the supplier, handles payment, and delivers the part. A ${FEE_RATE_LABEL} marketplace fee is added at checkout. You are not charged until you pay.`}
                 </div>
+                {!product.quoteOnly &&
+                  product.weightLbs != null &&
+                  product.supplier.warehouses.length > 0 && (
+                    <FreightEstimateWidget sku={product.sku} />
+                  )}
               </div>
             </div>
           </div>

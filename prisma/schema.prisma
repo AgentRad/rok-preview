@@ -496,6 +496,15 @@ model Order {
   //   reservedCents: mirror of sum(Payout.reservedCents) for this order.
   refundedCents       Int             @default(0)
   reservedCents       Int             @default(0)
+  // P9 freight. freightCarrier/Service: label for the chosen rate.
+  // freightBreakdown: when the cart spans multiple suppliers, this is
+  // the per-supplier-shipment array (carrier, service, cents, originZip).
+  // freightSurcharges: { liftgate, residential, insideDelivery } booleans
+  // (P9 S4). Stored as JSON to avoid a migration per new surcharge type.
+  freightCarrier      String?
+  freightService      String?
+  freightBreakdown    Json?
+  freightSurcharges   Json?
   shipmentStage       String          @default("")
   carrier             String?
   trackingCode        String?

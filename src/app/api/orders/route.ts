@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
@@ -6,6 +7,11 @@ import { computeOrderTotals } from "@/lib/order-totals";
 import { sendOrderConfirmation } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { captureError } from "@/lib/observability";
+import {
+  surchargeCents,
+  type FreightShipment,
+  type FreightSurcharges,
+} from "@/lib/freight";
 
 export async function POST(req: Request) {
   // Role gate: OEMs and Suppliers cannot place orders. Core platform rule:
@@ -119,9 +125,71 @@ export async function POST(req: Request) {
     );
   }
 
+  // P9: optional freight selection from the checkout client. When the
+  // buyer picks a real-rate quote we honor it; otherwise computeOrderTotals
+  // falls back to the deterministic flat-rate calculator.
+  //
+  //   freightBreakdown: per-supplier shipment array (multi-supplier orders)
+  //   freightCarrier / freightService: top-level labels for the chosen rate
+  //   freightSurcharges: { liftgate, residential, insideDelivery } booleans
+  let freightOverrideCents: number | undefined;
+  let freightOverrideLabel: string | undefined;
+  let freightBreakdown: FreightShipment[] = [];
+  if (Array.isArray(body.freightBreakdown) && body.freightBreakdown.length > 0) {
+    const parsed: FreightShipment[] = body.freightBreakdown
+      .map((s: Record<string, unknown>) => ({
+        supplierId: String(s.supplierId || ""),
+        supplierName: String(s.supplierName || ""),
+        originZip: String(s.originZip || ""),
+        carrier: String(s.carrier || "Carrier"),
+        service: String(s.service || "Standard"),
+        cents: Math.max(0, Math.floor(Number(s.cents) || 0)),
+        etaDays:
+          typeof s.etaDays === "number" && Number.isFinite(s.etaDays)
+            ? s.etaDays
+            : null,
+      }))
+      .filter((s: FreightShipment) => !!s.supplierId);
+    freightBreakdown = parsed;
+    freightOverrideCents = parsed.reduce((sum, s) => sum + s.cents, 0);
+    freightOverrideLabel =
+      parsed.length === 1
+        ? `${parsed[0].carrier} ${parsed[0].service}`
+        : `${parsed.length} shipments`;
+  } else if (
+    typeof body.freightCents === "number" &&
+    Number.isFinite(body.freightCents) &&
+    body.freightCents >= 0
+  ) {
+    freightOverrideCents = Math.floor(body.freightCents);
+    freightOverrideLabel = String(body.freightLabel || "Selected freight");
+  }
+
+  const surcharges: FreightSurcharges = {
+    liftgate: !!body.freightSurcharges?.liftgate,
+    residential: !!body.freightSurcharges?.residential,
+    insideDelivery: !!body.freightSurcharges?.insideDelivery,
+  };
+  const surchargeAdd = surchargeCents(surcharges);
+  if (freightOverrideCents != null) {
+    freightOverrideCents += surchargeAdd;
+  }
+
+  const freightCarrier =
+    typeof body.freightCarrier === "string" && body.freightCarrier.trim()
+      ? body.freightCarrier.trim().slice(0, 80)
+      : null;
+  const freightService =
+    typeof body.freightService === "string" && body.freightService.trim()
+      ? body.freightService.trim().slice(0, 80)
+      : null;
+
   // Single source of truth for the order math. See src/lib/order-totals.ts.
   // Tax stays 0 here; Stripe Tax snapshots it back in markOrderPaid.
-  const totals = computeOrderTotals(lines);
+  const totals = computeOrderTotals(lines, {
+    freightOverrideCents,
+    freightOverrideLabel,
+  });
   // Reuse the session lookup we already did up top for the role gate; no
   // need for a second auth round-trip.
   const user = sessionUser;
@@ -146,6 +214,20 @@ export async function POST(req: Request) {
       taxCents: totals.taxCents,
       totalCents: totals.totalCents,
       feeRateBps: totals.feeRateBps,
+      // P9 freight columns. carrier/service are top-level labels (the
+      // shipping-confirmation email reads these); breakdown is the per-
+      // shipment detail (used by the order-detail page when the cart
+      // spans multiple suppliers); surcharges is the persisted flag set.
+      freightCarrier,
+      freightService,
+      freightBreakdown:
+        freightBreakdown.length > 0
+          ? (freightBreakdown as unknown as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+      freightSurcharges:
+        surchargeAdd > 0
+          ? (surcharges as unknown as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
       items: { create: orderItems },
     },
     include: { items: true },
