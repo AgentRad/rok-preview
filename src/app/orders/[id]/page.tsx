@@ -6,11 +6,12 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PayOrder from "@/components/PayOrder";
 import CancelOrderButton from "@/components/CancelOrderButton";
+import ConfirmReceiptButton from "@/components/ConfirmReceiptButton";
 import ReturnRequestForm from "@/components/ReturnRequestForm";
 import MessageThread from "@/components/MessageThread";
 import { formatCents } from "@/lib/money";
 import { trackingLink } from "@/lib/tracking";
-import { isPaymentsConfigured } from "@/lib/payments";
+import { isPaymentsConfigured, reconcileOrderFromStripe } from "@/lib/payments";
 import WriteReview from "@/components/WriteReview";
 
 function rateLabelForOrder(order: { feeRateBps: number }): string {
@@ -28,20 +29,47 @@ const STATUS_CLASS: Record<string, string> = {
 
 export default async function OrderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const order = await prisma.order.findUnique({
+  const sp = (await searchParams) ?? {};
+  const orderInclude = {
+    items: { include: { product: { include: { supplier: true } } } },
+    returns: { orderBy: { createdAt: "desc" as const } },
+    messages: { orderBy: { createdAt: "asc" as const } },
+    reviews: { select: { productId: true, rating: true, createdAt: true } },
+  };
+  const initial = await prisma.order.findUnique({
     where: { id },
-    include: {
-      items: { include: { product: { include: { supplier: true } } } },
-      returns: { orderBy: { createdAt: "desc" } },
-      messages: { orderBy: { createdAt: "asc" } },
-      reviews: { select: { productId: true, rating: true, createdAt: true } },
-    },
+    include: orderInclude,
   });
-  if (!order) notFound();
+  if (!initial) notFound();
+  let order = initial;
+
+  // Webhook-independent reconciliation: when the buyer returns from Stripe
+  // with ?paid=1 in the URL but the order is still PENDING (the webhook may
+  // be delayed, mis-configured, or signature-failing), ask Stripe directly
+  // if a session for this order has been paid, and flip the order in-line
+  // so the page renders honest state on first load.
+  if (sp.paid === "1" && order.status === "PENDING") {
+    try {
+      const result = await reconcileOrderFromStripe(order.id);
+      if (result.paid) {
+        const reloaded = await prisma.order.findUnique({
+          where: { id },
+          include: orderInclude,
+        });
+        if (reloaded) order = reloaded;
+      }
+    } catch (e) {
+      // Reconciliation failed; render the page as PENDING. The webhook
+      // will catch up in time.
+      console.error("[order] Stripe reconcile failed:", e);
+    }
+  }
 
   const viewer = await getCurrentUser();
   const isBuyer = !!viewer && !!order.buyerId && viewer.id === order.buyerId;
@@ -159,6 +187,15 @@ export default async function OrderPage({
                 note any damage on the carrier delivery receipt before signing.
                 Report claims within the window in the supplier agreement.
               </p>
+              {isBuyer && order.shipmentStage === "Shipped" && (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+                  <div style={{ fontSize: 13.5, marginBottom: 8 }}>
+                    Already received your shipment? Confirm it below so the
+                    review window opens and the order closes out.
+                  </div>
+                  <ConfirmReceiptButton orderId={order.id} />
+                </div>
+              )}
             </div>
           )}
 
@@ -222,7 +259,19 @@ export default async function OrderPage({
                           {it.skuSnapshot}
                         </div>
                       </td>
-                      <td>{it.supplierName}</td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {it.product?.supplier?.logoUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={it.product.supplier.logoUrl}
+                              alt=""
+                              className="invoice-supplier-logo"
+                            />
+                          )}
+                          <span>{it.supplierName}</span>
+                        </div>
+                      </td>
                       <td className="num">{formatCents(it.unitPriceCents)}</td>
                       <td className="num">{it.qty}</td>
                       <td className="num">

@@ -22,6 +22,7 @@ export async function POST(req: Request) {
       priceCents: p.priceCents,
       etaDays: p.etaDays,
       stock: p.stock,
+      quoteOnly: p.quoteOnly,
       supplierName: p.supplier.name,
     })),
   });

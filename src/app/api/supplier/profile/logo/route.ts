@@ -7,7 +7,13 @@ import { getActiveSupplierContext, canManageTeam } from "@/lib/supplier-access";
 export const runtime = "nodejs";
 
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
-const ALLOWED = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
+const ALLOWED = new Set([
+  "image/svg+xml", // preferred: vector, infinite clarity
+  "image/png", // recommended for raster (supports transparency)
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+]);
 
 export async function POST(req: Request) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -44,13 +50,20 @@ export async function POST(req: Request) {
   }
   if (!ALLOWED.has(file.type)) {
     return NextResponse.json(
-      { error: "Use JPG, PNG, or WEBP." },
+      { error: "Use SVG (preferred), PNG, JPG, or WEBP." },
       { status: 400 }
     );
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json(
       { error: `Logo is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 2 MB.` },
+      { status: 400 }
+    );
+  }
+  if (file.size < 200) {
+    // Tiny files are almost certainly broken / accidental
+    return NextResponse.json(
+      { error: "Logo file is too small (under 200 bytes). Try again with a real export." },
       { status: 400 }
     );
   }

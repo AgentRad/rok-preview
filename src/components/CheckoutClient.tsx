@@ -6,7 +6,8 @@ import Link from "next/link";
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import ProductImage from "./ProductImage";
 import { getCart, clearCart, type CartLine } from "@/lib/cart";
-import { formatCents, feeFor, FEE_RATE_LABEL } from "@/lib/money";
+import { formatCents, FEE_RATE_LABEL } from "@/lib/money";
+import { computeOrderTotals } from "@/lib/order-totals";
 import { formatAddressBlock } from "@/lib/address";
 
 type SavedAddress = {
@@ -114,14 +115,19 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   }
 
   const valid = lines.filter((l) => products[l.sku]);
-  const subtotal = valid.reduce(
-    (s, l) => s + products[l.sku].priceCents * l.qty,
-    0
+  const totals = computeOrderTotals(
+    valid.map((l) => ({
+      unitPriceCents: products[l.sku].priceCents,
+      qty: l.qty,
+      quoteOnly: (products[l.sku] as { quoteOnly?: boolean }).quoteOnly,
+    }))
   );
-  const freight = 0;
-  const fee = feeFor(subtotal);
-  const tax = 0;
-  const total = subtotal + freight + fee + tax;
+  const subtotal = totals.subtotalCents;
+  const freight = totals.freightCents;
+  const freightInfo = totals.freight;
+  const fee = totals.feeCents;
+  const tax = totals.taxCents;
+  const total = totals.totalCents;
   const maxEta = valid.reduce(
     (m, l) => Math.max(m, products[l.sku].etaDays),
     0
@@ -246,8 +252,13 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
           <span>{formatCents(subtotal)}</span>
         </div>
         <div className="summary-line">
-          <span>Freight</span>
-          <span>{formatCents(freight)}</span>
+          <span>
+            Freight
+            <span className="muted-text" style={{ fontSize: 11, marginLeft: 6 }}>
+              {freightInfo.label}
+            </span>
+          </span>
+          <span>{freight > 0 ? formatCents(freight) : freightInfo.basis === "FREIGHT_QUOTED" ? "TBD" : formatCents(0)}</span>
         </div>
         <div className="summary-line">
           <span>Platform fee ({FEE_RATE_LABEL})</span>

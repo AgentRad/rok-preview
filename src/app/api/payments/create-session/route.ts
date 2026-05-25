@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getProvider } from "@/lib/payments";
+import { getProvider, type CheckoutLineItem } from "@/lib/payments";
 import { feeFor } from "@/lib/money";
 import { lookupTaxExemption } from "@/lib/stripe-tax";
 
@@ -50,19 +50,27 @@ export async function POST(req: Request) {
     quantity: i.qty,
   }));
   const feeAmount = order.feeCents > 0 ? order.feeCents : feeFor(order.subtotalCents);
-  const allLines =
-    feeAmount > 0
-      ? [
-          ...productLines,
-          {
-            name: "PartsPort marketplace fee",
-            unitAmountCents: feeAmount,
-            quantity: 1,
-            // Service fees use the SaaS tax code; tweak per CPA guidance.
-            taxCode: "txcd_10000000",
-          },
-        ]
-      : productLines;
+  const lines: CheckoutLineItem[] = [...productLines];
+  if (order.freightCents > 0) {
+    lines.push({
+      name: "Shipping & handling",
+      unitAmountCents: order.freightCents,
+      quantity: 1,
+      // Freight is taxable in most US jurisdictions; let Stripe Tax decide
+      // based on the ship-to state. Default goods code is fine.
+      taxCode: "txcd_92010001",
+    });
+  }
+  if (feeAmount > 0) {
+    lines.push({
+      name: "PartsPort marketplace fee",
+      unitAmountCents: feeAmount,
+      quantity: 1,
+      // Service fees use the SaaS tax code; tweak per CPA guidance.
+      taxCode: "txcd_10000000",
+    });
+  }
+  const allLines = lines;
 
   try {
     const session = await provider.createCheckoutSession({

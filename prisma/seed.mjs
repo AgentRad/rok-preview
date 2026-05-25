@@ -7,17 +7,25 @@ import { dirname, join } from "node:path";
 const prisma = new PrismaClient();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Supplier brand marks. Sourced from ui-avatars.com which serves clean
+// monogram SVGs - good enough for launch when we don't have real logos
+// from each supplier yet. Replace with a Vercel Blob-hosted PNG/SVG once
+// the supplier uploads their own through /supplier#profile. Background
+// colors chosen to feel industrial (deep, muted tones).
+const logo = (name, bg, color = "ffffff") =>
+  `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=400&background=${bg}&color=${color}&bold=true&format=svg`;
+
 const SUPPLIERS = [
-  { name: "Gridline Power Supply", contactEmail: "sales@gridlinepower.example", rating: 4.8, reviews: 164, onTimeRate: 98.3, certifications: "ISO 9001:2015, UL-recognized components" },
-  { name: "Substation Components Co.", contactEmail: "quotes@substationco.example", rating: 4.9, reviews: 92, onTimeRate: 98.8, certifications: "ISO 9001:2015, IEEE C57 compliant" },
-  { name: "Voltworks Switchgear", contactEmail: "sales@voltworks.example", rating: 4.8, reviews: 71, onTimeRate: 97.6, certifications: "ISO 9001:2015, ANSI C37 type-tested" },
-  { name: "Relay & Protection Partners", contactEmail: "desk@relayprotection.example", rating: 4.9, reviews: 138, onTimeRate: 99.0, certifications: "ISO 9001:2015, SEL authorized" },
-  { name: "Ironwood Transmission Supply", contactEmail: "orders@ironwoodtransmission.example", rating: 4.7, reviews: 210, onTimeRate: 97.9, certifications: "ISO 9001:2015" },
-  { name: "Cascade Utility Hardware", contactEmail: "sales@cascadeutility.example", rating: 4.7, reviews: 186, onTimeRate: 98.1, certifications: "ISO 9001:2015" },
-  { name: "Meridian Electric Distribution", contactEmail: "hello@meridianelectric.example", rating: 4.6, reviews: 154, onTimeRate: 96.8, certifications: "ISO 9001:2015" },
-  { name: "Summit Power Systems", contactEmail: "sales@summitpower.example", rating: 4.8, reviews: 88, onTimeRate: 98.0, certifications: "ISO 9001:2015, Generac PowerPro dealer" },
-  { name: "SunPath Renewables", contactEmail: "quotes@sunpathrenewables.example", rating: 4.8, reviews: 119, onTimeRate: 97.7, certifications: "ISO 9001:2015, NABCEP partner" },
-  { name: "StoreVolt Energy", contactEmail: "sales@storevolt.example", rating: 4.7, reviews: 64, onTimeRate: 97.4, certifications: "ISO 9001:2015, UL 9540 listed" },
+  { name: "Gridline Power Supply", contactEmail: "sales@gridlinepower.example", rating: 4.8, reviews: 164, onTimeRate: 98.3, certifications: "ISO 9001:2015, UL-recognized components", logoUrl: logo("Gridline Power", "1a1916", "e0a32a") },
+  { name: "Substation Components Co.", contactEmail: "quotes@substationco.example", rating: 4.9, reviews: 92, onTimeRate: 98.8, certifications: "ISO 9001:2015, IEEE C57 compliant", logoUrl: logo("Substation Components", "2c3e50") },
+  { name: "Voltworks Switchgear", contactEmail: "sales@voltworks.example", rating: 4.8, reviews: 71, onTimeRate: 97.6, certifications: "ISO 9001:2015, ANSI C37 type-tested", logoUrl: logo("Voltworks Switchgear", "b8860b") },
+  { name: "Relay & Protection Partners", contactEmail: "desk@relayprotection.example", rating: 4.9, reviews: 138, onTimeRate: 99.0, certifications: "ISO 9001:2015, SEL authorized", logoUrl: logo("Relay Protection", "8b2c2c") },
+  { name: "Ironwood Transmission Supply", contactEmail: "orders@ironwoodtransmission.example", rating: 4.7, reviews: 210, onTimeRate: 97.9, certifications: "ISO 9001:2015", logoUrl: logo("Ironwood Transmission", "5c4033") },
+  { name: "Cascade Utility Hardware", contactEmail: "sales@cascadeutility.example", rating: 4.7, reviews: 186, onTimeRate: 98.1, certifications: "ISO 9001:2015", logoUrl: logo("Cascade Utility", "2c5f3f") },
+  { name: "Meridian Electric Distribution", contactEmail: "hello@meridianelectric.example", rating: 4.6, reviews: 154, onTimeRate: 96.8, certifications: "ISO 9001:2015", logoUrl: logo("Meridian Electric", "4a5568") },
+  { name: "Summit Power Systems", contactEmail: "sales@summitpower.example", rating: 4.8, reviews: 88, onTimeRate: 98.0, certifications: "ISO 9001:2015, Generac PowerPro dealer", logoUrl: logo("Summit Power", "1e3a5f") },
+  { name: "SunPath Renewables", contactEmail: "quotes@sunpathrenewables.example", rating: 4.8, reviews: 119, onTimeRate: 97.7, certifications: "ISO 9001:2015, NABCEP partner", logoUrl: logo("SunPath Renewables", "d97706") },
+  { name: "StoreVolt Energy", contactEmail: "sales@storevolt.example", rating: 4.7, reviews: 64, onTimeRate: 97.4, certifications: "ISO 9001:2015, UL 9540 listed", logoUrl: logo("StoreVolt Energy", "1e5fa3") },
 ];
 
 const PRODUCTS = [
@@ -119,9 +127,22 @@ async function main() {
   const supplierIds = {};
   for (const s of SUPPLIERS) {
     const existing = await prisma.supplier.findFirst({ where: { name: s.name } });
-    const rec =
-      existing ||
-      (await prisma.supplier.create({ data: { ...s, status: "APPROVED" } }));
+    let rec;
+    if (existing) {
+      // Top-up missing fields without overwriting any supplier-edited values.
+      // Currently only logoUrl: if a supplier has uploaded their own, leave
+      // it alone; otherwise fill in the seed default.
+      if (!existing.logoUrl && s.logoUrl) {
+        rec = await prisma.supplier.update({
+          where: { id: existing.id },
+          data: { logoUrl: s.logoUrl },
+        });
+      } else {
+        rec = existing;
+      }
+    } else {
+      rec = await prisma.supplier.create({ data: { ...s, status: "APPROVED" } });
+    }
     supplierIds[s.name] = rec.id;
   }
 
@@ -149,13 +170,20 @@ async function main() {
     });
   }
 
-  // Seed real product photos from seed-images.json (idempotent: skips any
-  // product that already has ProductImage rows).
+  // Seed real product photos from seed-images.json. Idempotent top-up:
+  // - URLs already in the DB are left alone (preserves any supplier-uploaded
+  //   images that were positioned after the seeded ones).
+  // - URLs in the JSON that AREN'T in the DB yet get inserted at the next
+  //   open position. So adding a second photo for a SKU that previously
+  //   only had one will land on the next deploy.
+  // - Position 0 (the primary) is enforced: if the JSON's first URL is in
+  //   the DB but not at position 0, we leave the existing order alone (so
+  //   supplier-reorders are preserved).
   try {
     const raw = await readFile(join(__dirname, "seed-images.json"), "utf-8");
     const mapping = JSON.parse(raw);
     let inserted = 0;
-    let skippedHadImages = 0;
+    let toppedUp = 0;
     let skippedNoUrls = 0;
     for (const [sku, urls] of Object.entries(mapping)) {
       if (sku.startsWith("_")) continue;
@@ -165,37 +193,42 @@ async function main() {
       }
       const product = await prisma.product.findUnique({ where: { sku } });
       if (!product) continue;
-      const existing = await prisma.productImage.count({
+      const existing = await prisma.productImage.findMany({
         where: { productId: product.id },
+        orderBy: { position: "asc" },
       });
-      if (existing > 0) {
-        skippedHadImages++;
-        continue;
-      }
-      for (let i = 0; i < urls.length; i++) {
-        const url = String(urls[i]).trim();
+      const existingUrlSet = new Set(existing.map((e) => e.url));
+      let nextPos = existing.length;
+      let addedThisSku = 0;
+      for (const raw of urls) {
+        const url = String(raw).trim();
         if (!url) continue;
+        if (existingUrlSet.has(url)) continue;
         await prisma.productImage.create({
-          data: { productId: product.id, url, position: i },
+          data: { productId: product.id, url, position: nextPos++ },
         });
+        addedThisSku++;
       }
-      // Sync the legacy single-image field with the primary.
-      if (urls[0]) {
+      // Sync the legacy single-image field with whatever is at position 0.
+      const first = existing[0]?.url ?? String(urls[0]).trim();
+      if (first && first !== product.imageUrl) {
         await prisma.product.update({
           where: { id: product.id },
-          data: { imageUrl: String(urls[0]).trim() },
+          data: { imageUrl: first },
         });
       }
-      inserted++;
+      if (addedThisSku > 0 && existing.length === 0) inserted++;
+      else if (addedThisSku > 0) toppedUp++;
     }
     console.log(
-      "Seed images:",
+      "Seed images: inserted",
       inserted,
-      "products got images,",
-      skippedHadImages,
-      "already had images,",
+      "new SKUs,",
+      "topped-up",
+      toppedUp,
+      "existing SKUs,",
       skippedNoUrls,
-      "had no URLs in seed-images.json"
+      "had no URLs."
     );
   } catch (e) {
     console.warn(
