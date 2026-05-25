@@ -88,7 +88,15 @@ Don't keep running rounds for diminishing returns. Three rounds in a row finding
 
 Rad is the message bus. He pastes between chats. Don't pretend you can talk to the build chat directly — you can't.
 
-If Rad wants to remove himself from the loop after launch, point him at the Claude Agent SDK. A short Node.js script can wire the chats together programmatically. But during the build → launch phase, human-relay is the right architecture.
+## Autonomous mode
+
+The repo also has a self-running version of this loop at `.github/workflows/autonomous-loop.yml` driven by `scripts/auto/master-prompt.md`. It runs the test + triage + fix cycle as one Claude Code subprocess on Sonnet 4.6, billed to Rad's Anthropic account. Setup instructions are in `scripts/auto/README.md`.
+
+When autonomous mode is enabled, the chat-based loop and the autonomous loop **should not both run on the same branch at the same time** — they'll step on each other's commits. Either Rad drives it manually (chats) or the workflow drives it (autonomous), not both. Pick one mode per session.
+
+If the autonomous loop hits stop criteria, it posts a PR comment saying so and exits. At that point, Rad can ship.
+
+If the autonomous loop crashes or gets stuck, Rad can resume the chat-based loop seamlessly — the docs in the repo brief any chat instantly.
 
 ## Project context
 
