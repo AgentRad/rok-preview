@@ -1,10 +1,133 @@
 import "server-only";
+import crypto from "node:crypto";
 import { Resend } from "resend";
+import { prisma } from "./db";
 import { siteUrl } from "./site-url";
 import { trackingLink } from "./tracking";
 import { formatCents } from "./money";
 import { replyAddress, type ThreadKind } from "./inbound-email";
 import { captureError } from "./observability";
+
+/**
+ * PLH-2 Phase 4d (D1): email categorization.
+ *
+ * TRANSACTIONAL (no opt-out, CAN-SPAM safe-harbor): these always send,
+ * regardless of any user notification flag.
+ *   sendOrderConfirmation, sendPaymentReceived, sendOrderShipped,
+ *   sendOrderRefunded, sendOrderDelivered, sendRfqReceived, sendQuoteReady,
+ *   sendQuoteDeclined, sendApplicationStatus, sendThreadMessage,
+ *   sendNewSupplierWelcome, sendSupplierInvite, sendEmailVerification,
+ *   sendEmailChangeNotice, sendEmailChangeConfirm,
+ *   sendAccountDeletionScheduled, sendReturnApproved, sendReturnRejected,
+ *   sendReturnResolved, sendReturnNotifySupplier, sendPasswordReset,
+ *   sendSupplierDocReviewed, sendTwoFactorDisabled,
+ *   sendAddressAlreadyRegistered, sendDeletedAccountSignInAttempt
+ *
+ * NON-TRANSACTIONAL (gated by User.notifyMarketingEmails /
+ * notifyProductUpdates / notifyOrderEmails flags): broadcasts, product
+ * announcements, optional digests. Wrap with shouldSendToUser().
+ */
+
+export type EmailCategory = "order" | "marketing" | "product";
+
+/**
+ * Returns false when the user has opted out of this non-transactional
+ * category. Returns true on unknown user (so guest broadcasts still send
+ * when they were authorized in the first place). Never gates
+ * transactional mail; callers are required to use this only for
+ * non-essential categories per the legend above.
+ */
+export async function shouldSendToUser(
+  userId: string | null | undefined,
+  category: EmailCategory
+): Promise<boolean> {
+  if (!userId) return true;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        notifyOrderEmails: true,
+        notifyMarketingEmails: true,
+        notifyProductUpdates: true,
+      },
+    });
+    if (!user) return true;
+    if (category === "order") return user.notifyOrderEmails;
+    if (category === "marketing") return user.notifyMarketingEmails;
+    if (category === "product") return user.notifyProductUpdates;
+    return true;
+  } catch (err) {
+    captureError(err, { subsystem: "email-prefs", category });
+    // Fail-open on the read so a DB hiccup never silently swallows mail.
+    return true;
+  }
+}
+
+/**
+ * PLH-2 Phase 4d (D1): signed one-click unsubscribe token. Embedded in
+ * the List-Unsubscribe header and on a public /api/email/unsubscribe
+ * endpoint so the recipient can opt out without logging in.
+ */
+function unsubSecret(): string {
+  return (
+    process.env.SESSION_SECRET ||
+    process.env.INBOUND_REPLY_SECRET ||
+    "partsport-unsub-fallback"
+  );
+}
+
+export function signUnsubscribeToken(userId: string): string {
+  const sig = crypto
+    .createHmac("sha256", unsubSecret())
+    .update(userId)
+    .digest("hex")
+    .slice(0, 24);
+  return `${userId}.${sig}`;
+}
+
+export function verifyUnsubscribeToken(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [userId, sig] = parts;
+  if (!userId || !sig) return null;
+  const expected = crypto
+    .createHmac("sha256", unsubSecret())
+    .update(userId)
+    .digest("hex")
+    .slice(0, 24);
+  if (expected.length !== sig.length) return null;
+  try {
+    if (
+      !crypto.timingSafeEqual(Buffer.from(expected, "utf8"), Buffer.from(sig, "utf8"))
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return userId;
+}
+
+function unsubscribeHeaders(toEmail: string): Record<string, string> {
+  // Mailto unsubscribe + one-click POST URL. The token is per-recipient
+  // when we know the userId; otherwise we fall back to a mailto-only
+  // header so the recipient can still reply to opt out.
+  const mailto = `mailto:unsubscribe@partsport.agentgaming.gg?subject=unsubscribe%20${encodeURIComponent(toEmail)}`;
+  return {
+    "List-Unsubscribe": `<${mailto}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}
+
+function unsubscribeHeadersForUser(userId: string, toEmail: string): Record<string, string> {
+  const token = signUnsubscribeToken(userId);
+  const oneClick = siteUrl(`/api/email/unsubscribe?token=${encodeURIComponent(token)}`);
+  const mailto = `mailto:unsubscribe@partsport.agentgaming.gg?subject=unsubscribe%20${encodeURIComponent(toEmail)}`;
+  return {
+    "List-Unsubscribe": `<${oneClick}>, <${mailto}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}
 
 // PLH-1 commit 2: HTML-escape any user-supplied string we drop into an
 // email body. Subject lines (plain text) stay alone. The map covers the
@@ -43,11 +166,20 @@ export function isEmailConfigured(): boolean {
 }
 
 async function send(
-  args: SendArgs & { from?: string }
+  args: SendArgs & { from?: string; userId?: string | null }
 ): Promise<{ ok: boolean }> {
   const c = client();
   if (!c) return { ok: false };
   try {
+    // PLH-2 Phase 4d (D1): RFC 8058 List-Unsubscribe. When we know the
+    // user, the One-Click URL flips their marketing flag without login.
+    // For sends with no user (e.g. supplier application updates to a
+    // not-yet-a-user contact), we still set a mailto unsubscribe so we
+    // are CAN-SPAM compliant.
+    const toFirst = Array.isArray(args.to) ? args.to[0] : args.to;
+    const unsubHdrs = args.userId
+      ? unsubscribeHeadersForUser(args.userId, toFirst)
+      : unsubscribeHeaders(toFirst);
     await c.emails.send({
       from: args.from || FROM_DEFAULT,
       to: args.to,
@@ -55,6 +187,7 @@ async function send(
       html: args.html,
       text: args.text,
       replyTo: args.replyTo,
+      headers: unsubHdrs,
     });
     return { ok: true };
   } catch (err) {

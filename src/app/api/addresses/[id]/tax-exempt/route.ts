@@ -2,26 +2,30 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
+import { detectMagic, safeExt } from "@/lib/upload-validation";
 
 export const runtime = "nodejs";
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
+// PLH-2 Phase 4d (D4): SVG removed; magic-byte sniff replaces the
+// client-supplied mime. PDF, JPEG, PNG only.
 const ALLOWED = new Set([
   "application/pdf",
   "image/jpeg",
-  "image/jpg",
   "image/png",
-  "image/webp",
 ]);
 
 /**
  * Buyers upload a resale or government-entity certificate against a saved
  * address. Two paths:
- *   - multipart/form-data with a `file` part: uploaded to Vercel Blob (when
- *     BLOB_READ_WRITE_TOKEN is set).
+ *   - multipart/form-data with a `file` part: uploaded to Vercel Blob as
+ *     PRIVATE (PLH-2 Phase 4d D4); streamed back via the /download route
+ *     after an auth check.
  *   - application/json with `{ url }`: skips Blob and just records the
  *     hosted URL on the address (useful when Blob isn't configured, or for
- *     buyers who already host their cert in their own DMS).
+ *     buyers who already host their cert in their own DMS). PLH-2 Phase 4d
+ *     forces https only.
  * Either way, status flips to PENDING. Admin reviews and sets APPROVED /
  * REJECTED via the PATCH below.
  */
@@ -32,6 +36,14 @@ export async function POST(
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  }
+  // PLH-2 Phase 4d (D2): per-user throttle on tax-exempt mutations.
+  const rl = await rateLimit("generic", `user:${user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
   }
   const { id } = await params;
   const address = await prisma.address.findFirst({
@@ -53,9 +65,11 @@ export async function POST(
         { status: 400 }
       );
     }
-    if (!/^https?:\/\//i.test(url)) {
+    // PLH-2 Phase 4d (D4): https only; http:// is rejected because the
+    // cert can contain sensitive resale/EIN identifiers.
+    if (!/^https:\/\//i.test(url)) {
       return NextResponse.json(
-        { error: "URL must start with https:// or http://." },
+        { error: "Certificate URL must start with https://." },
         { status: 400 }
       );
     }
@@ -87,12 +101,6 @@ export async function POST(
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file attached." }, { status: 400 });
   }
-  if (!ALLOWED.has(file.type)) {
-    return NextResponse.json(
-      { error: "Use PDF, JPG, PNG, or WEBP." },
-      { status: 400 }
-    );
-  }
   if (file.size > MAX_BYTES) {
     return NextResponse.json(
       {
@@ -101,11 +109,20 @@ export async function POST(
       { status: 400 }
     );
   }
-  const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+  // PLH-2 Phase 4d (D4): magic-byte sniff. The client-supplied file.type
+  // is ignored. SVG is not in the allow-list.
+  const detected = await detectMagic(file);
+  if (!detected || !ALLOWED.has(detected)) {
+    return NextResponse.json(
+      { error: "Use PDF, JPG, or PNG." },
+      { status: 400 }
+    );
+  }
+  const ext = safeExt(file.name);
   const blob = await put(
     `tax-exempt/${user.id}/${id}.${ext}`,
     file,
-    { access: "public", addRandomSuffix: true, contentType: file.type }
+    { access: "private", addRandomSuffix: true, contentType: detected }
   );
   await prisma.address.update({
     where: { id },
@@ -155,6 +172,14 @@ export async function DELETE(
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  // PLH-2 Phase 4d (D2): per-user throttle on tax-exempt mutations.
+  const rl = await rateLimit("generic", `user:${user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
+  }
   const { id } = await params;
   const address = await prisma.address.findFirst({
     where: { id, userId: user.id },

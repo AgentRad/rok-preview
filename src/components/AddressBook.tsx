@@ -77,13 +77,17 @@ function TaxExemptRow({ address }: { address: Address }) {
           ? <span className="badge badge-cancelled">Tax-exempt rejected</span>
           : null;
 
+  // PLH-2 Phase 4d (D4): private blob. The buyer hits the download
+  // route, which auths and streams the bytes back.
+  const certHref = url ? `/api/addresses/${address.id}/tax-exempt/download` : "";
+
   return (
     <div style={{ marginTop: 10, fontSize: 12.5 }}>
       {badge && <div style={{ marginBottom: 6 }}>{badge}</div>}
       <input
         ref={fileInput}
         type="file"
-        accept="application/pdf,image/jpeg,image/png,image/webp"
+        accept="application/pdf,image/jpeg,image/png"
         style={{ display: "none" }}
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -94,7 +98,7 @@ function TaxExemptRow({ address }: { address: Address }) {
       <div className="muted-text" style={{ fontSize: 12, lineHeight: 1.45 }}>
         {url ? (
           <>
-            <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>
+            <a href={certHref} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>
               View certificate
             </a>
             {" · "}
@@ -182,6 +186,20 @@ export type Address = {
   isDefault: boolean;
   taxExemptCertificateUrl?: string | null;
   taxExemptStatus?: string | null;
+};
+
+// PLH-2 Phase 4d (D4): curated country list. Server still enforces ISO
+// alpha-2 on submit, so "Other…" lets the buyer type any 2-letter code.
+const COUNTRY_CODES = [
+  "US", "CA", "MX", "GB", "IE", "DE", "FR", "ES", "IT", "NL",
+  "BE", "CH", "SE", "NO", "DK", "FI", "PL", "AU", "NZ", "JP",
+];
+const COUNTRY_NAMES: Record<string, string> = {
+  US: "United States", CA: "Canada", MX: "Mexico", GB: "United Kingdom",
+  IE: "Ireland", DE: "Germany", FR: "France", ES: "Spain", IT: "Italy",
+  NL: "Netherlands", BE: "Belgium", CH: "Switzerland", SE: "Sweden",
+  NO: "Norway", DK: "Denmark", FI: "Finland", PL: "Poland",
+  AU: "Australia", NZ: "New Zealand", JP: "Japan",
 };
 
 type Draft = Omit<Address, "id" | "isDefault"> & { isDefault: boolean };
@@ -415,12 +433,32 @@ export default function AddressBook({ initial }: { initial: Address[] }) {
             </div>
             <div>
               <label htmlFor="ad-country">Country</label>
-              <input
+              {/* PLH-2 Phase 4d (D4): ISO alpha-2 select. Server validates. */}
+              <select
                 id="ad-country"
-                type="text"
-                value={draft.country}
-                onChange={(e) => patch("country", e.target.value)}
-              />
+                value={COUNTRY_CODES.includes(draft.country) ? draft.country : "OTHER"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  patch("country", v === "OTHER" ? "" : v);
+                }}
+              >
+                {COUNTRY_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {COUNTRY_NAMES[code] || code} ({code})
+                  </option>
+                ))}
+                <option value="OTHER">Other…</option>
+              </select>
+              {!COUNTRY_CODES.includes(draft.country) && (
+                <input
+                  type="text"
+                  value={draft.country}
+                  onChange={(e) => patch("country", e.target.value.toUpperCase())}
+                  placeholder="2-letter ISO code"
+                  maxLength={2}
+                  style={{ marginTop: 6 }}
+                />
+              )}
             </div>
           </div>
           <div className="form-row">

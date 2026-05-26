@@ -204,6 +204,16 @@ These are MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4c. The Phase 4c
 - **Slice / trim edge cases.** `tagline.slice(0, 140).trim()` can produce a string shorter than 140 chars and then a different-length string after trim; user-visible character count drifts. Trim first, then slice.
 - **Blob path leaks user id.** `oems/${user.id}/logo.${ext}` exposes the OEM's User id in the public blob URL. Use a hash or per-OEM random suffix instead.
 
+## Post-launch backlog (deferred from PLH-2 Phase 4d address-book + notif-prefs audit)
+
+These are MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4d. The Phase 4d commit closed the four CRITICAL/HIGH items: D1 (per-user notification preference flags `notifyOrderEmails` / `notifyMarketingEmails` / `notifyProductUpdates`, `shouldSendToUser` gate, /settings Notifications card, PATCH `/api/account/notification-preferences` rate-limited + auth-gated, RFC 8058 List-Unsubscribe header on outbound mail, public signed-token `/api/email/unsubscribe`), D2 (per-user `rateLimit("generic", user:${id})` on /api/addresses POST + /api/addresses/[id] PATCH/DELETE + /api/addresses/[id]/tax-exempt POST/DELETE), D3 (per-field length caps in `validateAddress`, structured `{ field, error }` 400), D4 (ISO alpha-2 country regex, per-country postal regex US/CA/GB + generic fallback, tax-exempt blob flipped to `access:"private"` with new auth+audit `/api/addresses/[id]/tax-exempt/download` route, `detectMagic` MIME sniff with PDF/JPEG/PNG only, SVG removed, https-only URL-paste). The list below is queued for a post-launch polish round, not for soft launch.
+
+- **Address bound on quantity.** Buyers can create unlimited saved addresses; add a hard cap (e.g. 25) before insert.
+- **Soft-delete addresses referenced by historical orders.** Today `DELETE` removes the row; if an old order embedded an Address relation we lose denorm history. Mirror the Supplier soft-delete pattern.
+- **Phone format validation.** Phone is capped but not format-checked; a libphonenumber parse would catch obvious typos.
+- **List the unsubscribed user a re-subscribe affordance in the unsubscribe response HTML.** Currently they have to find /settings on their own.
+- **Tax-exempt cert expiry.** Resale certs expire (1-3 years depending on state); add an `taxExemptExpiresAt` column and admin reminder cron.
+
 ## Project context
 
 PartsPort is a B2B industrial parts marketplace on `claude/industrial-marketplace-ROwAU`. Three user types beyond admin: buyers (free), suppliers/distributors (6% fee), OEMs/manufacturers (free, no direct sales). RFQ flow for big-ticket items. Stripe Checkout + Stripe Tax. Resend for email.

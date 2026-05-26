@@ -121,6 +121,14 @@ model User {
   addresses                  Address[]
   messages                   Message[]
   supplierMemberships        SupplierMember[]
+  // PLH-2 Phase 4d (D1): CAN-SPAM opt-out gates for non-transactional
+  // mail. Transactional emails (auth, password reset, order
+  // confirmation, payment receipt, refund, return, payout failure,
+  // 2FA, security alerts) always send and bypass these flags. These
+  // three only gate marketing-ish broadcasts.
+  notifyOrderEmails          Boolean              @default(true)
+  notifyMarketingEmails      Boolean              @default(true)
+  notifyProductUpdates       Boolean              @default(true)
   createdAt                  DateTime             @default(now())
   accountTokens              AccountToken[]
 }

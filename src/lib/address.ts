@@ -31,12 +31,89 @@ export function formatAddressBlock(a: AddressLike): string {
   return lines.join("\n");
 }
 
-/** Validates required fields. Returns null if ok, or an error message. */
-export function validateAddress(a: Partial<AddressInput>): string | null {
-  if (!a.recipient?.trim()) return "Recipient name is required.";
-  if (!a.line1?.trim()) return "Street address is required.";
-  if (!a.city?.trim()) return "City is required.";
-  if (!a.region?.trim()) return "State or region is required.";
-  if (!a.postalCode?.trim()) return "Postal code is required.";
+// PLH-2 Phase 4d (D3): per-field length caps. Prevents arbitrary-size
+// payloads from inflating storage or breaking downstream label/PDF
+// renderers. Caller checks each field; first overflow short-circuits.
+export const ADDRESS_FIELD_CAPS = {
+  recipient: 120,
+  line1: 200,
+  line2: 200,
+  city: 100,
+  region: 100,
+  postalCode: 20,
+  country: 100,
+  phone: 40,
+  label: 60,
+  company: 200,
+} as const;
+
+// PLH-2 Phase 4d (D4): country is normalized to ISO-3166 alpha-2 (two
+// uppercase letters). Anything else is rejected at the API boundary.
+const ISO_ALPHA2 = /^[A-Z]{2}$/;
+
+// PLH-2 Phase 4d (D4): per-country postal-code regexes. Other countries
+// fall back to a generic alphanumeric + length check.
+const POSTAL_PATTERNS: Record<string, RegExp> = {
+  US: /^\d{5}(-\d{4})?$/,
+  CA: /^[A-Z]\d[A-Z] ?\d[A-Z]\d$/,
+  // GB postcodes have several shapes; loose pattern catches valid ones
+  // without rejecting edge cases like GIR 0AA.
+  GB: /^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$/,
+};
+
+const GENERIC_POSTAL = /^[A-Z0-9 \-]{2,20}$/i;
+
+export type AddressFieldError = { field: keyof AddressInput; error: string };
+
+/**
+ * Validates required fields, per-field caps (D3), country format (D4
+ * alpha-2 ISO), and postal-code format (D4 per-country). Returns null on
+ * success or `{ field, error }` on the first failure.
+ */
+export function validateAddress(
+  a: Partial<AddressInput>
+): AddressFieldError | string | null {
+  if (!a.recipient?.trim()) return { field: "recipient", error: "Recipient name is required." };
+  if (!a.line1?.trim()) return { field: "line1", error: "Street address is required." };
+  if (!a.city?.trim()) return { field: "city", error: "City is required." };
+  if (!a.region?.trim()) return { field: "region", error: "State or region is required." };
+  if (!a.postalCode?.trim()) return { field: "postalCode", error: "Postal code is required." };
+
+  for (const [field, cap] of Object.entries(ADDRESS_FIELD_CAPS) as [
+    keyof typeof ADDRESS_FIELD_CAPS,
+    number
+  ][]) {
+    const v = (a as Partial<Record<keyof typeof ADDRESS_FIELD_CAPS, string>>)[field];
+    if (typeof v === "string" && v.length > cap) {
+      return {
+        field: field as keyof AddressInput,
+        error: `${field} is too long (max ${cap} characters).`,
+      };
+    }
+  }
+
+  const country = (a.country ?? "US").trim().toUpperCase();
+  if (!ISO_ALPHA2.test(country)) {
+    return {
+      field: "country",
+      error: "Country must be a 2-letter ISO code (e.g. US, CA, GB).",
+    };
+  }
+
+  const postal = a.postalCode!.trim().toUpperCase();
+  const specific = POSTAL_PATTERNS[country];
+  if (specific) {
+    if (!specific.test(postal)) {
+      return {
+        field: "postalCode",
+        error: `Postal code does not match the ${country} format.`,
+      };
+    }
+  } else if (!GENERIC_POSTAL.test(postal)) {
+    return {
+      field: "postalCode",
+      error: "Postal code must be 2-20 alphanumeric characters.",
+    };
+  }
   return null;
 }

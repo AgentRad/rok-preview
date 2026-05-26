@@ -11,6 +11,7 @@ import AddressBook from "@/components/AddressBook";
 import CompanyProfileForm from "@/components/CompanyProfileForm";
 import EmailChangeForm from "@/components/EmailChangeForm";
 import DeleteAccountForm from "@/components/DeleteAccountForm";
+import NotificationPreferencesForm from "@/components/NotificationPreferencesForm";
 import { isBlobConfigured } from "@/lib/blob-config";
 import Link from "next/link";
 
@@ -33,6 +34,21 @@ export default async function SettingsPage({
         orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
       })
     : [];
+
+  // PLH-2 Phase 4d (D1): non-transactional email opt-out flags.
+  const prefsRow = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: {
+      notifyOrderEmails: true,
+      notifyMarketingEmails: true,
+      notifyProductUpdates: true,
+    },
+  });
+  const notificationPrefs = prefsRow ?? {
+    notifyOrderEmails: true,
+    notifyMarketingEmails: true,
+    notifyProductUpdates: true,
+  };
 
   const header = isAdmin ? <AdminHeader /> : <SiteHeader />;
   const footer = isAdmin ? null : <SiteFooter />;
@@ -149,6 +165,15 @@ export default async function SettingsPage({
               </div>
             </div>
           )}
+
+          <div className="card" style={{ marginTop: 24 }}>
+            <div className="card-head">
+              <h2>Notifications</h2>
+            </div>
+            <div className="card-body">
+              <NotificationPreferencesForm initial={notificationPrefs} />
+            </div>
+          </div>
 
           <div className="card" style={{ marginTop: 24 }}>
             <div className="card-head">

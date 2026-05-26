@@ -60,6 +60,9 @@ export const AUDIT_ACTIONS = [
   "SUPPLIER_CONNECT_DISABLED",
   // PLH-2 Phase 2: supplier asked the AI assistant a question.
   "SUPPLIER_AI_ASKED",
+  // PLH-2 Phase 4d (D4): who streamed a buyer's tax-exempt certificate
+  // (private blob, owner or admin only).
+  "TAX_EXEMPT_DOC_VIEWED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

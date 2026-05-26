@@ -101,8 +101,9 @@ export default function TaxExemptReview({ rows }: { rows: ExemptRow[] }) {
                   </div>
                 </td>
                 <td>
+                  {/* PLH-2 Phase 4d (D4): private blob. Hit the auth+audit download route. */}
                   <a
-                    href={r.certificateUrl}
+                    href={`/api/addresses/${r.id}/tax-exempt/download`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
