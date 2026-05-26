@@ -582,7 +582,15 @@ model QuoteRequest {
   status          QuoteStatus @default(OPEN)
   quotedUnitCents Int?
   quoteNote       String      @default("")
-  orderId         String?
+  // Polish 12 H1: quotes default to a 30-day window once priced. The
+  // accept endpoint returns 410 past expiry; the buyer-facing quote
+  // page surfaces "Quote expires in N days".
+  quoteExpiresAt  DateTime?
+  // Polish 12 H2: unique so concurrent /accept POSTs can't write two
+  // different Order ids onto the same quote. The create-order +
+  // update-quote wrapper catches P2002 and returns the existing
+  // winner's orderId (idempotent 200).
+  orderId         String?     @unique
   messages        Message[]
   createdAt       DateTime    @default(now())
   quotedAt        DateTime?

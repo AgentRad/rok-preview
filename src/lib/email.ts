@@ -538,6 +538,105 @@ export async function sendAccountDeletionScheduled(args: {
   });
 }
 
+/**
+ * Polish 12 M4: dedicated decline email so the buyer hears back even
+ * when no quote is produced.
+ */
+export async function sendQuoteDeclined(quote: QuoteLite): Promise<void> {
+  const url = siteUrl(`/catalog`);
+  const body = `
+    <p>Hi ${quote.buyerName},</p>
+    <p>${quote.supplierName} is unable to quote your RFQ <strong>${quote.reference}</strong> for ${quote.productName} (SKU ${quote.productSku}, qty ${quote.qty}) at this time.</p>
+    <p>You can search for similar parts on PartsPort and submit a new RFQ to other suppliers whenever you're ready.</p>
+    <p style="margin-top:22px;">${btn(url, "Browse the catalog")}</p>`;
+  await send({
+    to: quote.buyerEmail,
+    subject: `Quote update for RFQ ${quote.reference}`,
+    html: wrap("Quote update", body),
+  });
+}
+
+type ReturnEmailArgs = {
+  to: string;
+  buyerName: string;
+  orderReference: string;
+  returnReference: string;
+  reason: string;
+  note?: string;
+  amountCents?: number;
+};
+
+export async function sendReturnApproved(args: ReturnEmailArgs): Promise<void> {
+  const url = siteUrl(`/orders`);
+  const amountLine =
+    args.amountCents && args.amountCents > 0
+      ? `<p>Approved refund: <strong>${formatCents(args.amountCents)}</strong>. Funds reach your card in 5 to 10 business days.</p>`
+      : "";
+  const body = `
+    <p>Hi ${args.buyerName},</p>
+    <p>Your return request <strong>${args.returnReference}</strong> on order <strong>${args.orderReference}</strong> has been approved.</p>
+    ${amountLine}
+    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Note:</strong> ${args.note}</p>` : ""}
+    <p style="margin-top:22px;">${btn(url, "View orders")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Return ${args.returnReference} approved`,
+    html: wrap("Return approved", body),
+  });
+}
+
+export async function sendReturnRejected(args: ReturnEmailArgs): Promise<void> {
+  const url = siteUrl(`/orders`);
+  const body = `
+    <p>Hi ${args.buyerName},</p>
+    <p>Your return request <strong>${args.returnReference}</strong> on order <strong>${args.orderReference}</strong> has been declined.</p>
+    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Reason:</strong> ${args.note}</p>` : ""}
+    <p>Reach support@partsport.agentgaming.gg if you'd like to discuss.</p>
+    <p style="margin-top:22px;">${btn(url, "View orders")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Return ${args.returnReference} declined`,
+    html: wrap("Return declined", body),
+  });
+}
+
+export async function sendReturnResolved(args: ReturnEmailArgs): Promise<void> {
+  const url = siteUrl(`/orders`);
+  const body = `
+    <p>Hi ${args.buyerName},</p>
+    <p>Your return request <strong>${args.returnReference}</strong> on order <strong>${args.orderReference}</strong> is now marked resolved. Thanks for your patience.</p>
+    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;">${args.note}</p>` : ""}
+    <p style="margin-top:22px;">${btn(url, "View orders")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Return ${args.returnReference} resolved`,
+    html: wrap("Return resolved", body),
+  });
+}
+
+export async function sendReturnNotifySupplier(args: {
+  to: string;
+  supplierName: string;
+  orderReference: string;
+  returnReference: string;
+  status: string;
+  reason: string;
+  note?: string;
+}): Promise<void> {
+  const url = siteUrl(`/supplier`);
+  const body = `
+    <p>A return on order <strong>${args.orderReference}</strong> for ${args.supplierName} has been marked <strong>${args.status}</strong> by admin.</p>
+    <p>Reason: ${args.reason}</p>
+    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Note:</strong> ${args.note}</p>` : ""}
+    <p>Reference: ${args.returnReference}.</p>
+    <p style="margin-top:22px;">${btn(url, "Open supplier dashboard")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Return ${args.returnReference} ${args.status.toLowerCase()}`,
+    html: wrap("Return update", body),
+  });
+}
+
 export async function sendPasswordReset(args: {
   to: string;
   name: string;

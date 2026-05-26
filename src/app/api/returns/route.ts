@@ -59,6 +59,24 @@ export async function POST(req: Request) {
     );
   }
 
+  // Polish 12 H7: refuse a second OPEN return for the same order. The
+  // pre-fix path let a buyer file unlimited duplicates, which junked
+  // up admin triage. Existing closed states (APPROVED/REJECTED/
+  // RESOLVED) don't block reopening a new request.
+  const existingOpen = await prisma.returnRequest.findFirst({
+    where: { orderId, status: "OPEN" },
+  });
+  if (existingOpen) {
+    return NextResponse.json(
+      {
+        error: "You already have an open return request on this order.",
+        returnId: existingOpen.id,
+        reference: existingOpen.reference,
+      },
+      { status: 409 }
+    );
+  }
+
   const created = await prisma.returnRequest.create({
     data: {
       reference: generateReference("RMA"),

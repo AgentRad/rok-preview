@@ -123,6 +123,28 @@ export default async function QuotePage({
                 <h2>Supplier quote</h2>
               </div>
               <div className="card-body">
+                {quote.quoteExpiresAt && (
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color:
+                        quote.quoteExpiresAt.getTime() < Date.now()
+                          ? "var(--amber-deep)"
+                          : "var(--muted)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    {quote.quoteExpiresAt.getTime() < Date.now()
+                      ? "This quote has expired. Please request a new quote."
+                      : `Quote expires in ${Math.max(
+                          1,
+                          Math.ceil(
+                            (quote.quoteExpiresAt.getTime() - Date.now()) /
+                              (24 * 60 * 60 * 1000)
+                          )
+                        )} days.`}
+                  </div>
+                )}
                 <div className="summary-line">
                   <span>Unit price</span>
                   <span>{formatCents(quote.quotedUnitCents!)}</span>

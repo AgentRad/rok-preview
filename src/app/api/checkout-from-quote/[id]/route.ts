@@ -183,42 +183,65 @@ export async function POST(
   }
 
   if (!order) {
-    order = await prisma.order.create({
-      data: {
-        reference: generateReference(),
-        status: "PENDING",
-        buyerId: quote.buyerId,
-        buyerName: quote.buyerName,
-        buyerEmail: quote.buyerEmail,
-        buyerCompanyName: user?.companyName || null,
-        buyerCompanyLogoUrl: user?.companyLogoUrl || null,
-        shipTo,
-        subtotalCents,
-        freightCents,
-        feeCents,
-        taxCents: 0,
-        totalCents: totalCentsEstimate,
-        feeRateBps: effectiveBps(subtotalCents),
-        freightCarrier,
-        freightService,
-        items: {
-          create: [
-            {
-              productId: quote.productId,
-              nameSnapshot: product.name,
-              skuSnapshot: product.sku,
-              supplierName: product.supplier.name,
-              unitPriceCents: quote.quotedUnitCents,
-              qty: quote.qty,
+    // H2: create order + bind quote.orderId in one transaction. On
+    // P2002 (the orderId unique index), another concurrent writer beat
+    // us; re-read the quote and return that order. Idempotent 200.
+    try {
+      order = await prisma.$transaction(async (tx) => {
+        const created = await tx.order.create({
+          data: {
+            reference: generateReference(),
+            status: "PENDING",
+            buyerId: quote.buyerId,
+            buyerName: quote.buyerName,
+            buyerEmail: quote.buyerEmail,
+            buyerCompanyName: user?.companyName || null,
+            buyerCompanyLogoUrl: user?.companyLogoUrl || null,
+            shipTo,
+            subtotalCents,
+            freightCents,
+            feeCents,
+            taxCents: 0,
+            totalCents: totalCentsEstimate,
+            feeRateBps: effectiveBps(subtotalCents),
+            freightCarrier,
+            freightService,
+            items: {
+              create: [
+                {
+                  productId: quote.productId,
+                  nameSnapshot: product.name,
+                  skuSnapshot: product.sku,
+                  supplierName: product.supplier.name,
+                  unitPriceCents: quote.quotedUnitCents!,
+                  qty: quote.qty,
+                },
+              ],
             },
-          ],
-        },
-      },
-    });
-    await prisma.quoteRequest.update({
-      where: { id: quote.id },
-      data: { orderId: order.id },
-    });
+          },
+        });
+        await tx.quoteRequest.update({
+          where: { id: quote.id },
+          data: { orderId: created.id },
+        });
+        return created;
+      });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === "P2002") {
+        const reread = await prisma.quoteRequest.findUnique({
+          where: { id: quote.id },
+        });
+        const winner =
+          reread?.orderId
+            ? await prisma.order.findUnique({ where: { id: reread.orderId } })
+            : null;
+        if (winner) {
+          return NextResponse.json({ ok: true, orderId: winner.id });
+        }
+      }
+      throw err;
+    }
   } else {
     // Refresh totals + ship-to from the latest form submission.
     await prisma.order.update({

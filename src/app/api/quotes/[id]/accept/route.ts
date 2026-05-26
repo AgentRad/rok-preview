@@ -64,6 +64,19 @@ export async function POST(
       { status: 401 }
     );
   }
+  // H3+H4: signed-in users must verify their email before accepting.
+  // The guest path (guestMatch) is gated by the email match itself, so
+  // it doesn't need verification.
+  if (user && !user.emailVerified && user.role !== "ADMIN") {
+    return NextResponse.json(
+      {
+        error:
+          "Verify your email before accepting a quote. Request a new verification link from /account.",
+        code: "EMAIL_NOT_VERIFIED",
+      },
+      { status: 403 }
+    );
+  }
 
   // Idempotent: already-accepted quotes just route the buyer to the
   // right destination. If an Order was created (legacy path), send the
@@ -86,8 +99,13 @@ export async function POST(
     );
   }
 
-  // Expiry gate (added in Commit 3 alongside the quoteExpiresAt schema
-  // migration; see /api/quotes/[id]/route.ts for the 410 check).
+  // H1 expiry. Reject 410 once past quoteExpiresAt.
+  if (quote.quoteExpiresAt && quote.quoteExpiresAt.getTime() < Date.now()) {
+    return NextResponse.json(
+      { error: "This quote has expired. Please request a new quote." },
+      { status: 410 }
+    );
+  }
 
   await prisma.quoteRequest.update({
     where: { id },

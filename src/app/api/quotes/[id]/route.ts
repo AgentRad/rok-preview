@@ -8,6 +8,10 @@ import {
   userHasAccessToSupplier,
 } from "@/lib/supplier-access";
 import { captureError } from "@/lib/observability";
+import { writeAuditLog } from "@/lib/audit";
+import { sendQuoteDeclined } from "@/lib/email";
+
+const QUOTE_VALID_DAYS = 30;
 
 export async function PATCH(
   req: Request,
@@ -30,9 +34,38 @@ export async function PATCH(
   }
 
   if (b.action === "decline") {
-    await prisma.quoteRequest.update({
+    const updated = await prisma.quoteRequest.update({
       where: { id },
       data: { status: "DECLINED" },
+      include: { product: { include: { supplier: true } } },
+    });
+    const actor = await getCurrentUser();
+    await writeAuditLog({
+      actor: { id: actor?.id || "system", email: actor?.email || "system@partsport" },
+      action: "QUOTE_DECLINED",
+      targetType: "QuoteRequest",
+      targetId: updated.id,
+      summary: `Quote ${updated.reference} declined.`,
+      metadata: { quoteReference: updated.reference, productSku: updated.product.sku },
+    });
+    after(async () => {
+      try {
+        await sendQuoteDeclined({
+          id: updated.id,
+          reference: updated.reference,
+          buyerName: updated.buyerName,
+          buyerEmail: updated.buyerEmail,
+          qty: updated.qty,
+          message: updated.message,
+          productName: updated.product.name,
+          productSku: updated.product.sku,
+          supplierName: updated.product.supplier.name,
+          quotedUnitCents: updated.quotedUnitCents,
+          quoteNote: updated.quoteNote,
+        });
+      } catch (err) {
+        captureError(err, { subsystem: "email", op: "quote-declined", quoteId: updated.id });
+      }
     });
     return NextResponse.json({ ok: true });
   }
@@ -79,6 +112,7 @@ export async function PATCH(
         { status: 400 }
       );
     }
+    const expiresAt = new Date(Date.now() + QUOTE_VALID_DAYS * 24 * 60 * 60 * 1000);
     const updated = await prisma.quoteRequest.update({
       where: { id },
       data: {
@@ -86,8 +120,22 @@ export async function PATCH(
         quoteNote: String(b.note || "").trim(),
         status: "QUOTED",
         quotedAt: new Date(),
+        quoteExpiresAt: expiresAt,
       },
       include: { product: { include: { supplier: true } } },
+    });
+    await writeAuditLog({
+      actor: user,
+      action: "QUOTE_PRICED",
+      targetType: "QuoteRequest",
+      targetId: updated.id,
+      summary: `Quote ${updated.reference} priced at ${dollarsToCents(price)} cents/unit (expires ${expiresAt.toISOString().slice(0, 10)}).`,
+      metadata: {
+        quoteReference: updated.reference,
+        productSku: updated.product.sku,
+        quotedUnitCents: dollarsToCents(price),
+        expiresAt: expiresAt.toISOString(),
+      },
     });
     after(async () => {
       try {

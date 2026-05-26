@@ -67,7 +67,16 @@ export default async function AdminConsole() {
         take: 12,
       }),
       prisma.returnRequest.findMany({
-        include: { order: { select: { reference: true, buyerName: true } } },
+        include: {
+          order: {
+            select: {
+              reference: true,
+              buyerName: true,
+              totalCents: true,
+              refundedCents: true,
+            },
+          },
+        },
         orderBy: [{ status: "asc" }, { createdAt: "desc" }],
         take: 12,
       }),
@@ -345,7 +354,13 @@ export default async function AdminConsole() {
                         </td>
                         <td>
                           {r.status !== "RESOLVED" && r.status !== "REJECTED" ? (
-                            <ReturnActions returnId={r.id} />
+                            <ReturnActions
+                              returnId={r.id}
+                              defaultRefundCents={Math.max(
+                                0,
+                                r.order.totalCents - r.order.refundedCents
+                              )}
+                            />
                           ) : r.adminNote ? (
                             <span className="muted-text" style={{ fontSize: 12 }}>
                               {r.adminNote}
