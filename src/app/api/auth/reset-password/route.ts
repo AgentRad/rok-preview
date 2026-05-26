@@ -10,9 +10,9 @@ export async function POST(req: Request) {
   const token = String(body.token || "").trim();
   const newPassword = String(body.password || "");
 
-  if (!token || newPassword.length < 8) {
+  if (!token || newPassword.length < 8 || newPassword.length > 128) {
     return NextResponse.json(
-      { error: "Please enter a password of at least 8 characters." },
+      { error: "Please enter a password between 8 and 128 characters." },
       { status: 400 }
     );
   }
@@ -31,10 +31,13 @@ export async function POST(req: Request) {
   }
 
   const passwordHash = await hashPassword(newPassword);
+  // PLH-1: invalidate every outstanding session for this user. Bumping
+  // sessionsValidFrom makes getCurrentUser reject any cookie issued
+  // before now on the next request.
   await prisma.$transaction([
     prisma.user.update({
       where: { id: record.userId },
-      data: { passwordHash },
+      data: { passwordHash, sessionsValidFrom: new Date() },
     }),
     prisma.passwordResetToken.update({
       where: { id: record.id },

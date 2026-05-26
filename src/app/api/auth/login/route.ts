@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import { prisma } from "@/lib/db";
-import { verifyPassword, createSession } from "@/lib/auth";
+import { verifyPassword, createSession, getSessionSecret } from "@/lib/auth";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-const secret = new TextEncoder().encode(
-  process.env.SESSION_SECRET || "insecure-dev-secret-please-override-in-prod"
-);
 
 export async function POST(req: Request) {
   const ip = clientIp(req);
@@ -70,7 +67,7 @@ export async function POST(req: Request) {
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
       .setExpirationTime("5m")
-      .sign(secret);
+      .sign(getSessionSecret());
     return NextResponse.json({
       ok: false,
       requires2FA: true,

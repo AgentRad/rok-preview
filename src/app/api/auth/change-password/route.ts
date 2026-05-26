@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import {
+  createSession,
   getCurrentUser,
   hashPassword,
   verifyPassword,
@@ -17,9 +18,9 @@ export async function POST(req: Request) {
   const currentPassword = String(body.currentPassword || "");
   const newPassword = String(body.newPassword || "");
 
-  if (newPassword.length < 8) {
+  if (newPassword.length < 8 || newPassword.length > 128) {
     return NextResponse.json(
-      { error: "New password must be at least 8 characters." },
+      { error: "New password must be between 8 and 128 characters." },
       { status: 400 }
     );
   }
@@ -38,9 +39,14 @@ export async function POST(req: Request) {
     );
   }
 
+  // PLH-1: bump sessionsValidFrom so every other browser this user is
+  // signed into on gets rejected on the next request.
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash: await hashPassword(newPassword) },
+    data: {
+      passwordHash: await hashPassword(newPassword),
+      sessionsValidFrom: new Date(),
+    },
   });
 
   // Invalidate any outstanding password-reset tokens for safety.
@@ -48,6 +54,11 @@ export async function POST(req: Request) {
     where: { userId: user.id, usedAt: null },
     data: { usedAt: new Date() },
   });
+
+  // Re-issue a fresh session cookie for the browser that just changed the
+  // password. The sessionsValidFrom bump above already invalidated every
+  // other outstanding session; this keeps the active tab signed in.
+  await createSession(user.id);
 
   return NextResponse.json({ ok: true });
 }

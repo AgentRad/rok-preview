@@ -42,11 +42,14 @@ export async function GET(req: Request) {
     );
   }
   const oldEmail = row.user.email;
+  // PLH-1: bump sessionsValidFrom so sessions on devices the old email
+  // still has access to get rejected on the next request.
   await prisma.user.update({
     where: { id: row.userId },
     data: {
       email: newEmail,
       emailVerified: new Date(),
+      sessionsValidFrom: new Date(),
     },
   });
   // Belt-and-suspenders heads-up: the old address already got a

@@ -30,9 +30,10 @@ export async function POST(req: Request) {
     );
   }
   const { name, email, password } = await req.json().catch(() => ({}));
-  if (!name || !email || !password || String(password).length < 6) {
+  const pwLen = String(password || "").length;
+  if (!name || !email || !password || pwLen < 8 || pwLen > 128) {
     return NextResponse.json(
-      { error: "Name, email and a password of at least 6 characters are required." },
+      { error: "Name, email and a password between 8 and 128 characters are required." },
       { status: 400 }
     );
   }

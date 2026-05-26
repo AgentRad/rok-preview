@@ -96,9 +96,16 @@ model User {
   // state-changing flows (orders, listings). The token + expiry are
   // cleared on success or on resend.
   emailVerified              DateTime?
-  emailVerificationToken     String?              @unique
+  // PLH-1: verify token is hashed at rest (SHA-256, hex). The raw token only
+  // appears in the URL we email and in memory between generation and send.
+  // Mirrors PasswordResetToken / AccountToken.
+  emailVerificationTokenHash String?              @unique
   emailVerificationExpiresAt DateTime?
   emailVerificationSentAt    DateTime?
+  // PLH-1: bumped on password change, password reset, 2FA disable, email
+  // change confirmation, and account self-delete. Every existing session
+  // cookie issued before this timestamp is rejected on the next request.
+  sessionsValidFrom          DateTime             @default(now())
   // Soft delete for GDPR/CCPA. When set, PII is anonymized but order
   // history is retained for tax/accounting. Hard-delete happens after
   // 30 days unless the user recovers.

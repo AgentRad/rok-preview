@@ -62,9 +62,12 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
+  // PLH-1: bump sessionsValidFrom so any other browser this user is signed
+  // into can't keep acting on the soon-to-be-anonymized account. The
+  // current browser's cookie is cleared via destroySession below.
   await prisma.user.update({
     where: { id: user.id },
-    data: { deletedAt: new Date() },
+    data: { deletedAt: new Date(), sessionsValidFrom: new Date() },
   });
   const raw = await issueAccountToken({
     userId: user.id,

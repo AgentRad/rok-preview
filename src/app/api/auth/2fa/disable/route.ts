@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { getCurrentUser, verifyPassword } from "@/lib/auth";
+import { createSession, getCurrentUser, verifyPassword } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -24,14 +24,19 @@ export async function POST(req: Request) {
     );
   }
 
+  // PLH-1: disabling 2FA is a sensitive auth change; invalidate every
+  // outstanding session for this user. The current browser gets a fresh
+  // cookie below.
   await prisma.user.update({
     where: { id: user.id },
     data: {
       totpSecret: null,
       totpEnabledAt: null,
       totpBackupCodes: Prisma.DbNull,
+      sessionsValidFrom: new Date(),
     },
   });
+  await createSession(user.id);
 
   return NextResponse.json({ ok: true });
 }

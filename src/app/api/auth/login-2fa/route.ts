@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/db";
-import { createSession } from "@/lib/auth";
+import { createSession, getSessionSecret } from "@/lib/auth";
 import { hashBackupCode, verifyTotp } from "@/lib/totp";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-const secret = new TextEncoder().encode(
-  process.env.SESSION_SECRET || "insecure-dev-secret-please-override-in-prod"
-);
 
 /**
  * Second step of the 2FA login: client posts back the 5-minute ticket from
@@ -39,7 +36,7 @@ export async function POST(req: Request) {
 
   let uid: string;
   try {
-    const { payload } = await jwtVerify(ticket, secret);
+    const { payload } = await jwtVerify(ticket, getSessionSecret());
     if (payload.kind !== "2fa-pending" || typeof payload.uid !== "string") {
       throw new Error("bad ticket");
     }
