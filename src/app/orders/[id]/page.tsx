@@ -446,9 +446,9 @@ export default async function OrderPage({
             </div>
           )}
 
-          <div className="card" style={{ marginTop: 28 }}>
+          <div className="card" id="messages" style={{ marginTop: 28 }}>
             <div className="card-head">
-              <h2>Messages{order.messages.length > 0 ? ` · ${order.messages.length}` : ""}</h2>
+              <h2>Conversation{order.messages.length > 0 ? ` · ${order.messages.length}` : ""}</h2>
             </div>
             <div className="card-body">
               <MessageThread

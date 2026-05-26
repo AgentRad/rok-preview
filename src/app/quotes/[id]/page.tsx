@@ -190,9 +190,9 @@ export default async function QuotePage({
             </div>
           )}
 
-          <div className="card" style={{ marginTop: 22 }}>
+          <div className="card" id="messages" style={{ marginTop: 22 }}>
             <div className="card-head">
-              <h2>Messages{quote.messages.length > 0 ? ` · ${quote.messages.length}` : ""}</h2>
+              <h2>Conversation{quote.messages.length > 0 ? ` · ${quote.messages.length}` : ""}</h2>
             </div>
             <div className="card-body">
               <MessageThread

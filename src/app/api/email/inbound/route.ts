@@ -220,6 +220,12 @@ export async function POST(req: Request) {
 }
 
 async function handleInbound(req: Request) {
+  // Fail-closed: if the provider env var is unset, the feature is off.
+  // Return 404 so the route looks absent to scanners and misconfigured
+  // webhooks, rather than advertising a disabled inbound surface.
+  if (!inboundProvider()) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
   if (!isInboundConfigured()) {
     return NextResponse.json(
       { error: "Inbound email is not configured." },

@@ -245,6 +245,13 @@ export default async function AdminConsole() {
                           >
                             View
                           </Link>
+                          <span className="muted-text" style={{ margin: "0 6px" }}>·</span>
+                          <Link
+                            href={`/orders/${o.id}#messages`}
+                            style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                          >
+                            Messages
+                          </Link>
                         </td>
                       </tr>
                     ))}

@@ -234,8 +234,16 @@ endpoints, per-page SEO metadata.
   needed when those phases land: `STRIPE_SECRET_KEY`,
   `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`.
 - Stripe: webhook points at `<deploy-url>/api/payments/webhook` (NOT
-  `/api/stripe/webhook` — the route lives under the processor-agnostic
+  `/api/stripe/webhook`. The route lives under the processor-agnostic
   `/api/payments/*` namespace).
+- **Inbound email threading activation (PLH-2 Phase 1).** Set the three
+  `INBOUND_*` env vars in Vercel (see Environment variables section above):
+  `INBOUND_EMAIL_PROVIDER=resend`, `INBOUND_REPLY_SECRET=<32-char random>`,
+  `INBOUND_EMAIL_DOMAIN=reply.partsport.agentgaming.gg`. Then in the Resend
+  dashboard add the inbound email domain (`reply.partsport.agentgaming.gg`,
+  with the MX records Resend supplies pointed at Cloudflare DNS) and point
+  its webhook at `<prod-url>/api/email/inbound`. Until the env vars are
+  present the route returns 404 by design.
 - Product photos: owner supplies; image URLs go on listings.
 - A rename of the product/brand is planned for later.
 
@@ -320,3 +328,17 @@ Required: `DATABASE_URL` + `DATABASE_URL_UNPOOLED`. Set in Vercel: `ANTHROPIC_AP
 `PAYPAL_CLIENT_SECRET` / `NEXT_PUBLIC_PAYPAL_CLIENT_ID`, `STRIPE_SECRET_KEY` /
 `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET`. The build runs
 `prisma migrate deploy` + seed, so deploys come up populated.
+
+**Inbound email threading (PLH-2 Phase 1)**. Setting all three turns on
+reply-by-email so order and RFQ message threads accept inbound replies and
+post them back into the right thread. Until `INBOUND_EMAIL_PROVIDER` is set,
+`/api/email/inbound` returns 404 (feature off, fail-closed).
+- `INBOUND_EMAIL_PROVIDER` (set to `resend` for Resend Inbound; also accepts
+  `postmark` or `sendgrid`).
+- `INBOUND_REPLY_SECRET` (any random 32-char string; HMAC key that signs the
+  per-thread token embedded in the Reply-To address).
+- `INBOUND_EMAIL_DOMAIN` (e.g. `reply.partsport.agentgaming.gg`, the domain
+  configured for inbound parsing at the provider).
+- Optional `INBOUND_WEBHOOK_SECRET` to require a shared secret on the inbound
+  webhook (sent as `Authorization: Bearer <secret>`, or
+  `X-Postmark-Webhook-Token` for Postmark).
