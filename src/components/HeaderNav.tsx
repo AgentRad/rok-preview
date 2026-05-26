@@ -64,7 +64,10 @@ export default function HeaderNav({ user }: { user: NavUser }) {
           </button>
         </form>
 
-        <div className={"nav-links" + (mobileOpen ? " open" : "")}>
+        <div
+          id="primary-nav-links"
+          className={"nav-links" + (mobileOpen ? " open" : "")}
+        >
           <Link href="/catalog" onClick={() => setMobileOpen(false)}>Catalog</Link>
           <Link href="/how-it-works" onClick={() => setMobileOpen(false)}>How it works</Link>
           {/* Hide the "For X" recruitment links for users who are already that role. */}
@@ -97,7 +100,14 @@ export default function HeaderNav({ user }: { user: NavUser }) {
 
           {user ? (
             <div className="nav-user" ref={menuRef}>
-              <button className="nav-user-btn" onClick={() => setMenuOpen((o) => !o)}>
+              <button
+                type="button"
+                className="nav-user-btn"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-label={`Account menu for ${user.name}`}
+                onClick={() => setMenuOpen((o) => !o)}
+              >
                 <span className="nav-avatar">
                   {user.name.charAt(0).toUpperCase()}
                 </span>
@@ -121,8 +131,11 @@ export default function HeaderNav({ user }: { user: NavUser }) {
         </div>
 
         <button
+          type="button"
           className="nav-toggle"
-          aria-label="Toggle menu"
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileOpen}
+          aria-controls="primary-nav-links"
           onClick={() => setMobileOpen((o) => !o)}
         >
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
