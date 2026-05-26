@@ -158,7 +158,11 @@ export default async function QuotePage({
                   </p>
                 )}
                 <div style={{ marginTop: 14 }}>
-                  <QuoteActions quoteId={quote.id} />
+                  <QuoteActions
+                    quoteId={quote.id}
+                    isOwner={isBuyer || isAdmin}
+                    buyerEmailHint={quote.buyerEmail}
+                  />
                 </div>
               </div>
             </div>
