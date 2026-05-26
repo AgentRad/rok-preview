@@ -1,5 +1,30 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+import { siteUrl } from "@/lib/site-url";
 import { prisma } from "@/lib/db";
+
+export const metadata: Metadata = {
+  title: { absolute: "PartsPort | The Industrial Parts Marketplace" },
+  description:
+    "Search any industrial part, compare vetted-supplier options with real delivery ETAs, and order. Transformers, switchgear, relays, conductors, metering, generators, solar, storage, grounding, SCADA. PartsPort handles payment and delivery end to end.",
+  alternates: { canonical: siteUrl("/") },
+  openGraph: {
+    title: "PartsPort | The Industrial Parts Marketplace",
+    description:
+      "Every industrial part you need, in one search. Vetted suppliers, transparent pricing, delivery handled end to end.",
+    type: "website",
+    url: siteUrl("/"),
+    siteName: "PartsPort",
+    images: [{ url: "/og-default.svg", width: 1200, height: 630, alt: "PartsPort" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PartsPort | The Industrial Parts Marketplace",
+    description:
+      "Every industrial part you need, in one search. Vetted suppliers, transparent pricing, delivery handled end to end.",
+    images: ["/og-default.svg"],
+  },
+};
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PartIcon from "@/components/PartIcon";

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { siteUrl } from "@/lib/site-url";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
@@ -77,6 +79,43 @@ async function resolveBrand(slug: string): Promise<ResolvedBrand | null> {
     };
   }
   return null;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const brand = await resolveBrand(slug);
+  if (!brand) return { title: "Manufacturer not found", robots: { index: false, follow: false } };
+  const title = brand.name;
+  const desc = (
+    brand.bio ||
+    brand.tagline ||
+    `${brand.name} parts and equipment on PartsPort. Every listing routes to an authorized distributor at checkout.`
+  ).slice(0, 200);
+  const url = siteUrl(`/manufacturers/${slug}`);
+  const img = brand.logoUrl || "/og-default.svg";
+  return {
+    title,
+    description: desc,
+    alternates: { canonical: url },
+    openGraph: {
+      title: `${title} | PartsPort`,
+      description: desc,
+      type: "website",
+      url,
+      siteName: "PartsPort",
+      images: [{ url: img, width: 1200, height: 630, alt: `${brand.name} on PartsPort` }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${title} | PartsPort`,
+      description: desc,
+      images: [img],
+    },
+  };
 }
 
 export default async function ManufacturerStorefront({

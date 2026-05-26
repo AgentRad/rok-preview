@@ -2,23 +2,33 @@ import type { Metadata } from "next";
 import "./globals.css";
 import DemoGuide from "@/components/DemoGuide";
 import CookieConsent from "@/components/CookieConsent";
+import { siteUrl } from "@/lib/site-url";
+
+const DEFAULT_TITLE = "PartsPort | The Industrial Parts Marketplace";
+const DEFAULT_DESC =
+  "PartsPort is the search engine for industrial parts and equipment. Type what you need, compare vetted-supplier options with real delivery ETAs, and order. We handle payment and delivery.";
+const OG_IMAGE = "/og-default.svg";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://rok-preview.vercel.app"),
-  title: {
-    default: "PartsPort | The Industrial Parts Marketplace",
-    template: "%s | PartsPort",
-  },
-  description:
-    "PartsPort is the search engine for industrial parts and equipment. Type what you need, compare vetted-supplier options with real delivery ETAs, and order. We handle payment and delivery.",
+  metadataBase: new URL(siteUrl("/")),
+  title: { default: DEFAULT_TITLE, template: "%s | PartsPort" },
+  description: DEFAULT_DESC,
   icons: { icon: "/favicon.svg" },
   manifest: "/manifest.json",
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "PartsPort | The Industrial Parts Marketplace",
-    description:
-      "Every part you need, in one search. Vetted suppliers, transparent pricing, delivery handled end to end.",
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESC,
     type: "website",
+    url: siteUrl("/"),
     siteName: "PartsPort",
+    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "PartsPort" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESC,
+    images: [OG_IMAGE],
   },
 };
 

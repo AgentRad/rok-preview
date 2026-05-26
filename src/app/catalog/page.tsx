@@ -1,6 +1,30 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import type { Prisma } from "@prisma/client";
+import { siteUrl } from "@/lib/site-url";
 import { prisma } from "@/lib/db";
+
+export const metadata: Metadata = {
+  title: "Catalog",
+  description:
+    "Browse the PartsPort catalog: transformers, switchgear, relays, conductors, metering, generators, solar, storage, grounding, and SCADA, listed by vetted distributors with live pricing and delivery ETAs.",
+  alternates: { canonical: siteUrl("/catalog") },
+  openGraph: {
+    title: "Catalog | PartsPort",
+    description:
+      "Search vetted distributors for industrial parts. Live pricing, real delivery ETAs, one-click ordering.",
+    type: "website",
+    url: siteUrl("/catalog"),
+    siteName: "PartsPort",
+    images: [{ url: "/og-default.svg", width: 1200, height: 630, alt: "PartsPort catalog" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Catalog | PartsPort",
+    description: "Search vetted distributors for industrial parts.",
+    images: ["/og-default.svg"],
+  },
+};
 import { runSearch, type SearchProduct } from "@/lib/search";
 import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";

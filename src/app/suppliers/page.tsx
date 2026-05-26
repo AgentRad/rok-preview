@@ -1,9 +1,33 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+import { siteUrl } from "@/lib/site-url";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import SupplierApplicationForm from "@/components/SupplierApplicationForm";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "For suppliers",
+  description:
+    "Sell on PartsPort. Qualified demand, one dashboard for orders and RFQs, guaranteed payment on dispatch. 6% transaction fee, no monthly subscription.",
+  alternates: { canonical: siteUrl("/suppliers") },
+  openGraph: {
+    title: "Sell on PartsPort",
+    description:
+      "Qualified demand, one dashboard, guaranteed payment. 6% transaction fee, no monthly subscription.",
+    type: "website",
+    url: siteUrl("/suppliers"),
+    siteName: "PartsPort",
+    images: [{ url: "/og-default.svg", width: 1200, height: 630, alt: "Sell on PartsPort" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Sell on PartsPort",
+    description: "Qualified demand, one dashboard, guaranteed payment.",
+    images: ["/og-default.svg"],
+  },
+};
 
 const SELL = [
   {

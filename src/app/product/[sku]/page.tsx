@@ -1,5 +1,7 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { siteUrl } from "@/lib/site-url";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
@@ -15,6 +17,57 @@ import { formatCents, FEE_RATE_LABEL } from "@/lib/money";
 import { displayBuyerName, supplierRatingSummary } from "@/lib/reviews";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ sku: string }>;
+}): Promise<Metadata> {
+  const { sku } = await params;
+  const product = await prisma.product.findUnique({
+    where: { sku },
+    select: {
+      name: true,
+      manufacturer: true,
+      description: true,
+      imageUrl: true,
+      active: true,
+      supplier: { select: { status: true, publicVisible: true } },
+    },
+  });
+  if (
+    !product ||
+    !product.active ||
+    product.supplier.status !== "APPROVED" ||
+    !product.supplier.publicVisible
+  ) {
+    return { title: "Part not found", robots: { index: false, follow: false } };
+  }
+  const title = `${product.name} (${product.manufacturer})`;
+  const desc =
+    (product.description || `Buy ${product.name} by ${product.manufacturer} on PartsPort. Vetted distributor, transparent pricing, delivery handled end to end.`).slice(0, 200);
+  const url = siteUrl(`/product/${sku}`);
+  const img = product.imageUrl || "/og-default.svg";
+  return {
+    title,
+    description: desc,
+    alternates: { canonical: url },
+    openGraph: {
+      title: `${title} | PartsPort`,
+      description: desc,
+      type: "website",
+      url,
+      siteName: "PartsPort",
+      images: [{ url: img, width: 1200, height: 630, alt: product.name }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${title} | PartsPort`,
+      description: desc,
+      images: [img],
+    },
+  };
+}
 
 export default async function ProductPage({
   params,

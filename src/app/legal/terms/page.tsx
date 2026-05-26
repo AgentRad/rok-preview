@@ -5,10 +5,32 @@
 // posted here at the time a buyer or supplier accepts.
 
 import type { Metadata } from "next";
+import { siteUrl } from "@/lib/site-url";
 import LegalLayout, { type LegalSection } from "@/components/LegalLayout";
 
+const TITLE = "Terms of Service";
+const DESC =
+  "The terms that govern access to and use of the PartsPort B2B marketplace by buyers, suppliers, and manufacturers.";
+const URL = siteUrl("/legal/terms");
+
 export const metadata: Metadata = {
-  title: "Terms of Service · PartsPort",
+  title: TITLE,
+  description: DESC,
+  alternates: { canonical: URL },
+  openGraph: {
+    title: `${TITLE} | PartsPort`,
+    description: DESC,
+    type: "article",
+    url: URL,
+    siteName: "PartsPort",
+    images: [{ url: "/og-default.svg", width: 1200, height: 630, alt: "PartsPort" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${TITLE} | PartsPort`,
+    description: DESC,
+    images: ["/og-default.svg"],
+  },
 };
 
 const LAST_UPDATED = "2026-05-25";

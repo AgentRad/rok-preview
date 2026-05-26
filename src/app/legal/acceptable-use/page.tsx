@@ -1,10 +1,32 @@
 // TEMPLATE — Rad must replace with attorney-reviewed copy before live launch.
 
 import type { Metadata } from "next";
+import { siteUrl } from "@/lib/site-url";
 import LegalLayout, { type LegalSection } from "@/components/LegalLayout";
 
+const TITLE = "Acceptable Use Policy";
+const DESC =
+  "Conduct rules for everyone using PartsPort. What we won't tolerate, and what happens when an account crosses the line.";
+const URL = siteUrl("/legal/acceptable-use");
+
 export const metadata: Metadata = {
-  title: "Acceptable Use Policy · PartsPort",
+  title: TITLE,
+  description: DESC,
+  alternates: { canonical: URL },
+  openGraph: {
+    title: `${TITLE} | PartsPort`,
+    description: DESC,
+    type: "article",
+    url: URL,
+    siteName: "PartsPort",
+    images: [{ url: "/og-default.svg", width: 1200, height: 630, alt: "PartsPort" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${TITLE} | PartsPort`,
+    description: DESC,
+    images: ["/og-default.svg"],
+  },
 };
 
 const LAST_UPDATED = "2026-05-25";

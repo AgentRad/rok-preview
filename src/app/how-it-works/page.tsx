@@ -1,8 +1,32 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+import { siteUrl } from "@/lib/site-url";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "How it works",
+  description:
+    "How PartsPort works for buyers, distributors, and manufacturers. Three lanes, one marketplace, transparent fees.",
+  alternates: { canonical: siteUrl("/how-it-works") },
+  openGraph: {
+    title: "How PartsPort works",
+    description:
+      "How PartsPort works for buyers, distributors, and manufacturers. Three lanes, one marketplace.",
+    type: "website",
+    url: siteUrl("/how-it-works"),
+    siteName: "PartsPort",
+    images: [{ url: "/og-default.svg", width: 1200, height: 630, alt: "How PartsPort works" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "How PartsPort works",
+    description: "Three lanes, one marketplace, transparent fees.",
+    images: ["/og-default.svg"],
+  },
+};
 
 type Role = {
   eyebrow: string;

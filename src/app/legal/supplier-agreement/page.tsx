@@ -5,10 +5,32 @@
 // this PDF, upload it, admin approves, and the onboarding checklist clears.
 
 import type { Metadata } from "next";
+import { siteUrl } from "@/lib/site-url";
 import LegalLayout, { type LegalSection } from "@/components/LegalLayout";
 
+const TITLE = "Supplier Agreement";
+const DESC =
+  "The terms distributors agree to when they sell on PartsPort. Fee, payout, reserve, listing, and fulfillment expectations.";
+const URL = siteUrl("/legal/supplier-agreement");
+
 export const metadata: Metadata = {
-  title: "Supplier Agreement · PartsPort",
+  title: TITLE,
+  description: DESC,
+  alternates: { canonical: URL },
+  openGraph: {
+    title: `${TITLE} | PartsPort`,
+    description: DESC,
+    type: "article",
+    url: URL,
+    siteName: "PartsPort",
+    images: [{ url: "/og-default.svg", width: 1200, height: 630, alt: "PartsPort" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${TITLE} | PartsPort`,
+    description: DESC,
+    images: ["/og-default.svg"],
+  },
 };
 
 const LAST_UPDATED = "2026-05-25";

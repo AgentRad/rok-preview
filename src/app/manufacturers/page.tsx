@@ -1,5 +1,29 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+import { siteUrl } from "@/lib/site-url";
 import { prisma } from "@/lib/db";
+
+export const metadata: Metadata = {
+  title: "Manufacturers",
+  description:
+    "Every brand on PartsPort, from Siemens and ABB to specialty manufacturers. Browse their authorized distributors and live listings.",
+  alternates: { canonical: siteUrl("/manufacturers") },
+  openGraph: {
+    title: "Manufacturers | PartsPort",
+    description:
+      "Every brand on PartsPort. Browse authorized distributors and live listings.",
+    type: "website",
+    url: siteUrl("/manufacturers"),
+    siteName: "PartsPort",
+    images: [{ url: "/og-default.svg", width: 1200, height: 630, alt: "PartsPort manufacturers" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Manufacturers | PartsPort",
+    description: "Every brand on PartsPort, with authorized distributors and live listings.",
+    images: ["/og-default.svg"],
+  },
+};
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ManufacturerForm from "@/components/ManufacturerForm";
