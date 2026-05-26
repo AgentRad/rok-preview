@@ -312,7 +312,7 @@ export async function getAdminAttention(): Promise<AttentionItem[]> {
   // payouts, late shipments. Supplier-team chores (pending team invites,
   // catalog completeness, etc.) belong on the supplier's own dashboard and
   // were dropped from here to stop the cross-leakage.
-  const [pendingApps, openReturns, duePayouts, lateShipments] =
+  const [pendingApps, openReturns, duePayouts, lateShipments, bankPending] =
     await Promise.all([
       prisma.supplierApplication.findMany({
         where: { status: "PENDING" },
@@ -335,6 +335,23 @@ export async function getAdminAttention(): Promise<AttentionItem[]> {
         orderBy: { paidAt: "asc" },
         take: 5,
         select: { id: true, reference: true, carrier: true, paidAt: true },
+      }),
+      // PLH-1 commit 4: suppliers with a fresh bank-info PENDING summary.
+      // Surfaces "Acme Corp changed their payout last4 to 1234" so the
+      // admin re-verifies before the next payout cycle runs.
+      prisma.supplier.findMany({
+        where: {
+          bankInfoStatus: "PENDING",
+          bankInfoUpdatedAt: { not: null },
+        },
+        orderBy: { bankInfoUpdatedAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          name: true,
+          bankInfoLast4: true,
+          bankInfoUpdatedAt: true,
+        },
       }),
     ]);
 
@@ -373,6 +390,19 @@ export async function getAdminAttention(): Promise<AttentionItem[]> {
       actionLabel: "Process",
       actionHref: `/ops`,
       severity: "warning",
+    });
+  }
+
+  for (const s of bankPending) {
+    items.push({
+      id: `bank-${s.id}`,
+      kind: "bank-info-updated",
+      title: `${s.name} updated bank details (****${s.bankInfoLast4 ?? "????"})`,
+      body: `New payout destination is PENDING re-verification. Confirm against the supplier's W-9 or voided check before the next payout.`,
+      actionLabel: "Review",
+      actionHref: `/admin`,
+      severity: "warning",
+      createdAt: s.bankInfoUpdatedAt ?? undefined,
     });
   }
 

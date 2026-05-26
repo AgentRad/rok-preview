@@ -9,6 +9,7 @@ import {
   type SupplierDocKind,
 } from "@/lib/supplier-access";
 import { detectMagic, safeExt } from "@/lib/upload-validation";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,15 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  }
+  // PLH-1 commit 4: per-supplier-user throttle on legal-doc upload to
+  // stop an automated client from flooding Blob with garbage PDFs.
+  const rl = await rateLimit("generic", `supplier:${user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
   }
   const ctx = await getActiveSupplierContext(user);
   if (!ctx) {

@@ -5,6 +5,7 @@ import {
   canEditCatalog,
   effectiveAccessToSupplier,
 } from "@/lib/supplier-access";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,13 @@ export async function PATCH(
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  }
+  const rl = await rateLimit("generic", `supplier:${user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
   }
   const { id } = await params;
   const warehouse = await prisma.supplierWarehouse.findUnique({
@@ -84,6 +92,13 @@ export async function DELETE(
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  }
+  const rl = await rateLimit("generic", `supplier:${user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
   }
   const { id } = await params;
   const warehouse = await prisma.supplierWarehouse.findUnique({

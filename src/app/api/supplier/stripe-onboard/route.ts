@@ -9,6 +9,7 @@ import {
   isStripeConnectConfigured,
 } from "@/lib/stripe-connect";
 import { captureError } from "@/lib/observability";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,28 @@ export async function POST() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  }
+  // PLH-1 commit 4: two-bucket throttle. The generic bucket catches
+  // bursts (60 calls/min across all supplier mutations); the dedicated
+  // stripe-connect bucket caps total onboarding-link creation at
+  // 5/hour/supplier so a wedged client can't burn through Stripe API
+  // quota.
+  const genericRl = await rateLimit("generic", `supplier:${user.id}`);
+  if (!genericRl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(genericRl.retryAfterMs / 1000)) } }
+    );
+  }
+  const connectRl = await rateLimit("stripe-connect", `supplier:${user.id}`);
+  if (!connectRl.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "Too many Stripe onboarding attempts. Wait an hour, or contact support if you're stuck.",
+      },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(connectRl.retryAfterMs / 1000)) } }
+    );
   }
   const ctx = await getActiveSupplierContext(user);
   if (!ctx) {

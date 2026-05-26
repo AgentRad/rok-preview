@@ -55,6 +55,9 @@ export const AUDIT_ACTIONS = [
   "TWO_FACTOR_DISABLED",
   // PLH-1 commit 3: who pulled a supplier's legal document and when.
   "SUPPLIER_DOC_VIEWED",
+  // PLH-1 commit 4: Stripe Connect went from active to disabled; admin
+  // is alerted via attention feed + supplier may be auto-hidden.
+  "SUPPLIER_CONNECT_DISABLED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

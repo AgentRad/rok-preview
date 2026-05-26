@@ -5,6 +5,8 @@ import {
   canManageBankInfo,
   getActiveSupplierContext,
 } from "@/lib/supplier-access";
+import { rateLimit } from "@/lib/rate-limit";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -20,6 +22,16 @@ export async function PATCH(req: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  }
+  // PLH-1 commit 4: throttle bank-info edits per supplier user. Stops a
+  // compromised session from rapid-firing fake updates to bury the real
+  // last4 in the audit trail.
+  const rl = await rateLimit("generic", `supplier:${user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
   }
   const ctx = await getActiveSupplierContext(user);
   if (!ctx) {
@@ -59,6 +71,14 @@ export async function PATCH(req: Request) {
     );
   }
 
+  // PLH-1 commit 4: snapshot the previous bank summary BEFORE the write
+  // so the audit row carries a real before/after diff. last4 + status are
+  // what an investigator needs to spot "someone changed payout destination".
+  const previous = await prisma.supplier.findUnique({
+    where: { id: ctx.supplier.id },
+    select: { bankInfoLast4: true, bankInfoStatus: true },
+  });
+
   const updated = await prisma.supplier.update({
     where: { id: ctx.supplier.id },
     data: {
@@ -69,6 +89,26 @@ export async function PATCH(req: Request) {
       bankInfoUpdatedAt: new Date(),
     },
   });
+
+  // PLH-1 commit 4: audit + admin attention. A bank-detail change is one
+  // of the highest-signal events on the platform (it's the lever for
+  // payout fraud), so we write a structured audit row AND mark the
+  // supplier as needing re-verification so it surfaces on the admin
+  // attention feed via the PENDING bankInfoStatus.
+  await writeAuditLog({
+    actor: user,
+    action: "SUPPLIER_BANK_INFO_UPDATED",
+    targetType: "Supplier",
+    targetId: updated.id,
+    summary: `Bank info updated to ${bankName} ****${last4Raw} (was ****${previous?.bankInfoLast4 ?? "none"})`,
+    metadata: {
+      previousLast4: previous?.bankInfoLast4 ?? null,
+      newLast4: last4Raw,
+      previousStatus: previous?.bankInfoStatus ?? null,
+      actor: user.id,
+    },
+  });
+
   return NextResponse.json({
     ok: true,
     supplier: {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { writeAuditLog, type AuditAction } from "@/lib/audit";
+import { sendSupplierDocReviewed } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -60,5 +61,28 @@ export async function PATCH(
     summary: `${updated.kind} (${updated.filename}) ${status.toLowerCase()}${reviewNote ? `: ${reviewNote}` : ""}`,
     metadata: { supplierId: updated.supplierId, kind: updated.kind },
   });
+
+  // PLH-1 commit 4: tell the supplier their document was reviewed.
+  // Gated on RESEND_API_KEY (the helper no-ops without it).
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: updated.supplierId },
+        select: { name: true, contactEmail: true },
+      });
+      if (supplier?.contactEmail) {
+        await sendSupplierDocReviewed({
+          to: supplier.contactEmail,
+          supplierName: supplier.name,
+          kind: updated.kind,
+          status,
+          reviewNote: updated.reviewNote ?? null,
+        });
+      }
+    } catch {
+      // Non-fatal: a failed notification email doesn't undo the review.
+    }
+  }
+
   return NextResponse.json({ ok: true, document: updated });
 }

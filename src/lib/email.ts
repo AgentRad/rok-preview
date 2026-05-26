@@ -668,6 +668,44 @@ export async function sendPasswordReset(args: {
 }
 
 /**
+ * PLH-1 commit 4: notify a supplier when admin reviews one of their
+ * legal documents. APPROVED is a green light; REJECTED prompts the
+ * supplier to upload a replacement, with the admin's note in the body.
+ */
+export async function sendSupplierDocReviewed(args: {
+  to: string;
+  supplierName: string;
+  kind: string;
+  status: string;
+  reviewNote?: string | null;
+}): Promise<void> {
+  const url = siteUrl(`/supplier`);
+  const niceKind = esc(args.kind.replaceAll("_", " ").toLowerCase());
+  const niceStatus = esc(args.status.toLowerCase());
+  const isApproved = args.status.toUpperCase() === "APPROVED";
+  const headline = isApproved
+    ? `Your ${niceKind} document was approved.`
+    : `Your ${niceKind} document was marked ${niceStatus}.`;
+  const noteBlock = args.reviewNote
+    ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Reviewer note:</strong> ${esc(args.reviewNote)}</p>`
+    : "";
+  const followUp = isApproved
+    ? `<p>No action needed. The document counts toward your go-live checklist.</p>`
+    : `<p>Open your supplier dashboard to upload a replacement when ready.</p>`;
+  const body = `
+    <p>Hi ${esc(args.supplierName)},</p>
+    <p>${headline}</p>
+    ${noteBlock}
+    ${followUp}
+    <p style="margin-top:22px;">${btn(url, "Open supplier dashboard")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Document ${niceStatus}: ${niceKind}`,
+    html: wrap("Document review update", body),
+  });
+}
+
+/**
  * PLH-1 commit 2: 2FA-disabled notification. Fires on a successful
  * /api/auth/2fa/disable so the user notices an attacker stripping the
  * second factor even if the attacker has the password and session.

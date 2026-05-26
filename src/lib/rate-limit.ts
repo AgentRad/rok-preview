@@ -53,6 +53,13 @@ const BUCKETS: Record<string, Bucket> = {
   // re-quotes are a normal user flow (changing ship-to + surcharges
   // both trigger a refresh).
   "freight-quote": { capacity: 5, windowMs: 60_000 },
+  // PLH-1 commit 4: per-supplier cap on Stripe Connect onboarding link
+  // creation. Each call hits Stripe's accountLinks.create API, which is
+  // rate-limited on their side and costs us latency. 5/hour/supplier is
+  // plenty for a real user (they refresh maybe once or twice mid-flow);
+  // a runaway client retrying every second hits this before it hits the
+  // Stripe limit and gets a clean 429.
+  "stripe-connect": { capacity: 5, windowMs: 60 * 60_000 },
   generic: { capacity: 60, windowMs: 60_000 },
 };
 
