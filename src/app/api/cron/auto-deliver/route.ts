@@ -1,50 +1,51 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { sendOrderDelivered } from "@/lib/email";
+import { isAuthorizedCronRequest } from "@/lib/cron-auth";
+import { writeAuditLog } from "@/lib/audit";
+import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * Nightly cron: any PAID order that has been in "Shipped" state for more
- * than AUTO_DELIVER_DAYS gets auto-flipped to Delivered. This is the safety
- * net for when carrier APIs miss a delivery event, the buyer never clicks
- * "Confirm receipt", and the admin doesn't manually mark it.
+ * than AUTO_DELIVER_DAYS gets auto-flipped to Delivered. This is the
+ * safety net for when carrier APIs miss a delivery event, the buyer
+ * never clicks "Confirm receipt", and the admin doesn't manually mark
+ * it.
  *
  * Schedule via vercel.json: { "crons": [{ "path": "/api/cron/auto-deliver",
- * "schedule": "0 9 * * *" }] } - runs 09:00 UTC daily (early morning US).
+ * "schedule": "0 9 * * *" }] } runs 09:00 UTC daily (early morning US).
  *
- * Auth: Vercel Cron sends a CRON_SECRET header in production. If the env
- * var is set, we require the header to match. Locally (no secret) the
- * endpoint is open for testing.
+ * Auth: PLH-2 Phase 4e (E1). Pre-fix this route rolled its own header
+ * check that fell open when CRON_SECRET was unset, including in
+ * production. It now uses the shared isAuthorizedCronRequest helper
+ * which fails closed in prod when the secret is missing.
  */
 
 const AUTO_DELIVER_DAYS = 14;
-const MAX_PER_RUN = 200; // safety cap; one slow night won't bog the function
+const MAX_PER_RUN = 200;
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization") || "";
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (!isAuthorizedCronRequest(req)) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   const cutoff = new Date(
     Date.now() - AUTO_DELIVER_DAYS * 24 * 60 * 60 * 1000
   );
 
-  // Find PAID + Shipped orders whose paidAt (proxy for ship date when we
-  // don't have a separate shippedAt timestamp) is older than cutoff.
+  // E4: order by paidAt ASC so the oldest backlog gets processed first
+  // when the cron is catching up after an outage.
   const candidates = await prisma.order.findMany({
     where: {
       status: "PAID",
       shipmentStage: "Shipped",
-      // Use paidAt as the floor; in practice we want shippedAt but that's
-      // not on the model today. paidAt < cutoff is conservative (older).
       paidAt: { lt: cutoff },
     },
-    take: MAX_PER_RUN,
+    orderBy: { paidAt: "asc" },
+    take: MAX_PER_RUN + 1,
     select: {
       id: true,
       reference: true,
@@ -54,22 +55,54 @@ export async function GET(req: Request) {
     },
   });
 
+  const hasMore = candidates.length > MAX_PER_RUN;
+  const batch = hasMore ? candidates.slice(0, MAX_PER_RUN) : candidates;
+
   let delivered = 0;
+  let emailFailed = 0;
   const errors: string[] = [];
 
-  for (const c of candidates) {
+  for (const c of batch) {
     try {
       const updated = await prisma.order.update({
         where: { id: c.id },
         data: { shipmentStage: "Delivered", status: "FULFILLED" },
         include: { items: true },
       });
-      // Cron iterates orders synchronously; await so each email actually
-       // fires inside the function lifetime instead of racing the response.
+
+      // PLH-2 Phase 4e (E2): pre-fix this `catch` swallowed email failures
+      // silently. The order would flip to FULFILLED, the buyer would
+      // never get the notification, and nothing told the admin. We can't
+      // roll back the status update (the same failing email would
+      // re-fail forever and trap the order in PAID), so the failure
+      // path now writes an audit row + Sentry so admin can manually
+      // re-notify the buyer from /admin/audit.
       try {
         await sendOrderDelivered(updated);
-      } catch {
-        // Non-fatal: a missing email doesn't stop the rest of the batch.
+        await prisma.order.update({
+          where: { id: c.id },
+          data: { deliveryEmailSentAt: new Date() },
+        });
+      } catch (emailErr) {
+        emailFailed++;
+        captureError(emailErr, {
+          subsystem: "auto-deliver",
+          op: "sendOrderDelivered",
+          orderId: c.id,
+          orderReference: c.reference,
+        });
+        await writeAuditLog({
+          actor: { id: "system", email: "system@partsport" },
+          action: "AUTO_DELIVER_EMAIL_FAILED",
+          targetType: "Order",
+          targetId: c.id,
+          summary: `Order ${c.reference} auto-flipped to FULFILLED but the delivery email to ${c.buyerEmail} failed: ${emailErr instanceof Error ? emailErr.message : String(emailErr)}`,
+          metadata: {
+            orderReference: c.reference,
+            buyerEmail: c.buyerEmail,
+            error: emailErr instanceof Error ? emailErr.message : String(emailErr),
+          },
+        });
       }
       delivered++;
     } catch (e) {
@@ -79,9 +112,11 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    scanned: candidates.length,
+    scanned: batch.length,
     delivered,
+    emailFailed,
     errors,
     cutoffDays: AUTO_DELIVER_DAYS,
+    hasMore,
   });
 }

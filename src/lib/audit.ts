@@ -63,6 +63,10 @@ export const AUDIT_ACTIONS = [
   // PLH-2 Phase 4d (D4): who streamed a buyer's tax-exempt certificate
   // (private blob, owner or admin only).
   "TAX_EXEMPT_DOC_VIEWED",
+  // PLH-2 Phase 4e (E2): the auto-deliver cron flipped the order to
+  // FULFILLED but sendOrderDelivered threw. The status change stands;
+  // this row is the trail so admin can manually re-notify the buyer.
+  "AUTO_DELIVER_EMAIL_FAILED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

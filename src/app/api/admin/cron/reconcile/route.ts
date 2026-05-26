@@ -9,6 +9,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
+const WINDOW_DAYS = 7;
+const MAX_CHARGES_PER_RUN = 1000;
+const MAX_TRANSFERS_PER_RUN = 1000;
 
 let _client: Stripe | null = null;
 function client(): Stripe | null {
@@ -27,9 +30,9 @@ type Mismatch = {
 };
 
 /**
- * Daily reconciliation. Fetches the previous day's Stripe
- * BalanceTransactions and matches each against PartsPort's records.
- * Three classes of mismatch are surfaced:
+ * Daily reconciliation. Fetches Stripe BalanceTransactions and matches
+ * each against PartsPort's records. Three classes of mismatch are
+ * surfaced:
  *
  *   - missing-db        : a Stripe charge with no matching Order or
  *                         a transfer with no matching Payout
@@ -39,8 +42,23 @@ type Mismatch = {
  *                         with no Stripe row in the window
  *
  * Every mismatch is captured to the AuditLog with
- * action="RECONCILIATION_MISMATCH" so the morning admin sees them in
- * /admin/audit.
+ * action="RECONCILIATION_MISMATCH".
+ *
+ * PLH-2 Phase 4e (E5): persisted cursor. Pre-fix this cron only ever
+ * looked back the last 1 to 7 days, so any data older than the most
+ * recent run's lookback was permanently unreachable. After a multi-day
+ * outage the gap was silently lost. The cursor lives on the singleton
+ * ReconciliationState row. Each run starts from
+ *   start = max(cursor, NOW() - WINDOW_DAYS days)
+ * processes one WINDOW_DAYS chunk, then advances the cursor to the end
+ * of the chunk. If the cursor is older than a single window the cron
+ * walks forward one chunk per invocation until it catches up, surfacing
+ * `hasMore: true` on each run that still has ground to cover.
+ *
+ * E4: caps at MAX_CHARGES_PER_RUN + MAX_TRANSFERS_PER_RUN rows. If
+ * either cap trips we return `hasMore: true` and DO NOT advance the
+ * cursor so the next run re-processes the chunk; mismatches are
+ * idempotent so the rewrite is safe.
  */
 export async function GET(req: Request) {
   if (!isAuthorizedCronRequest(req)) {
@@ -53,26 +71,54 @@ export async function GET(req: Request) {
       { status: 200 }
     );
   }
+
   const url = new URL(req.url);
-  const lookbackDays = Math.max(1, Math.min(7, Number(url.searchParams.get("days") || "1")));
-  const now = Math.floor(Date.now() / 1000);
-  const since = now - lookbackDays * SECONDS_PER_DAY;
+  const overrideDays = Number(url.searchParams.get("days") || "0");
+  const windowDays =
+    overrideDays > 0 ? Math.max(1, Math.min(7, overrideDays)) : WINDOW_DAYS;
+
+  // Load (or initialize) the singleton cursor row.
+  const state = await prisma.reconciliationState.upsert({
+    where: { id: "singleton" },
+    update: {},
+    create: { id: "singleton", cursor: null },
+  });
+
+  const now = Date.now();
+  const windowMs = windowDays * SECONDS_PER_DAY * 1000;
+  // Stripe's API list endpoints can comfortably reach a few weeks back.
+  // Floor the start at NOW - WINDOW_DAYS only on first ever run (no
+  // cursor) so the cron has a sensible baseline; once a cursor exists,
+  // we honor it even if it's older than 7 days and walk forward one
+  // window per run.
+  const firstRunStart = new Date(now - windowMs);
+  const cursorStart = state.cursor ?? firstRunStart;
+  const startMs = cursorStart.getTime();
+  const endMs = Math.min(now, startMs + windowMs);
+  const startSec = Math.floor(startMs / 1000);
+  const endSec = Math.floor(endMs / 1000);
 
   const mismatches: Mismatch[] = [];
   let chargesScanned = 0;
   let transfersScanned = 0;
+  let chargesCapped = false;
+  let transfersCapped = false;
 
   try {
     // 1. Charges -> Orders
     let starting: string | undefined = undefined;
-    for (let i = 0; i < 5; i++) {
+    chargesLoop: for (let i = 0; i < 20; i++) {
       const page = await s.charges.list({
-        created: { gte: since },
+        created: { gte: startSec, lte: endSec },
         limit: 100,
         ...(starting ? { starting_after: starting } : {}),
       });
       for (const charge of page.data) {
         chargesScanned++;
+        if (chargesScanned > MAX_CHARGES_PER_RUN) {
+          chargesCapped = true;
+          break chargesLoop;
+        }
         if (!charge.paid || charge.refunded) continue;
         const pi =
           typeof charge.payment_intent === "string"
@@ -104,14 +150,18 @@ export async function GET(req: Request) {
 
     // 2. Transfers -> Payouts
     starting = undefined;
-    for (let i = 0; i < 5; i++) {
+    transfersLoop: for (let i = 0; i < 20; i++) {
       const page = await s.transfers.list({
-        created: { gte: since },
+        created: { gte: startSec, lte: endSec },
         limit: 100,
         ...(starting ? { starting_after: starting } : {}),
       });
       for (const transfer of page.data) {
         transfersScanned++;
+        if (transfersScanned > MAX_TRANSFERS_PER_RUN) {
+          transfersCapped = true;
+          break transfersLoop;
+        }
         const payout = await prisma.payout.findUnique({
           where: { stripeTransferId: transfer.id },
         });
@@ -145,8 +195,6 @@ export async function GET(req: Request) {
     );
   }
 
-  // Log every mismatch into the audit trail so the admin can filter
-  // /admin/audit?action=RECONCILIATION_MISMATCH and triage in one place.
   for (const m of mismatches) {
     await writeAuditLog({
       actor: { id: "system", email: "system@partsport" },
@@ -154,15 +202,37 @@ export async function GET(req: Request) {
       targetType: "Order",
       targetId: m.reference,
       summary: `${m.kind}: ${m.detail}`,
-      metadata: { kind: m.kind, lookbackDays },
+      metadata: { kind: m.kind, windowStart: new Date(startMs).toISOString(), windowEnd: new Date(endMs).toISOString() },
     });
   }
+
+  const capped = chargesCapped || transfersCapped;
+  // Only advance the cursor when we processed the full window without
+  // tripping a cap. A capped run leaves the cursor in place so the next
+  // run re-processes the same chunk; mismatches are idempotent on
+  // (action, kind, reference) for the morning admin.
+  const cursorAfter = capped ? state.cursor : new Date(endMs);
+  if (!capped) {
+    await prisma.reconciliationState.update({
+      where: { id: "singleton" },
+      data: { cursor: cursorAfter },
+    });
+  }
+
+  // hasMore is true when either we capped OR the window we just
+  // processed ends before "now" (so a backlog still exists).
+  const hasMore = capped || endMs < now;
 
   return NextResponse.json({
     ok: true,
     chargesScanned,
     transfersScanned,
     mismatches,
-    lookbackDays,
+    windowDays,
+    windowStart: new Date(startMs).toISOString(),
+    windowEnd: new Date(endMs).toISOString(),
+    cursorAfter: cursorAfter ? cursorAfter.toISOString() : null,
+    hasMore,
+    capped,
   });
 }

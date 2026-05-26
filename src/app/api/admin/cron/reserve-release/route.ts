@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const RELEASE_AFTER_DAYS = 60;
+const MAX_PER_RUN = 200;
 
 /**
  * Daily cron: release reserves on orders that are RELEASE_AFTER_DAYS old
@@ -17,9 +18,31 @@ const RELEASE_AFTER_DAYS = 60;
  * Supplier.reserveBalanceCents, transfers it to the supplier (when
  * Connect is active), and records a RELEASE SupplierReserveTransaction.
  *
- * Idempotent: orders are matched on Order.reservedCents > 0; the
- * release transaction clears reservedCents on the way out so a re-run
- * doesn't double-release.
+ * PLH-2 Phase 4e (E3): two-stage release so the Stripe transfer fires
+ * AFTER the row is staked out but BEFORE reserveBalanceCents is
+ * decremented. Pre-fix the DB transaction decremented reserveBalanceCents
+ * and wrote the RELEASE row, then the Stripe transfer fired afterwards.
+ * If the transfer failed, the reserve had already been "released" on the
+ * books with no money actually leaving the platform. Same money-leak
+ * pattern as P12 C3 on the payouts path.
+ *
+ * New three-stage flow:
+ *   Stage 1 (DB tx): create a PENDING SupplierReserveTransaction noting
+ *     the planned drawCents. reserveBalanceCents is NOT decremented yet.
+ *   Stage 2 (no tx, network): createTransferToSupplier (Connect-active
+ *     suppliers only; non-Connect suppliers skip Stage 2 and Stage 3
+ *     just settles the books).
+ *   Stage 3a SUCCESS (new tx): flip PENDING row to COMPLETED, decrement
+ *     reserveBalanceCents (re-read fresh, Math.min on current balance),
+ *     decrement Payout.reservedCents and Order.reservedCents, write
+ *     PAYOUT_MARKED_PAID audit.
+ *   Stage 3b FAILURE (new tx): flip PENDING row to FAILED with the
+ *     failure reason. reserveBalanceCents stays untouched. The next
+ *     cron run picks the order up again.
+ *
+ * PLH-2 Phase 4e (E4): cap at MAX_PER_RUN candidates per invocation and
+ * sort by paidAt ASC so the oldest backlog clears first. Surfaces
+ * `hasMore: true` so the next run knows to keep going.
  */
 export async function GET(req: Request) {
   if (!isAuthorizedCronRequest(req)) {
@@ -31,21 +54,25 @@ export async function GET(req: Request) {
       reservedCents: { gt: 0 },
       paidAt: { lt: cutoff },
       refundedCents: 0,
-      // Skip orders with any non-resolved return; that's a money-at-risk signal.
       returns: {
         none: { status: { in: ["OPEN", "APPROVED"] } },
       },
     },
+    orderBy: { paidAt: "asc" },
+    take: MAX_PER_RUN + 1,
     include: {
       items: { include: { product: { select: { supplierId: true } } } },
       payouts: true,
     },
   });
 
+  const hasMore = candidates.length > MAX_PER_RUN;
+  const batch = hasMore ? candidates.slice(0, MAX_PER_RUN) : candidates;
+
   const released: { orderId: string; supplierId: string; amountCents: number }[] = [];
-  for (const order of candidates) {
-    // Per-supplier share of the order's reservedCents, matched to the
-    // payout row that recorded the HOLD.
+  const failed: { orderId: string; supplierId: string; reason: string }[] = [];
+
+  for (const order of batch) {
     for (const payout of order.payouts) {
       if (payout.reservedCents <= 0) continue;
       const supplier = await prisma.supplier.findUnique({
@@ -54,93 +81,186 @@ export async function GET(req: Request) {
       if (!supplier) continue;
       const drawCents = Math.min(payout.reservedCents, supplier.reserveBalanceCents);
       if (drawCents <= 0) continue;
+
+      // STAGE 1: stake out the release. NO reserveBalanceCents
+      // decrement here. The row is the receipt that lets Stage 3
+      // recover if this process dies between Stage 2 and Stage 3.
+      let pendingTxId: string;
       try {
-        // P9.5 HIGH 10: re-fetch inside the transaction and verify the
-        // order STILL has no refund. A refund landing between the
-        // candidate-selection query above and this point would let the
-        // reserve leak to the supplier even though it's now needed to
-        // cover the refund. The serializable-read inside the tx catches
-        // that race.
-        const released_ok = await prisma.$transaction(async (tx) => {
-          const fresh = await tx.order.findUnique({
-            where: { id: order.id },
-            select: { refundedCents: true, reservedCents: true },
-          });
-          if (!fresh) return false;
-          if (fresh.refundedCents > 0) {
-            // Refund snuck in. Skip the release; the cron retries
-            // tomorrow if/when the refund is finalized and there's
-            // remaining reserve.
-            return false;
-          }
-          // Re-check that the supplier still has at least drawCents in
-          // reserveBalanceCents (another refund on a DIFFERENT order
-          // could have drawn it down).
-          const freshSupplier = await tx.supplier.findUnique({
-            where: { id: supplier.id },
-            select: { reserveBalanceCents: true },
-          });
-          if (!freshSupplier || freshSupplier.reserveBalanceCents < drawCents) {
-            return false;
-          }
-          await tx.supplier.update({
-            where: { id: supplier.id },
-            data: { reserveBalanceCents: { decrement: drawCents } },
-          });
-          await tx.supplierReserveTransaction.create({
-            data: {
-              supplierId: supplier.id,
-              type: "RELEASE",
-              amountCents: drawCents,
-              orderId: order.id,
-              reason: `Auto-release after ${RELEASE_AFTER_DAYS} days, no refund or open dispute`,
-            },
-          });
-          await tx.payout.update({
-            where: { id: payout.id },
-            data: { reservedCents: { decrement: drawCents } },
-          });
-          await tx.order.update({
-            where: { id: order.id },
-            data: { reservedCents: { decrement: drawCents } },
-          });
-          return true;
+        const fresh = await prisma.order.findUnique({
+          where: { id: order.id },
+          select: { refundedCents: true, reservedCents: true },
         });
-        if (!released_ok) continue;
-        // ...then send it to the supplier via an extra transfer when
-        // they're Connect-active. Otherwise the released balance just
-        // becomes part of the platform's owings on the next manual
-        // payout cycle (legacy path).
-        if (supplier.stripeAccountId && supplier.stripePayoutsEnabled) {
+        if (!fresh) continue;
+        if (fresh.refundedCents > 0) {
+          // Refund snuck in between selection and Stage 1. Skip.
+          continue;
+        }
+        const created = await prisma.supplierReserveTransaction.create({
+          data: {
+            supplierId: supplier.id,
+            type: "RELEASE",
+            status: "PENDING",
+            amountCents: drawCents,
+            orderId: order.id,
+            reason: `Pending auto-release after ${RELEASE_AFTER_DAYS} days, no refund or open dispute`,
+          },
+        });
+        pendingTxId = created.id;
+      } catch (err) {
+        captureError(err, {
+          subsystem: "reserve-release",
+          op: "stage1",
+          orderId: order.id,
+          supplierId: supplier.id,
+        });
+        continue;
+      }
+
+      // STAGE 2: send the cash. Connect-active suppliers only. For
+      // legacy non-Connect suppliers the released balance just stays on
+      // the platform's books and gets paid out manually on the next
+      // cycle. There is no network call to fail, so we drop straight
+      // into Stage 3a.
+      let transferFailed = false;
+      let transferFailReason = "";
+      if (supplier.stripeAccountId && supplier.stripePayoutsEnabled) {
+        try {
           await createTransferToSupplier({
             supplier,
             amountCents: drawCents,
             orderId: order.id,
             payoutReference: generateReference("RES"),
           });
+        } catch (err) {
+          transferFailed = true;
+          transferFailReason =
+            err instanceof Error ? err.message.slice(0, 500) : "Unknown";
+          captureError(err, {
+            subsystem: "reserve-release",
+            op: "stage2-transfer",
+            orderId: order.id,
+            supplierId: supplier.id,
+            pendingTxId,
+          });
         }
-        released.push({
+      }
+
+      if (transferFailed) {
+        // STAGE 3b: mark the PENDING row failed. reserveBalanceCents
+        // stays untouched. Next cron run will retry the order.
+        try {
+          await prisma.supplierReserveTransaction.update({
+            where: { id: pendingTxId },
+            data: {
+              status: "FAILED",
+              reason: `Transfer failed: ${transferFailReason}`,
+            },
+          });
+        } catch (err) {
+          captureError(err, {
+            subsystem: "reserve-release",
+            op: "stage3b-mark-failed",
+            orderId: order.id,
+            supplierId: supplier.id,
+            pendingTxId,
+          });
+        }
+        failed.push({
           orderId: order.id,
           supplierId: supplier.id,
-          amountCents: drawCents,
+          reason: transferFailReason,
         });
-        await writeAuditLog({
-          actor: { id: "system", email: "system@partsport" },
-          action: "PAYOUT_MARKED_PAID",
-          targetType: "Payout",
-          targetId: payout.id,
-          summary: `Reserve released: ${drawCents} cents for ${supplier.name} on order ${order.reference}`,
-          metadata: {
-            orderReference: order.reference,
-            supplierId: supplier.id,
+        continue;
+      }
+
+      // STAGE 3a SUCCESS: settle the books. Re-read reserve balance
+      // inside the tx and Math.min on the fresh value so a concurrent
+      // refund-clawback landing between Stage 1 and Stage 3 cannot push
+      // reserveBalanceCents below zero.
+      try {
+        const settled = await prisma.$transaction(async (tx) => {
+          const recheck = await tx.order.findUnique({
+            where: { id: order.id },
+            select: { refundedCents: true },
+          });
+          if (!recheck) return 0;
+          if (recheck.refundedCents > 0) {
+            // Cash already left the platform via the Stripe transfer.
+            // The supplier got the reserve. Mark the row COMPLETED so
+            // the books match the cash, but DO NOT decrement
+            // reserveBalanceCents (the clawback already did). This is
+            // a known edge case: the platform now owes itself the
+            // shortfall and a future refund clawback may add to
+            // Supplier.owedToPlatformCents. Note it on the audit row.
+            await tx.supplierReserveTransaction.update({
+              where: { id: pendingTxId },
+              data: {
+                status: "COMPLETED",
+                reason: `Released ${drawCents} cents, but a refund landed between Stage 1 and Stage 3; reserveBalanceCents already adjusted by clawback path`,
+              },
+            });
+            return drawCents;
+          }
+          const freshSupplier = await tx.supplier.findUnique({
+            where: { id: supplier.id },
+            select: { reserveBalanceCents: true },
+          });
+          const safeDraw = Math.min(
             drawCents,
-          },
+            freshSupplier?.reserveBalanceCents ?? 0
+          );
+          if (safeDraw > 0) {
+            await tx.supplier.update({
+              where: { id: supplier.id },
+              data: { reserveBalanceCents: { decrement: safeDraw } },
+            });
+            await tx.payout.update({
+              where: { id: payout.id },
+              data: { reservedCents: { decrement: safeDraw } },
+            });
+            await tx.order.update({
+              where: { id: order.id },
+              data: { reservedCents: { decrement: safeDraw } },
+            });
+          }
+          await tx.supplierReserveTransaction.update({
+            where: { id: pendingTxId },
+            data: {
+              status: "COMPLETED",
+              amountCents: safeDraw,
+              reason: `Auto-release after ${RELEASE_AFTER_DAYS} days, no refund or open dispute`,
+            },
+          });
+          return safeDraw;
         });
+        if (settled > 0) {
+          released.push({
+            orderId: order.id,
+            supplierId: supplier.id,
+            amountCents: settled,
+          });
+          await writeAuditLog({
+            actor: { id: "system", email: "system@partsport" },
+            action: "PAYOUT_MARKED_PAID",
+            targetType: "Payout",
+            targetId: payout.id,
+            summary: `Reserve released: ${settled} cents for ${supplier.name} on order ${order.reference}`,
+            metadata: {
+              orderReference: order.reference,
+              supplierId: supplier.id,
+              drawCents: settled,
+              pendingTxId,
+            },
+          });
+        }
       } catch (err) {
         captureError(err, {
           subsystem: "reserve-release",
+          op: "stage3a-settle",
           orderId: order.id,
           supplierId: supplier.id,
+          pendingTxId,
         });
       }
     }
@@ -149,7 +269,9 @@ export async function GET(req: Request) {
   return NextResponse.json({
     ok: true,
     cutoffDays: RELEASE_AFTER_DAYS,
-    scanned: candidates.length,
+    scanned: batch.length,
     released,
+    failed,
+    hasMore,
   });
 }

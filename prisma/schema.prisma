@@ -442,14 +442,28 @@ model Payout {
 model SupplierReserveTransaction {
   id          String   @id @default(cuid())
   supplierId  String
-  type        String   // HOLD | RELEASE | DRAW_DOWN
+  type        String   // HOLD | RELEASE | DRAW_DOWN | OWED_INCURRED
   amountCents Int
   orderId     String?
   reason      String   @default("")
+  // PLH-2 Phase 4e (E3): RELEASE rows go through a two-stage lifecycle so
+  // the Stripe transfer fires AFTER the candidate is staked out but BEFORE
+  // reserveBalanceCents is decremented. status values:
+  //   PENDING   - row staked out before the Stripe transfer fires.
+  //               reserveBalanceCents NOT yet decremented.
+  //   COMPLETED - the transfer succeeded (or was skipped for non-Connect
+  //               suppliers). reserveBalanceCents has been decremented.
+  //   FAILED    - the transfer failed. reserveBalanceCents was NOT
+  //               touched. The next cron run retries.
+  // Pre-existing rows have status NULL which is treated as COMPLETED for
+  // backwards compatibility. HOLD / DRAW_DOWN / OWED_INCURRED rows ignore
+  // this field.
+  status      String?
   createdAt   DateTime @default(now())
 
   @@index([supplierId])
   @@index([orderId])
+  @@index([status])
 }
 
 /**
@@ -545,6 +559,10 @@ model Order {
   shipmentStage       String          @default("")
   carrier             String?
   trackingCode        String?
+  // PLH-2 Phase 4e (E2): set when sendOrderDelivered fires successfully
+  // after the auto-deliver cron flips the order. If the email throws, this
+  // stays null and the AUTO_DELIVER_EMAIL_FAILED audit row is the trail.
+  deliveryEmailSentAt DateTime?
   items               OrderItem[]
   invoice             Invoice?
   returns             ReturnRequest[]
@@ -666,6 +684,20 @@ model TaxRegistration {
   notes              String    @default("")
   updatedAt          DateTime  @updatedAt
   createdAt          DateTime  @default(now())
+}
+
+/**
+ * PLH-2 Phase 4e (E5): singleton row tracking the reconcile cron cursor.
+ * The reconcile cron walks Stripe charges and transfers in 7-day chunks
+ * starting from `cursor`. On success it advances `cursor` to the end of
+ * the processed window. A long outage catches up over multiple runs
+ * instead of silently losing any data beyond Stripe's 7-day default.
+ * Singleton: one row with id = "singleton".
+ */
+model ReconciliationState {
+  id        String   @id @default("singleton")
+  cursor    DateTime?
+  updatedAt DateTime @updatedAt
 }
 
 model SupplierApplication {

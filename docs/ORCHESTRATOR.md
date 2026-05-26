@@ -214,6 +214,16 @@ These are MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4d. The Phase 4d
 - **List the unsubscribed user a re-subscribe affordance in the unsubscribe response HTML.** Currently they have to find /settings on their own.
 - **Tax-exempt cert expiry.** Resale certs expire (1-3 years depending on state); add an `taxExemptExpiresAt` column and admin reminder cron.
 
+## Post-launch backlog (deferred from PLH-2 Phase 4e crons audit)
+
+These are MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4e. The Phase 4e commit closed the five CRITICAL/HIGH items: E1 (auto-deliver routed through `isAuthorizedCronRequest` so prod fails closed when CRON_SECRET is unset), E2 (auto-deliver no longer swallows email failures; new `AUTO_DELIVER_EMAIL_FAILED` audit + `Order.deliveryEmailSentAt` timestamp + Sentry on `sendOrderDelivered` throw), E3 (reserve-release two-stage so the Stripe transfer fires AFTER the row is staked out but BEFORE `reserveBalanceCents` is decremented; new `status` column on `SupplierReserveTransaction` with PENDING/COMPLETED/FAILED lifecycle and stage-3 re-read + Math.min on fresh balance), E4 (`MAX_PER_RUN=200` cap on auto-deliver and reserve-release, ASC ordering by oldest first, `hasMore` in response payload), E5 (`ReconciliationState` singleton with `cursor` column; reconcile now walks forward in 7-day chunks one window per invocation with 1000/1000 charges+transfers caps, advances cursor only on a non-capped run). New migration: `20260604000000_plh2_phase4e_cron_audit`. The list below is queued for a post-launch polish round, not for soft launch.
+
+- **Apply MAX_PER_RUN to remaining crons.** Phase 4e capped auto-deliver and reserve-release. The other cron loops (anonymize-deleted-accounts, cleanup-unverified-accounts, connect-sync, payout-retry, health-check) iterate users/suppliers/payouts unbounded. A first-run-after-outage backlog on any of them could still time out the Vercel function. Add a 200-per-run cap with ASC-by-creation ordering and a `hasMore` field.
+- **Reconcile mismatch dedupe.** When a capped run replays the same window, the same mismatch can be written multiple times to AuditLog. Add a unique index on `(action, targetId, metadata->>'kind', metadata->>'windowStart')` or a check-then-write to suppress duplicates.
+- **Reserve-release orphan cleanup.** A PENDING `SupplierReserveTransaction` whose process died between Stage 1 and Stage 3 (and where the Stripe transfer either landed or did not) will never resolve on its own. Add a sweeper that flags PENDING rows older than 1 hour with a metadata note for admin review.
+- **Auto-deliver email retry surface.** `AUTO_DELIVER_EMAIL_FAILED` rows currently require an admin to manually re-notify the buyer from `/admin/audit`. A small "resend delivery email" button on the order detail page would close the loop.
+- **Reconcile cursor admin view.** No UI surfaces the current cursor; a long backlog is only visible via the JSON response. Add a small card on `/ops` showing cursor + window + `hasMore`.
+
 ## Project context
 
 PartsPort is a B2B industrial parts marketplace on `claude/industrial-marketplace-ROwAU`. Three user types beyond admin: buyers (free), suppliers/distributors (6% fee), OEMs/manufacturers (free, no direct sales). RFQ flow for big-ticket items. Stripe Checkout + Stripe Tax. Resend for email.
