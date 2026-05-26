@@ -206,7 +206,7 @@ export default async function CatalogPage({
         <div className="catalog-layout">
           <aside className="filters" aria-label="Filters">
             <div className="filter-group">
-              <h3>Category</h3>
+              <h2>Category</h2>
               <Link
                 href={hrefWith({ cat: "", mfr: "", page: "1" })}
                 className="filter-opt"
@@ -236,7 +236,7 @@ export default async function CatalogPage({
 
             {manufacturers.length > 1 && (
               <div className="filter-group">
-                <h3>Manufacturer</h3>
+                <h2>Manufacturer</h2>
                 <Link
                   href={hrefWith({ mfr: "", page: "1" })}
                   className="filter-opt"
@@ -270,7 +270,7 @@ export default async function CatalogPage({
             )}
 
             <div className="filter-group">
-              <h3>Availability</h3>
+              <h2>Availability</h2>
               <Link
                 href={hrefWith({ instock: inStock ? "" : "1", page: "1" })}
                 className="filter-opt"
@@ -327,7 +327,7 @@ export default async function CatalogPage({
 
             {products.length === 0 ? (
               <div className="empty-block">
-                <h3>No parts match your filters</h3>
+                <h2>No parts match your filters</h2>
                 <p>
                   Try a different category, manufacturer, or{" "}
                   <Link href="/suppliers">request a part we don&rsquo;t list</Link>.

@@ -350,7 +350,7 @@ export default async function ProductPage({
           </div>
 
           <div className="detail-specs">
-            <h3>Specifications</h3>
+            <h2>Specifications</h2>
             <table className="spec-table">
               <tbody>
                 {Object.entries(specs).map(([k, v]) => (
@@ -366,7 +366,7 @@ export default async function ProductPage({
 
           <div className="reviews-section">
             <div className="reviews-head">
-              <h3>Reviews</h3>
+              <h2>Reviews</h2>
               {reviewCount > 0 && (
                 <div className="reviews-summary">
                   <Stars value={reviewAverage} size={16} />

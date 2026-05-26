@@ -3,8 +3,7 @@ import { Hanken_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
-import DemoGuide from "@/components/DemoGuide";
-import CookieConsent from "@/components/CookieConsent";
+import DeferredChrome from "@/components/DeferredChrome";
 import { siteUrl } from "@/lib/site-url";
 
 const hankenGrotesk = Hanken_Grotesk({
@@ -76,8 +75,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
-        <CookieConsent />
-        {process.env.VERCEL_ENV !== "production" && <DemoGuide />}
+        <DeferredChrome showDemoGuide={process.env.VERCEL_ENV !== "production"} />
         <Analytics />
         <SpeedInsights />
       </body>

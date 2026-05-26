@@ -3,6 +3,13 @@ import { withSentryConfig } from "@sentry/nextjs";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    // Inline above-the-fold critical CSS via Critters so the first paint
+    // doesn't wait for the full stylesheet to download. The full sheet is
+    // still requested with media="print" + onload swap so subsequent
+    // paints get the rest.
+    optimizeCss: true,
+  },
   images: {
     // Allow-list for next/image optimizer. Anything outside this list is
     // rendered via the `unoptimized` prop so we still get sizing + lazy
