@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
 import { sendRfqReceived } from "@/lib/email";
 import { captureError } from "@/lib/observability";
+import { writeAuditLog } from "@/lib/audit";
 
 export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
@@ -40,6 +41,22 @@ export async function POST(req: Request) {
     );
   }
 
+  // Polish 12 M5: dedupe OPEN quotes for the same (product, email).
+  // Prevents a buyer who refreshes the RFQ form from kicking off a
+  // second supplier email + duplicating triage work.
+  const existingOpen = await prisma.quoteRequest.findFirst({
+    where: { productId: product.id, buyerEmail: email, status: "OPEN" },
+    orderBy: { createdAt: "desc" },
+  });
+  if (existingOpen) {
+    return NextResponse.json({
+      ok: true,
+      quoteId: existingOpen.id,
+      reference: existingOpen.reference,
+      deduped: true,
+    });
+  }
+
   const quote = await prisma.quoteRequest.create({
     data: {
       reference: generateReference("RFQ"),
@@ -51,6 +68,21 @@ export async function POST(req: Request) {
       company: String(b.company || "").trim(),
       message: String(b.message || "").trim(),
       status: "OPEN",
+    },
+  });
+
+  // Polish 12 M3: audit RFQ submission.
+  await writeAuditLog({
+    actor: { id: user?.id || "guest", email: user?.email || email },
+    action: "QUOTE_SUBMITTED",
+    targetType: "QuoteRequest",
+    targetId: quote.id,
+    summary: `Quote ${quote.reference} submitted for ${product.sku} (qty ${qty}).`,
+    metadata: {
+      quoteReference: quote.reference,
+      productSku: product.sku,
+      qty,
+      supplierId: product.supplierId,
     },
   });
 

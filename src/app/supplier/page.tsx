@@ -91,7 +91,7 @@ export default async function SupplierDashboard({
     );
   }
 
-  const [orders, quotes, payouts, attention, documents, warehouses] = await Promise.all([
+  const [orders, quotes, payouts, attention, documents, warehouses, reserveTxns] = await Promise.all([
     prisma.order.findMany({
       where: {
         items: { some: { product: { supplierId: supplier.id } } },
@@ -121,6 +121,14 @@ export default async function SupplierDashboard({
     prisma.supplierWarehouse.findMany({
       where: { supplierId: supplier.id },
       orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    }),
+    // Polish 12 M11: surface reserve + owed balance on the supplier
+    // dashboard so the supplier can see why a payout was netted before
+    // pinging support.
+    prisma.supplierReserveTransaction.findMany({
+      where: { supplierId: supplier.id },
+      orderBy: { createdAt: "desc" },
+      take: 10,
     }),
   ]);
 
@@ -367,6 +375,96 @@ export default async function SupplierDashboard({
               <div className="card-body">
                 <CatalogCsvImport />
               </div>
+            </div>
+          )}
+
+          {showPayouts && (
+            <div className="card">
+              <div className="card-head">
+                <h2>Reserve &amp; balance</h2>
+                <div style={{ display: "flex", gap: 18, fontSize: 13 }}>
+                  <span className="muted-text">
+                    Reserve held{" "}
+                    <strong style={{ color: "var(--ink)" }}>
+                      {formatCents(supplier.reserveBalanceCents)}
+                    </strong>
+                  </span>
+                  <span className="muted-text">
+                    Owed to platform{" "}
+                    <strong
+                      style={{
+                        color:
+                          supplier.owedToPlatformCents > 0
+                            ? "var(--amber-deep)"
+                            : "var(--ink)",
+                      }}
+                    >
+                      {formatCents(supplier.owedToPlatformCents)}
+                    </strong>{" "}
+                    <Link
+                      href="/legal/supplier-agreement"
+                      style={{ fontSize: 11, color: "var(--muted)" }}
+                    >
+                      Why?
+                    </Link>
+                  </span>
+                </div>
+              </div>
+              {reserveTxns.length === 0 ? (
+                <div className="empty-block">
+                  <h3>No reserve activity yet</h3>
+                  <p>
+                    PartsPort holds {(supplier.reservePercent / 100).toFixed(1)}%
+                    of each payout as a chargeback reserve, released after 60
+                    days when no refund or chargeback hits the order.
+                  </p>
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th className="num">Amount</th>
+                        <th>Order</th>
+                        <th>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reserveTxns.map((t) => (
+                        <tr key={t.id}>
+                          <td>{t.createdAt.toLocaleDateString()}</td>
+                          <td>
+                            <span
+                              className={
+                                "badge " +
+                                (t.type === "HOLD"
+                                  ? "badge-pending"
+                                  : t.type === "RELEASE"
+                                    ? "badge-fulfilled"
+                                    : t.type === "OWED_INCURRED"
+                                      ? "badge-cancelled"
+                                      : "badge-paid")
+                              }
+                            >
+                              {t.type}
+                            </span>
+                          </td>
+                          <td className="num">{formatCents(t.amountCents)}</td>
+                          <td>{t.orderId ? t.orderId.slice(-6) : ""}</td>
+                          <td
+                            className="muted-text"
+                            style={{ fontSize: 12.5 }}
+                          >
+                            {t.reason}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

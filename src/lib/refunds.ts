@@ -1,6 +1,5 @@
 import "server-only";
 import Stripe from "stripe";
-import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { writeAuditLog } from "./audit";
 import { captureError } from "./observability";
@@ -172,63 +171,58 @@ export async function refundOrder(args: {
       // Proportion of this refund attributable to this supplier.
       const supplierRefundCents = Math.round((amount * share) / totalShare);
       if (supplierRefundCents <= 0) continue;
-      const supplier = await prisma.supplier.findUnique({
-        where: { id: supplierId },
-      });
-      if (!supplier) continue;
-      const drawCents = Math.min(
-        supplierRefundCents,
-        supplier.reserveBalanceCents
-      );
-      const shortfallCents = supplierRefundCents - drawCents;
-      const writes: Prisma.PrismaPromise<unknown>[] = [];
-      if (drawCents > 0) {
-        writes.push(
-          prisma.supplier.update({
+      // Polish 12 M6 + H8: wrap the per-supplier clawback inside a single
+      // $transaction with the balance re-fetched fresh INSIDE the tx, so
+      // a concurrent payout-success owed-recovery can't push the values
+      // past the supplier_*_nonneg CHECK constraints.
+      const { supplierName, drawCents, shortfallCents } = await prisma.$transaction(async (tx) => {
+        const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
+        if (!supplier) {
+          return { supplierName: "", drawCents: 0, shortfallCents: 0 };
+        }
+        const fresh = Math.max(0, supplier.reserveBalanceCents);
+        const drawC = Math.min(supplierRefundCents, fresh);
+        const shortC = supplierRefundCents - drawC;
+        if (drawC > 0) {
+          await tx.supplier.update({
             where: { id: supplierId },
-            data: { reserveBalanceCents: { decrement: drawCents } },
-          })
-        );
-        writes.push(
-          prisma.supplierReserveTransaction.create({
+            data: { reserveBalanceCents: { decrement: drawC } },
+          });
+          await tx.supplierReserveTransaction.create({
             data: {
               supplierId,
               type: "DRAW_DOWN",
-              amountCents: drawCents,
+              amountCents: drawC,
               orderId: order.id,
               reason: `Refund of ${amount} cents on order ${order.reference}`,
             },
-          })
-        );
-      }
-      if (shortfallCents > 0) {
-        // Net against future payouts. Records as an OWE transaction so
-        // /admin/audit + the reserve transaction view show the running
-        // balance the supplier owes back to PartsPort. Pairs with
-        // OWED_RECOVERED written from lib/payouts.ts when the next
-        // payout nets the balance back down.
-        writes.push(
-          prisma.supplier.update({
+          });
+        }
+        if (shortC > 0) {
+          await tx.supplier.update({
             where: { id: supplierId },
-            data: { owedToPlatformCents: { increment: shortfallCents } },
-          })
-        );
-        writes.push(
-          prisma.supplierReserveTransaction.create({
+            data: { owedToPlatformCents: { increment: shortC } },
+          });
+          // Polish 12 M9: shortfall accumulation uses OWED_INCURRED type
+          // (not the DRAW_DOWN bucket; DRAW_DOWN is reserved for the
+          // reserve-balance debit so the supplier ledger reads honest).
+          await tx.supplierReserveTransaction.create({
             data: {
               supplierId,
-              type: "DRAW_DOWN",
-              amountCents: shortfallCents,
+              type: "OWED_INCURRED",
+              amountCents: shortC,
               orderId: order.id,
-              reason: `Owed to platform: ${shortfallCents} cents shortfall on refund for order ${order.reference}`,
+              reason: `Owed to platform: ${shortC} cents shortfall on refund for order ${order.reference}`,
             },
-          })
-        );
-      }
-      if (writes.length > 0) {
-        await prisma.$transaction(writes);
-      }
+          });
+        }
+        return { supplierName: supplier.name, drawCents: drawC, shortfallCents: shortC };
+      });
+      void drawCents;
       if (shortfallCents > 0) {
+        // Use the captured supplier name for the audit log (avoid an
+        // extra read after the tx commits).
+        const supplier = { name: supplierName };
         const updated = await prisma.supplier.findUnique({
           where: { id: supplierId },
           select: { owedToPlatformCents: true },
