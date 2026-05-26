@@ -175,7 +175,7 @@ export default async function AdminConsole() {
             />
           </div>
 
-          <div className="card">
+          <div className="card" id="orders">
             <div className="card-head">
               <h2>Recent orders</h2>
               <a
@@ -241,7 +241,7 @@ export default async function AdminConsole() {
             )}
           </div>
 
-          <div className="card">
+          <div className="card" id="invoices">
             <div className="card-head">
               <h2>Invoices</h2>
               {invoices.length > 0 && (
@@ -308,7 +308,7 @@ export default async function AdminConsole() {
           </div>
 
           {returns.length > 0 && (
-            <div className="card">
+            <div className="card" id="returns">
               <div className="card-head">
                 <h2>Return requests</h2>
               </div>
@@ -416,7 +416,7 @@ export default async function AdminConsole() {
             />
           </div>
 
-          <div className="card">
+          <div className="card" id="quotes">
             <div className="card-head">
               <h2>Quote requests</h2>
             </div>
@@ -471,7 +471,7 @@ export default async function AdminConsole() {
             )}
           </div>
 
-          <div className="card">
+          <div className="card" id="suppliers">
             <div className="card-head">
               <h2>Suppliers</h2>
               <span className="muted-text" style={{ fontSize: 12.5 }}>

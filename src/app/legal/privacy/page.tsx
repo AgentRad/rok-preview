@@ -1,4 +1,4 @@
-// TEMPLATE — Rad must replace with attorney-reviewed copy before live launch.
+// TEMPLATE: Rad must replace with attorney-reviewed copy before live launch.
 // Boilerplate B2B-marketplace privacy notice. Not legal advice. Structured
 // to disclose what PartsPort actually collects and processes today, so
 // privacy regulators get a meaningful document even before counsel rewrites

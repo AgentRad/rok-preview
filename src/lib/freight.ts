@@ -1,5 +1,5 @@
 /**
- * Freight calculation — pure helpers + types. Safe to import from client
+ * Freight calculation: pure helpers + types. Safe to import from client
  * AND server. The Shippo SDK wrapper lives in src/lib/freight-server.ts
  * which is server-only.
  *

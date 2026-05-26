@@ -1,4 +1,4 @@
-// TEMPLATE — Rad must replace with attorney-reviewed copy before live launch.
+// TEMPLATE: Rad must replace with attorney-reviewed copy before live launch.
 
 import type { Metadata } from "next";
 import { siteUrl } from "@/lib/site-url";

@@ -124,8 +124,13 @@ export default async function AccountPage({
                           <td style={{ fontWeight: 700 }}>{o.reference}</td>
                           <td>{o.createdAt.toLocaleDateString()}</td>
                           <td>
-                            {o.items.reduce((n, i) => n + i.qty, 0)} item
-                            {o.items.length === 1 ? "" : "s"}
+                            {(() => {
+                              const qtyTotal = o.items.reduce(
+                                (n, i) => n + i.qty,
+                                0
+                              );
+                              return `${qtyTotal} item${qtyTotal === 1 ? "" : "s"}`;
+                            })()}
                           </td>
                           <td>
                             <span className={"badge " + (STATUS_CLASS[o.status] || "")}>

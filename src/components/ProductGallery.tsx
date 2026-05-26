@@ -54,7 +54,6 @@ export default function ProductGallery({
               aria-label={`View image ${idx + 1} of ${images.length}`}
               className={"gallery-thumb" + (idx === active ? " on" : "")}
               onClick={() => setActive(idx)}
-              onMouseEnter={() => setActive(idx)}
             >
               <Image
                 src={img.url}

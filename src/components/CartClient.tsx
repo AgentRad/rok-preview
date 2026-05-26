@@ -123,7 +123,7 @@ export default function CartClient() {
                   </button>
                 </div>
               </div>
-              <div style={{ fontWeight: 800, fontSize: 15 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>
                 {formatCents(p.priceCents * l.qty)}
               </div>
             </div>

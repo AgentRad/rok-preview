@@ -419,7 +419,7 @@ export default async function SupplierDashboard({
                         </td>
                         <td className="num">{formatCents(p.amountCents)}</td>
                         <td>
-                          {p.paidAt ? p.paidAt.toLocaleDateString() : "—"}
+                          {p.paidAt ? p.paidAt.toLocaleDateString() : "Not paid"}
                         </td>
                       </tr>
                     ))}

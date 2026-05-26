@@ -69,16 +69,6 @@ export default function LegalLayout({
           </aside>
 
           <article className="legal-doc">
-            {templateWarning && (
-              <div className="alert alert-info" style={{ marginBottom: 20 }}>
-                <strong>Template only.</strong> This document is a structural
-                starting point for PartsPort&rsquo;s legal pages, not legal
-                advice and not the final operative agreement. The platform
-                owner is replacing it with attorney-reviewed copy before the
-                public launch. Do not rely on it for any decision in the
-                meantime.
-              </div>
-            )}
             <header className="legal-doc-head">
               <span className="eyebrow">PartsPort, Inc.</span>
               <h1>{title}</h1>
@@ -118,6 +108,15 @@ export default function LegalLayout({
                 legal@partsport.agentgaming.gg
               </a>{" "}
               with questions.
+              {templateWarning && (
+                <span className="legal-doc-foot-note">
+                  Template only. This document is a structural starting point
+                  for PartsPort&rsquo;s legal pages, not legal advice and not
+                  the final operative agreement. The platform owner is
+                  replacing it with attorney-reviewed copy before the public
+                  launch. Do not rely on it for any decision in the meantime.
+                </span>
+              )}
             </footer>
           </article>
         </div>

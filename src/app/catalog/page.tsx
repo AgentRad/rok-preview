@@ -31,6 +31,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductCard from "@/components/ProductCard";
 import CatalogSort from "@/components/CatalogSort";
+import MobileFilterToggle from "@/components/MobileFilterToggle";
 import { publicProductFilter } from "@/lib/supplier-access";
 
 export const dynamic = "force-dynamic";
@@ -204,7 +205,8 @@ export default async function CatalogPage({
         </div>
 
         <div className="catalog-layout">
-          <aside className="filters" aria-label="Filters">
+          <MobileFilterToggle targetId="catalog-filters" />
+          <aside id="catalog-filters" className="filters" aria-label="Filters">
             <div className="filter-group">
               <h2>Category</h2>
               <Link

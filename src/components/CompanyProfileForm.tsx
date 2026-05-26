@@ -35,7 +35,7 @@ export default function CompanyProfileForm({
     setError("");
     setSaved("");
     try {
-      // PATCH the profile route — it preserves user.name (we send it back
+      // PATCH the profile route. It preserves user.name (we send it back
       // unchanged) and just updates companyName + optionally companyLogoUrl.
       const res = await fetch("/api/account/profile", {
         method: "PATCH",

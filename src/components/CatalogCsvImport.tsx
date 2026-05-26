@@ -251,8 +251,8 @@ export default function CatalogCsvImport() {
                     style={r.error ? { background: "rgba(176, 74, 44, 0.06)" } : undefined}
                   >
                     <td>{r.rowNumber}</td>
-                    <td style={{ fontWeight: 700 }}>{r.sku || "—"}</td>
-                    <td>{r.name || "—"}</td>
+                    <td style={{ fontWeight: 700 }}>{r.sku || "-"}</td>
+                    <td>{r.name || "-"}</td>
                     <td className="num">${Number(r.price || 0).toFixed(2)}</td>
                     <td className="num">{r.stock}</td>
                     <td>

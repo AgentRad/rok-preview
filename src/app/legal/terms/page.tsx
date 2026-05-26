@@ -1,4 +1,4 @@
-// TEMPLATE — Rad must replace with attorney-reviewed copy before live launch.
+// TEMPLATE: Rad must replace with attorney-reviewed copy before live launch.
 // Boilerplate B2B-marketplace terms only. Not legal advice. Structural
 // scaffolding so footer links resolve and the supplier onboarding flow has
 // a real document to point at. The operative document is whatever is

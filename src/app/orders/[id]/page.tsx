@@ -219,7 +219,7 @@ export default async function OrderPage({
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>
                   {order.reference}
                 </div>
                 <div className={"badge " + (STATUS_CLASS[order.status] || "")}>

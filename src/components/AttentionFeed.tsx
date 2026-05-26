@@ -27,7 +27,7 @@ export default function AttentionFeed({
   if (items.length === 0) {
     return (
       <div className="attention attention-empty">
-        <div className="invoice-meta-label" style={{ marginBottom: 6 }}>
+        <div className="section-eyebrow" style={{ marginBottom: 6 }}>
           Today
         </div>
         <h2 style={{ fontSize: 19, fontWeight: 600, letterSpacing: "-.02em" }}>
@@ -53,7 +53,7 @@ export default function AttentionFeed({
   return (
     <section className="attention" aria-label="Needs your attention">
       <div className="attention-head">
-        <span className="invoice-meta-label">Needs your attention</span>
+        <span className="section-eyebrow">Needs your attention</span>
         <span className="muted-text" style={{ fontSize: 12.5 }}>
           {items.length} item{items.length === 1 ? "" : "s"}
         </span>

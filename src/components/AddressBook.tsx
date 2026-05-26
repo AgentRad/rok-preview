@@ -326,7 +326,7 @@ export default function AddressBook({ initial }: { initial: Address[] }) {
 
       {adding ? (
         <form onSubmit={save} className="address-form">
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>
+          <h3 style={{ fontWeight: 600, marginBottom: 16 }}>
             Add an address
           </h3>
           {error && <div className="alert alert-error">{error}</div>}

@@ -1,4 +1,4 @@
-// TEMPLATE — Rad must replace with attorney-reviewed copy before live launch.
+// TEMPLATE: Rad must replace with attorney-reviewed copy before live launch.
 // This is the document THRADD (and every future distributor) signs to
 // transact through PartsPort. The "Supplier Agreement" slot in the new
 // SupplierDocument upload flow points here; suppliers download and sign

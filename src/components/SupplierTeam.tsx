@@ -269,7 +269,7 @@ export default function SupplierTeam() {
               >
                 {SELECTABLE.map((r) => (
                   <option key={r} value={r}>
-                    {ROLE_LABEL[r]} — {ROLE_DESCRIPTION[r]}
+                    {ROLE_LABEL[r]} · {ROLE_DESCRIPTION[r]}
                   </option>
                 ))}
               </select>

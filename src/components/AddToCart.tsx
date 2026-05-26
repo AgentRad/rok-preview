@@ -28,27 +28,48 @@ export default function AddToCart({
 
   return (
     <div>
+      {!inStock && (
+        <p className="muted-text" style={{ marginBottom: 12, fontSize: 12.5 }}>
+          This part is on backorder. Use the request-a-quote flow on the
+          supplier page for a confirmed ETA.
+        </p>
+      )}
       <div className="qty-row">
         <span style={{ fontSize: 14, fontWeight: 600 }}>Qty</span>
         <div className="qty-stepper">
-          <button type="button" aria-label="Decrease" onClick={() => setQty((q) => Math.max(1, q - 1))}>
+          <button
+            type="button"
+            aria-label="Decrease"
+            onClick={() => setQty((q) => Math.max(1, q - 1))}
+            disabled={!inStock}
+          >
             −
           </button>
           <span>{qty}</span>
-          <button type="button" aria-label="Increase" onClick={() => setQty((q) => q + 1)}>
+          <button
+            type="button"
+            aria-label="Increase"
+            onClick={() => setQty((q) => q + 1)}
+            disabled={!inStock}
+          >
             +
           </button>
         </div>
       </div>
-      <button className="btn btn-primary btn-block" onClick={add}>
-        Add to cart
+      <button
+        className="btn btn-primary btn-block"
+        onClick={add}
+        disabled={!inStock}
+      >
+        {inStock ? "Add to cart" : "Out of stock"}
       </button>
       <button
         className="btn btn-ghost btn-block"
         style={{ marginTop: 9 }}
         onClick={buyNow}
+        disabled={!inStock}
       >
-        Buy now
+        {inStock ? "Buy now" : "Backorder unavailable"}
       </button>
       {added && (
         <div className="alert alert-ok" style={{ marginTop: 12, marginBottom: 0 }}>
@@ -57,11 +78,6 @@ export default function AddToCart({
             View cart →
           </Link>
         </div>
-      )}
-      {!inStock && (
-        <p className="muted-text" style={{ marginTop: 10, fontSize: 12.5 }}>
-          This part is on backorder. Delivery takes longer than the listed ETA.
-        </p>
       )}
     </div>
   );
