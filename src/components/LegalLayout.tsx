@@ -49,7 +49,7 @@ export default function LegalLayout({
       <main id="main" className="app-page">
         <div className="legal-wrap">
           <aside className="legal-nav" aria-label="Legal documents">
-            <h3>Legal</h3>
+            <div className="legal-nav-label">Legal</div>
             <ul>
               {NAV.map((n) => (
                 <li

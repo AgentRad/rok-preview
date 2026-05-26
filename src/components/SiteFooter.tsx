@@ -21,7 +21,7 @@ export default function SiteFooter() {
             </p>
           </div>
           <div>
-            <h4>Buy</h4>
+            <h3>Buy</h3>
             <ul>
               <li><Link href="/catalog">Browse catalog</Link></li>
               <li><Link href="/catalog?cat=Transformers">Transformers</Link></li>
@@ -30,7 +30,7 @@ export default function SiteFooter() {
             </ul>
           </div>
           <div>
-            <h4>Sell</h4>
+            <h3>Sell</h3>
             <ul>
               <li><Link href="/suppliers">For distributors</Link></li>
               <li><Link href="/manufacturers">For manufacturers</Link></li>
@@ -38,7 +38,7 @@ export default function SiteFooter() {
             </ul>
           </div>
           <div>
-            <h4>Account</h4>
+            <h3>Account</h3>
             <ul>
               <li><Link href="/login">Sign in</Link></li>
               <li><Link href="/register">Create account</Link></li>

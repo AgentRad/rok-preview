@@ -13,8 +13,8 @@
   --line-strong: #d3d0c6;
   --amber: #e0a32a;
   --amber-soft: #f1e6b8;
-  --amber-deep: #9a6f12;
-  --green: #3f7d4f;
+  --amber-deep: #835d0e;
+  --green: #2f6940;
   --red: #b04a2c;
   --red-soft: #e8c6b1;
   --blue: #2c5cdc;
@@ -48,6 +48,8 @@ body {
 }
 
 img { max-width: 100%; display: block; }
+
+input::placeholder, textarea::placeholder { color: var(--steel-light); opacity: 1; }
 a { color: inherit; }
 
 ::selection { background: var(--ink); color: var(--bg); }
@@ -123,7 +125,7 @@ h4 { font-size: clamp(16px, 1.6vw, 18px); }
 .btn-ghost-dark:hover { color: #fff; border-color: rgba(255, 255, 255, 0.55); }
 .btn-sm { padding: 9px 16px; font-size: 13px; }
 .btn-block { width: 100%; justify-content: center; }
-.btn:disabled { opacity: .5; cursor: not-allowed; pointer-events: none; }
+.btn:disabled { opacity: .65; cursor: not-allowed; pointer-events: none; }
 
 /* ---------- Topbar ---------- */
 .topbar {
@@ -396,7 +398,7 @@ h2.section-head {
 .footer { background: var(--panel-dark); color: rgba(243, 242, 239, .55); padding: 72px 0 32px; }
 .footer-grid { display: grid; grid-template-columns: 1.8fr 1fr 1fr 1fr; gap: 40px; }
 .footer .brand { color: #f3f2ef; }
-.footer h4 {
+.footer h3 {
   color: #f3f2ef; font-family: var(--mono); font-size: 11px; text-transform: uppercase;
   letter-spacing: .14em; margin-bottom: 18px; font-weight: 500;
 }
@@ -1861,7 +1863,7 @@ h2.section-head {
   background: var(--surface); padding: 18px 18px 14px;
   font-size: 13.5px;
 }
-.legal-nav h3 {
+.legal-nav-label {
   font-family: var(--mono);
   font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--steel);
