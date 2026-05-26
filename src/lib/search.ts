@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Product, Supplier } from "@prisma/client";
 import { prisma } from "./db";
@@ -10,7 +11,57 @@ export type SearchResult = {
   interpretation: string;
   products: SearchProduct[];
   ai: boolean;
+  cacheHit: boolean;
 };
+
+/* ---------- AI result cache (PLH-2 Phase 4b B2) ---------- */
+// Module-level LRU cache. Identical normalized queries within TTL skip the
+// Anthropic call entirely. Sized small (500) because the population of
+// repeated free-text searches is dominated by a small head of common terms;
+// 30-minute TTL keeps cache entries from getting stale relative to catalog
+// edits while still saving the vast majority of repeat-cost.
+const AI_CACHE_TTL_MS = 30 * 60_000;
+const AI_CACHE_MAX = 500;
+type AiCacheEntry = { interpretation: string; skus: string[]; expiresAt: number };
+const aiCache = new Map<string, AiCacheEntry>();
+
+function cacheKey(query: string): string {
+  return createHash("sha256").update(query.toLowerCase().trim()).digest("hex");
+}
+
+function cacheGet(key: string): AiCacheEntry | null {
+  const hit = aiCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt < Date.now()) {
+    aiCache.delete(key);
+    return null;
+  }
+  // LRU touch: re-insert to move to end.
+  aiCache.delete(key);
+  aiCache.set(key, hit);
+  return hit;
+}
+
+function cacheSet(key: string, entry: AiCacheEntry): void {
+  if (aiCache.has(key)) aiCache.delete(key);
+  aiCache.set(key, entry);
+  while (aiCache.size > AI_CACHE_MAX) {
+    const oldest = aiCache.keys().next().value;
+    if (oldest === undefined) break;
+    aiCache.delete(oldest);
+  }
+}
+
+// Max characters in a query passed to the AI. Anything longer is truncated
+// (and logged) before reaching the model. Prevents prompt-stuffing abuse
+// and runaway token cost on a single request.
+const MAX_QUERY_CHARS = 200;
+
+// Hard cap on number of catalog rows we send into the prompt. Above this we
+// prefilter with the heuristic ranker and ask the AI to rerank the top N.
+// Keeps prompt + completion cost bounded as the catalog scales past the
+// soft-launch size.
+const MAX_CATALOG_ROWS = 500;
 
 export function isAISearchEnabled(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -198,10 +249,33 @@ Keep "interpretation" to one plain sentence.`;
 async function aiRank(
   query: string,
   products: SearchProduct[]
-): Promise<{ interpretation: string; products: SearchProduct[] } | null> {
+): Promise<{ interpretation: string; products: SearchProduct[]; cacheHit: boolean } | null> {
+  // Cache lookup: identical normalized queries skip the model call entirely.
+  // Cached SKU list is re-resolved against the LIVE catalog so deactivated
+  // products fall out naturally.
+  const key = cacheKey(query);
+  const cached = cacheGet(key);
+  if (cached) {
+    const bySku = new Map(products.map((p) => [p.sku, p]));
+    const ranked = cached.skus
+      .map((s) => bySku.get(s))
+      .filter((p): p is SearchProduct => Boolean(p));
+    return { interpretation: cached.interpretation, products: ranked, cacheHit: true };
+  }
+
+  // Catalog cap: above MAX_CATALOG_ROWS we send only the heuristic ranker's
+  // top candidates to the AI. The AI then reranks; recall floor padding
+  // downstream still pulls from the full catalog so we don't lose breadth.
+  let prompted = products;
+  if (products.length > MAX_CATALOG_ROWS) {
+    const ranked = heuristicRank(query, products);
+    const candidates = ranked.length > 0 ? ranked : products;
+    prompted = candidates.slice(0, MAX_CATALOG_ROWS);
+  }
+
   try {
     const client = new Anthropic({ timeout: 15000, maxRetries: 1 });
-    const catalog = products
+    const catalog = prompted
       .map(
         (p) =>
           `${p.sku} | ${p.name} | ${p.category} | ${p.manufacturer} | $${(
@@ -242,7 +316,13 @@ async function aiRank(
       .map((s) => bySku.get(s))
       .filter((p): p is SearchProduct => Boolean(p));
 
-    return { interpretation: parsed.interpretation, products: ranked };
+    cacheSet(key, {
+      interpretation: parsed.interpretation,
+      skus: parsed.skus,
+      expiresAt: Date.now() + AI_CACHE_TTL_MS,
+    });
+
+    return { interpretation: parsed.interpretation, products: ranked, cacheHit: false };
   } catch {
     return null;
   }
@@ -261,15 +341,33 @@ export async function quickSearch(query: string): Promise<SearchProduct[]> {
 }
 
 /* ---------- entry point ---------- */
-export async function runSearch(query: string): Promise<SearchResult> {
+export type RunSearchOptions = {
+  /** When true, skip the Anthropic call and only run the heuristic path.
+   *  Used by the catalog RSC when an IP has exceeded the AI rate limit. */
+  skipAi?: boolean;
+};
+
+export async function runSearch(
+  query: string,
+  options: RunSearchOptions = {}
+): Promise<SearchResult> {
   const products = await prisma.product.findMany({
     where: { active: true, ...publicProductFilter() },
     include: { supplier: true },
   });
 
-  const q = query.trim();
+  // Cap query length before any downstream use. Long queries are typically
+  // bot abuse or pasted blobs; truncating keeps prompt cost bounded.
+  let q = query.trim();
+  if (q.length > MAX_QUERY_CHARS) {
+    console.warn(
+      "[search] query truncated:",
+      JSON.stringify({ origLen: q.length, cap: MAX_QUERY_CHARS })
+    );
+    q = q.slice(0, MAX_QUERY_CHARS);
+  }
   if (!q) {
-    return { interpretation: "", products, ai: false };
+    return { interpretation: "", products, ai: false, cacheHit: false };
   }
 
   // Log the query as demand signal (surfaced to manufacturers).
@@ -279,7 +377,7 @@ export async function runSearch(query: string): Promise<SearchResult> {
     /* non-fatal */
   }
 
-  if (isAISearchEnabled()) {
+  if (isAISearchEnabled() && !options.skipAi) {
     const ai = await aiRank(q, products);
     if (ai) {
       // Recall floor: if the AI returned fewer than RECALL_FLOOR results, pad
@@ -291,6 +389,7 @@ export async function runSearch(query: string): Promise<SearchResult> {
         interpretation: ai.interpretation,
         products: padded,
         ai: true,
+        cacheHit: ai.cacheHit,
       };
     }
   }
@@ -304,6 +403,7 @@ export async function runSearch(query: string): Promise<SearchResult> {
     interpretation: `Showing parts matched to “${q}”.`,
     products: padded,
     ai: false,
+    cacheHit: false,
   };
 }
 

@@ -25,7 +25,9 @@ export const metadata: Metadata = {
     images: ["/og-default.svg"],
   },
 };
+import { headers } from "next/headers";
 import { runSearch, type SearchProduct } from "@/lib/search";
+import { rateLimit } from "@/lib/rate-limit";
 import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
@@ -133,7 +135,16 @@ export default async function CatalogPage({
   let aiSearch = false;
 
   if (q) {
-    const result = await runSearch(q);
+    // PLH-2 Phase 4b (B1): cap query length and rate-limit the AI path per
+    // client IP. Above the cap we fall back to the heuristic-only ranker so
+    // the page still renders. Anonymous traffic to `/catalog?q=...` used to
+    // trigger an Anthropic Opus call per request with no auth gate.
+    const cappedQ = q.length > 200 ? q.slice(0, 200) : q;
+    const h = await headers();
+    const xff = h.get("x-forwarded-for") || "";
+    const ip = xff.split(",")[0]?.trim() || h.get("x-real-ip")?.trim() || "unknown";
+    const aiLimit = await rateLimit("ai-search", ip);
+    const result = await runSearch(cappedQ, { skipAi: !aiLimit.allowed });
     interpretation = result.interpretation;
     aiSearch = result.ai;
     allProducts = result.products.filter((p) => {

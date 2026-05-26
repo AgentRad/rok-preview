@@ -70,6 +70,12 @@ const BUCKETS: Record<string, Bucket> = {
   // so a stuck client cannot run up a meaningful bill before the supplier
   // notices.
   "catalog-cleanup": { capacity: 10, windowMs: 60 * 60_000 },
+  // PLH-2 Phase 4b (B1): anonymous catalog AI search. Each `/catalog?q=`
+  // request runs an Anthropic Opus call server-side with no auth gate, so
+  // an unauthenticated burst is direct cost runaway. 20/hour/IP is plenty
+  // for a real buyer iterating on queries; abusive clients fall back to
+  // the heuristic path and the page still renders.
+  "ai-search": { capacity: 20, windowMs: 60 * 60_000 },
   generic: { capacity: 60, windowMs: 60_000 },
 };
 
