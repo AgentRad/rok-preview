@@ -12,6 +12,7 @@ const hankenGrotesk = Hanken_Grotesk({
   weight: ["300", "400", "500", "600", "700"],
   style: ["normal", "italic"],
   display: "swap",
+  preload: true,
   variable: "--font-hanken",
 });
 
@@ -19,6 +20,7 @@ const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   display: "swap",
+  preload: false,
   variable: "--font-plex-mono",
 });
 
@@ -56,7 +58,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${hankenGrotesk.variable} ${ibmPlexMono.variable}`}>
+    <html
+      lang="en"
+      className={`${hankenGrotesk.variable} ${ibmPlexMono.variable} ${hankenGrotesk.className}`}
+    >
       <head>
         <meta name="theme-color" content="#f3f2ef" />
         <link

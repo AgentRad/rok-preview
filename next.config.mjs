@@ -7,6 +7,7 @@ const nextConfig = {
     // Allow-list for next/image optimizer. Anything outside this list is
     // rendered via the `unoptimized` prop so we still get sizing + lazy
     // loading without the optimizer needing to fetch arbitrary URLs.
+    formats: ["image/avif", "image/webp"],
     remotePatterns: [
       { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
       { protocol: "https", hostname: "files.stripe.com" },
