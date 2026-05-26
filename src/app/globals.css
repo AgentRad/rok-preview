@@ -25,6 +25,7 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+html, body { overflow-x: hidden; }
 
 body {
   font-family: var(--sans);
@@ -1267,6 +1268,16 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   .trust { grid-template-columns: 1fr; }
   .product-grid { grid-template-columns: 1fr; }
   .kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* Mobile tap targets: every interactive element should clear 44x44 on touch.
+   Scoped to coarse pointers so desktop hover/density isn't affected. */
+@media (pointer: coarse) {
+  .btn, .nav-toggle, .nav-cart, .qa-btn, .ci-remove, .ci-qty-btn,
+  .nav-search button, .nav-user-btn, .nav-links a {
+    min-height: 44px;
+  }
+  .nav-toggle, .nav-search button { min-width: 44px; }
 }
 
 .filter-toggle { display: none; }
