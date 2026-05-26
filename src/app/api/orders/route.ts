@@ -40,26 +40,6 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
-  // Bot-throttle: 10 orders per hour per user (or per IP for guests).
-  // Legitimate buyers never hit this; credential-stuffing bots that get a
-  // session token would.
-  const rlKey = sessionUser ? `user:${sessionUser.id}` : `ip:${clientIp(req)}`;
-  const orderLimit = await rateLimit("order", rlKey);
-  if (!orderLimit.allowed) {
-    return NextResponse.json(
-      {
-        error:
-          "You've hit the order rate limit for now. Try again in an hour, or contact support if you need to place many orders quickly.",
-      },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil(orderLimit.retryAfterMs / 1000)),
-        },
-      }
-    );
-  }
-
   // Signed-in buyers must verify their email before placing orders. Guest
   // checkout (no session) is still allowed; the order email + invoice land
   // at whatever address they typed. The fraud risk for an unverified
@@ -133,6 +113,27 @@ export async function POST(req: Request) {
         idempotent: true,
       });
     }
+  }
+
+  // Bot-throttle: 10 orders per hour per user (or per IP for guests).
+  // Runs AFTER the idempotency lookup so a retrying client whose first
+  // POST succeeded gets the cached order back, not a 429. Only counts
+  // against the limit when we're about to actually create a new order.
+  const rlKey = sessionUser ? `user:${sessionUser.id}` : `ip:${clientIp(req)}`;
+  const orderLimit = await rateLimit("order", rlKey);
+  if (!orderLimit.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "You've hit the order rate limit for now. Try again in an hour, or contact support if you need to place many orders quickly.",
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(orderLimit.retryAfterMs / 1000)),
+        },
+      }
+    );
   }
 
   const products = await prisma.product.findMany({
