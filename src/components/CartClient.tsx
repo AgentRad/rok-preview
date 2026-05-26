@@ -151,7 +151,7 @@ export default function CartClient() {
           </div>
           <div className="summary-line">
             <span>Marketplace fee ({FEE_RATE_LABEL})</span>
-            <span style={{ color: "var(--amber-dark)" }}>{formatCents(fee)}</span>
+            <span style={{ color: "var(--amber-deep)" }}>{formatCents(fee)}</span>
           </div>
           <div className="summary-line">
             <span>Sales tax</span>

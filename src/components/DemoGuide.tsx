@@ -62,7 +62,7 @@ export default function DemoGuide() {
   }
 
   return (
-    <div className="dg-overlay" aria-hidden="true">
+    <div className="dg-overlay">
       <div
         className="demo-guide"
         role="dialog"

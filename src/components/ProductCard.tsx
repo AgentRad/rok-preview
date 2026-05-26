@@ -72,8 +72,8 @@ export default function ProductCard({
                 className="supplier-logo-inline"
                 src={product.supplier.logoUrl}
                 alt=""
-                width={20}
-                height={20}
+                width={18}
+                height={18}
                 unoptimized
               />
             )}

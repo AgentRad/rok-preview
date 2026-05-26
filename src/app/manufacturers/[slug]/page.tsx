@@ -231,7 +231,7 @@ export default async function ManufacturerStorefront({
                       <a
                         href={brandData.website}
                         target="_blank"
-                        rel="noreferrer noopener"
+                        rel="noopener noreferrer"
                       >
                         {brandData.website
                           .replace(/^https?:\/\//, "")
