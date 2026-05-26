@@ -9,6 +9,10 @@ const nextConfig = {
     // still requested with media="print" + onload swap so subsequent
     // paints get the rest.
     optimizeCss: true,
+    // Smarter tree-shake for these packages. @sentry/nextjs is referenced
+    // only by the server route /api/error-log + the code-split global-error
+    // boundary; this flag keeps webpack from pulling unrelated subpaths.
+    optimizePackageImports: ["@sentry/nextjs"],
   },
   // SWC automatically targets the package.json browserslist field
   // (Chrome/Firefox/Edge >= 90, Safari >= 14). Next 15 dropped the
