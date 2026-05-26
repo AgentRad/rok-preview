@@ -52,7 +52,18 @@ export async function ensurePayoutsForOrder(orderId: string): Promise<void> {
     const reservedCents = Math.ceil(
       (supplierSubtotalCents * supplier.reservePercent) / 10000
     );
-    const transferableCents = supplierSubtotalCents - reservedCents;
+    const grossTransferable = supplierSubtotalCents - reservedCents;
+    // P9.5 CRIT 5: net any owedToPlatformCents from prior refund shortfalls
+    // against this payout. The owed balance accumulated when a refund hit
+    // an order whose reserve had already released; we recover it on the
+    // next payout. Capped at the payout amount so we never withhold past
+    // zero, and the recovered amount is recorded so the audit trail shows
+    // the offset.
+    const owedRecovery = Math.min(
+      Math.max(0, supplier.owedToPlatformCents),
+      grossTransferable
+    );
+    const transferableCents = grossTransferable - owedRecovery;
 
     const reference = generateReference("PAY");
 
@@ -68,8 +79,27 @@ export async function ensurePayoutsForOrder(orderId: string): Promise<void> {
             amountCents: transferableCents,
             reservedCents,
             status: hasActiveStripeConnect(supplier) ? "PROCESSING" : "DUE",
+            failureReason:
+              owedRecovery > 0
+                ? `Netted ${owedRecovery} cents against prior refund shortfall`
+                : "",
           },
         });
+        if (owedRecovery > 0) {
+          await tx.supplier.update({
+            where: { id: supplierId },
+            data: { owedToPlatformCents: { decrement: owedRecovery } },
+          });
+          await tx.supplierReserveTransaction.create({
+            data: {
+              supplierId,
+              type: "DRAW_DOWN",
+              amountCents: owedRecovery,
+              orderId,
+              reason: `Netted ${owedRecovery} cents owed-to-platform against payout ${reference}`,
+            },
+          });
+        }
         if (reservedCents > 0) {
           await tx.supplierReserveTransaction.create({
             data: {

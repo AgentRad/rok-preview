@@ -245,6 +245,11 @@ model Supplier {
   // no chargeback or refund has hit the order.
   reservePercent       Int     @default(500)   // basis points (500 = 5%)
   reserveBalanceCents  Int     @default(0)
+  // P9.5: refund shortfall accounting. When a refund clears more than the
+  // available reserveBalanceCents (typical for 60+ day-old orders where
+  // the supplier was already paid out), the difference is added here and
+  // netted against future Payouts via lib/payouts.ts. Always >= 0.
+  owedToPlatformCents  Int     @default(0)
   user              User?              @relation(fields: [userId], references: [id])
   userId            String?            @unique
   products          Product[]
@@ -480,6 +485,12 @@ model Order {
   buyerCompanyName    String?
   buyerCompanyLogoUrl String?
   shipTo              String
+  // P9.5: server-side idempotency. Hash of (Idempotency-Key header or
+  // body.idempotencyKey) + buyer (userId or email). Two identical POSTs
+  // collide on this unique index; the second POST returns the existing
+  // order id instead of creating a duplicate. Pre-P9.5 the route had no
+  // dedupe and the verify chat confirmed duplicates were being created.
+  idempotencyKey      String?         @unique
   subtotalCents       Int
   freightCents        Int             @default(0)
   feeCents            Int
@@ -505,6 +516,13 @@ model Order {
   freightService      String?
   freightBreakdown    Json?
   freightSurcharges   Json?
+  // P9.5: Shippo labels. shippoLabels is an array of { supplierId,
+  // labelUrl, trackingNumber, carrier, service, transactionId } - one
+  // per shipment, mirrors freightBreakdown. P9 S5 only stored a single
+  // carrier+tracking on top-level fields; multi-supplier orders need
+  // per-shipment labels. Existing single-supplier orders keep using the
+  // top-level carrier + trackingCode fields.
+  shippoLabels        Json?
   shipmentStage       String          @default("")
   carrier             String?
   trackingCode        String?

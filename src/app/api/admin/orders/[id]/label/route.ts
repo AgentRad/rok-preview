@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { Shippo } from "shippo";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { captureError } from "@/lib/observability";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -17,32 +19,89 @@ function client(): Shippo | null {
   return _client;
 }
 
-function parseUsAddress(shipTo: string) {
-  // Best-effort parse of the buyer-typed shipTo block: pulls 2-letter
-  // state + 5-digit ZIP off the end, treats the rest as the street.
+/**
+ * Best-effort parse of the buyer-typed shipTo block.
+ *
+ * P9.5 MED 22: when the parser can't extract a real city, we now refuse
+ * to print rather than ship "City" placeholder to Shippo. Forces admin
+ * to fix the address first or fall back to manual carrier entry.
+ */
+function parseUsAddress(shipTo: string):
+  | {
+      ok: true;
+      street1: string;
+      city: string;
+      state: string;
+      zip: string;
+      country: string;
+    }
+  | { ok: false; reason: string } {
   const zipMatch = shipTo.match(/\b(\d{5})(-\d{4})?\b/);
-  const stateMatch = shipTo.match(/\b([A-Z]{2})\b(?=\s*\d{5})/);
+  if (!zipMatch) {
+    return { ok: false, reason: "Could not find a 5-digit ZIP in the delivery address." };
+  }
+  const stateMatch = shipTo.match(/\b([A-Z]{2})\s+\d{5}/);
+  if (!stateMatch) {
+    return {
+      ok: false,
+      reason:
+        "Could not find a 2-letter state code before the ZIP. Edit the buyer's address to 'Street, City, ST 12345' format before printing.",
+    };
+  }
+  // Pull the city from the segment immediately before "STATE ZIP".
+  // Pattern: "...Street, City, ST 12345"  -> city = "City"
+  // If the address has no commas the parser falls back to a directional "Unknown"
+  // city which Shippo will reject; we surface a clearer error there.
+  const cityMatch = shipTo.match(/,\s*([A-Za-z][A-Za-z .\-']{1,40}),?\s+[A-Z]{2}\s+\d{5}/);
+  if (!cityMatch) {
+    return {
+      ok: false,
+      reason:
+        "Could not extract a city. Ensure the address has a comma before the city, like 'Street, City, ST 12345'.",
+    };
+  }
+  // Street1: anything before the first comma is the street.
+  const firstComma = shipTo.indexOf(",");
+  const street1 =
+    firstComma > 0
+      ? shipTo.slice(0, firstComma).trim().slice(0, 80)
+      : shipTo.trim().slice(0, 80);
   return {
-    street1: shipTo.split(/\n|,/)[0]?.trim() || shipTo.slice(0, 80),
-    city: "City",
-    state: stateMatch?.[1] || "CA",
-    zip: zipMatch?.[1] || "00000",
+    ok: true,
+    street1,
+    city: cityMatch[1].trim(),
+    state: stateMatch[1],
+    zip: zipMatch[1],
     country: "US",
   };
 }
 
 /**
- * Label-printing stub. POST creates a Shippo shipment + transaction (buys
- * a test label) for the order's freight and returns the label URL plus
- * the tracking number Shippo issued.
+ * Multi-supplier label printer. Pre-P9.5 this aggregated all items into
+ * one parcel from supplier[0]'s warehouse, which is wrong when a cart
+ * spans multiple suppliers. P9.5 CRIT 4: group items per supplier, buy
+ * one label per shipment, persist all of them on Order.shippoLabels.
  *
- * Auto-populates Order.carrier + Order.trackingCode with the Shippo
- * tracking number when the order doesn't have one yet, so the supplier
- * can hit Mark Shipped without retyping. Test-mode labels are free; live
- * labels cost the Shippo fee.
+ * HIGH 20 idempotency: if Order.shippoLabels is already populated, return
+ * the existing labels instead of re-buying. Admin can force a fresh buy
+ * via body.reprint = true.
+ *
+ * MED 28 audit: every successful label purchase writes a LABEL_PURCHASED
+ * audit row.
  */
+type LabelRecord = {
+  supplierId: string;
+  supplierName: string;
+  labelUrl: string;
+  trackingNumber: string | null;
+  carrier: string | null;
+  service: string | null;
+  costCents: number;
+  transactionId: string;
+};
+
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
@@ -61,6 +120,9 @@ export async function POST(
       { status: 503 }
     );
   }
+
+  const body = await req.json().catch(() => ({}));
+  const reprint = body?.reprint === true;
 
   const order = await prisma.order.findUnique({
     where: { id },
@@ -92,13 +154,70 @@ export async function POST(
     );
   }
 
-  // Aggregate parcel from the order items. Reuses the freight-lib shape.
-  let totalWeight = 0;
-  let maxLength = 0;
-  let maxWidth = 0;
-  let maxHeight = 0;
-  let missingDims = false;
+  // HIGH 20: idempotent reprint. If labels already exist and admin
+  // hasn't asked for a reprint, return the saved set instead of buying
+  // again (live Shippo charges per label).
+  if (
+    !reprint &&
+    order.shippoLabels &&
+    Array.isArray(order.shippoLabels) &&
+    (order.shippoLabels as unknown[]).length > 0
+  ) {
+    return NextResponse.json({
+      ok: true,
+      labels: order.shippoLabels,
+      reprinted: false,
+      cachedFromPriorPrint: true,
+    });
+  }
+
+  // MED 22: refuse with clear copy if shipTo can't be parsed cleanly.
+  const dest = parseUsAddress(order.shipTo);
+  if (!dest.ok) {
+    return NextResponse.json(
+      { error: `Address parse failed: ${dest.reason}` },
+      { status: 400 }
+    );
+  }
+
+  // CRIT 4: group items per supplier, build one shipment per warehouse.
+  type Slot = {
+    supplierId: string;
+    supplierName: string;
+    warehouse:
+      | { label: string; city: string; state: string; zip: string }
+      | null;
+    parcel: {
+      weightLbs: number;
+      lengthIn: number;
+      widthIn: number;
+      heightIn: number;
+    } | null;
+    missingDimSku?: string;
+  };
+  const slotsBySupplier = new Map<string, Slot>();
   for (const item of order.items) {
+    const supId = item.product.supplierId;
+    if (!slotsBySupplier.has(supId)) {
+      const warehouse =
+        item.product.supplier.warehouses.find((w) => w.isDefault) ||
+        item.product.supplier.warehouses[0] ||
+        null;
+      slotsBySupplier.set(supId, {
+        supplierId: supId,
+        supplierName: item.product.supplier.name,
+        warehouse: warehouse
+          ? {
+              label: warehouse.label,
+              city: warehouse.city,
+              state: warehouse.state,
+              zip: warehouse.zip,
+            }
+          : null,
+        parcel: null,
+      });
+    }
+    const slot = slotsBySupplier.get(supId)!;
     const p = item.product;
     if (
       p.weightLbs == null ||
@@ -106,127 +225,194 @@ export async function POST(
       p.widthIn == null ||
       p.heightIn == null
     ) {
-      missingDims = true;
+      slot.missingDimSku = p.sku;
       continue;
     }
-    totalWeight += p.weightLbs * item.qty;
-    maxLength = Math.max(maxLength, p.lengthIn);
-    maxWidth = Math.max(maxWidth, p.widthIn);
-    maxHeight = Math.max(maxHeight, p.heightIn * Math.min(item.qty, 3));
-  }
-  if (missingDims || totalWeight <= 0) {
-    return NextResponse.json(
-      {
-        error:
-          "At least one item is missing weight or dimensions. Add them on the supplier dashboard, then retry.",
-      },
-      { status: 400 }
+    if (!slot.parcel) {
+      slot.parcel = {
+        weightLbs: 0,
+        lengthIn: 0,
+        widthIn: 0,
+        heightIn: 0,
+      };
+    }
+    slot.parcel.weightLbs += p.weightLbs * item.qty;
+    slot.parcel.lengthIn = Math.max(slot.parcel.lengthIn, p.lengthIn);
+    slot.parcel.widthIn = Math.max(slot.parcel.widthIn, p.widthIn);
+    slot.parcel.heightIn = Math.max(
+      slot.parcel.heightIn,
+      p.heightIn * Math.min(item.qty, 3)
     );
   }
-  const firstSupplier = order.items[0]?.product.supplier;
-  const warehouse =
-    firstSupplier?.warehouses.find((w) => w.isDefault) ||
-    firstSupplier?.warehouses[0];
-  if (!warehouse) {
-    return NextResponse.json(
-      {
-        error:
-          "Supplier has no origin warehouse on file. Add one before printing labels.",
-      },
-      { status: 400 }
-    );
-  }
-  const dest = parseUsAddress(order.shipTo);
 
-  try {
-    const shipment = await s.shipments.create({
-      addressFrom: {
-        name: firstSupplier?.name || "PartsPort Supplier",
-        street1: warehouse.label || `${warehouse.city} warehouse`,
-        city: warehouse.city,
-        state: warehouse.state,
-        zip: warehouse.zip,
-        country: "US",
-      },
-      addressTo: {
-        name: order.buyerName,
-        street1: dest.street1,
-        city: dest.city,
-        state: dest.state,
-        zip: dest.zip,
-        country: dest.country,
-        email: order.buyerEmail,
-      },
-      parcels: [
-        {
-          length: String(Math.max(1, maxLength + 4)),
-          width: String(Math.max(1, maxWidth + 4)),
-          height: String(Math.max(1, maxHeight + 2)),
-          distanceUnit: "in",
-          weight: String(Math.max(0.1, totalWeight)),
-          massUnit: "lb",
-        },
-      ],
-      async: false,
-    });
-    if (!shipment.rates || shipment.rates.length === 0) {
+  // Validate every slot has both a warehouse and a parcel.
+  for (const slot of slotsBySupplier.values()) {
+    if (!slot.warehouse) {
       return NextResponse.json(
-        { error: "Shippo returned no rates for this shipment." },
-        { status: 502 }
+        {
+          error: `${slot.supplierName} has no origin warehouse on file. Add one before printing labels.`,
+        },
+        { status: 400 }
       );
     }
-    const cheapest = [...shipment.rates].sort(
-      (a, b) => Number(a.amount) - Number(b.amount)
-    )[0];
-    const transaction = await s.transactions.create({
-      rate: cheapest.objectId || "",
-      labelFileType: "PDF",
-      async: false,
-    });
-    if (transaction.status !== "SUCCESS" || !transaction.labelUrl) {
+    if (slot.missingDimSku) {
       return NextResponse.json(
         {
+          error: `${slot.supplierName}'s SKU ${slot.missingDimSku} is missing weight or dimensions. Add them on the supplier dashboard, then retry.`,
+        },
+        { status: 400 }
+      );
+    }
+    if (!slot.parcel || slot.parcel.weightLbs <= 0) {
+      return NextResponse.json(
+        {
+          error: `${slot.supplierName} has no shippable items in this order.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
+  // Buy one label per supplier shipment. Each can fail independently;
+  // partial successes are persisted so the admin doesn't lose work.
+  const labels: LabelRecord[] = [];
+  const failures: { supplierId: string; supplierName: string; error: string }[] =
+    [];
+  for (const slot of slotsBySupplier.values()) {
+    try {
+      const shipment = await s.shipments.create({
+        addressFrom: {
+          name: slot.supplierName || "PartsPort Supplier",
+          street1: slot.warehouse!.label || `${slot.warehouse!.city} warehouse`,
+          city: slot.warehouse!.city,
+          state: slot.warehouse!.state,
+          zip: slot.warehouse!.zip,
+          country: "US",
+        },
+        addressTo: {
+          name: order.buyerName,
+          street1: dest.street1,
+          city: dest.city,
+          state: dest.state,
+          zip: dest.zip,
+          country: dest.country,
+          email: order.buyerEmail,
+        },
+        parcels: [
+          {
+            length: String(Math.max(1, slot.parcel!.lengthIn + 4)),
+            width: String(Math.max(1, slot.parcel!.widthIn + 4)),
+            height: String(Math.max(1, slot.parcel!.heightIn + 2)),
+            distanceUnit: "in",
+            weight: String(Math.max(0.1, slot.parcel!.weightLbs)),
+            massUnit: "lb",
+          },
+        ],
+        async: false,
+      });
+      if (!shipment.rates || shipment.rates.length === 0) {
+        failures.push({
+          supplierId: slot.supplierId,
+          supplierName: slot.supplierName,
+          error: "Shippo returned no rates for this shipment.",
+        });
+        continue;
+      }
+      const cheapest = [...shipment.rates].sort(
+        (a, b) => Number(a.amount) - Number(b.amount)
+      )[0];
+      const transaction = await s.transactions.create({
+        rate: cheapest.objectId || "",
+        labelFileType: "PDF",
+        async: false,
+      });
+      if (transaction.status !== "SUCCESS" || !transaction.labelUrl) {
+        failures.push({
+          supplierId: slot.supplierId,
+          supplierName: slot.supplierName,
           error: `Shippo transaction failed: ${transaction.messages?.[0]?.text || "no label produced"}`,
-        },
-        { status: 502 }
-      );
-    }
-    // Persist the carrier + tracking back onto the Order if not set, so
-    // the supplier doesn't have to retype it before Mark Shipped.
-    if (!order.carrier && transaction.trackingNumber) {
-      await prisma.order.update({
-        where: { id },
-        data: {
-          carrier: cheapest.provider || "Shippo",
-          trackingCode: transaction.trackingNumber,
-        },
+        });
+        continue;
+      }
+      labels.push({
+        supplierId: slot.supplierId,
+        supplierName: slot.supplierName,
+        labelUrl: transaction.labelUrl,
+        trackingNumber: transaction.trackingNumber || null,
+        carrier: cheapest.provider || null,
+        service:
+          cheapest.servicelevel?.name || cheapest.servicelevel?.token || "Standard",
+        costCents: Math.round(Number(cheapest.amount) * 100),
+        transactionId: transaction.objectId || "",
+      });
+    } catch (err) {
+      captureError(err, {
+        subsystem: "freight",
+        op: "label-print",
+        orderId: id,
+        supplierId: slot.supplierId,
+      });
+      failures.push({
+        supplierId: slot.supplierId,
+        supplierName: slot.supplierName,
+        error: err instanceof Error ? err.message : "Shippo error",
       });
     }
-    return NextResponse.json({
-      ok: true,
-      labelUrl: transaction.labelUrl,
-      trackingNumber: transaction.trackingNumber || null,
-      carrier: cheapest.provider || null,
-      service:
-        cheapest.servicelevel?.name ||
-        cheapest.servicelevel?.token ||
-        "Standard",
-      costCents: Math.round(Number(cheapest.amount) * 100),
-    });
-  } catch (err) {
-    captureError(err, {
-      subsystem: "freight",
-      op: "label-print",
-      orderId: id,
-    });
+  }
+
+  if (labels.length === 0) {
     return NextResponse.json(
       {
-        error:
-          err instanceof Error
-            ? `Shippo error: ${err.message}`
-            : "Shippo error during label creation.",
+        error: "No labels were produced.",
+        failures,
       },
       { status: 502 }
     );
   }
+
+  // Persist labels onto the Order. For single-shipment orders, also
+  // populate the top-level carrier + trackingCode so the existing
+  // /ops Mark Shipped flow continues to work without retyping.
+  //
+  // MED 24: write each field independently so a re-print of a partial
+  // can still fill missing fields.
+  const firstLabel = labels[0];
+  const updateData: Prisma.OrderUpdateInput = {
+    shippoLabels: labels as unknown as Prisma.InputJsonValue,
+  };
+  if (firstLabel.carrier && !order.carrier) {
+    updateData.carrier = firstLabel.carrier;
+  }
+  if (firstLabel.trackingNumber && !order.trackingCode) {
+    updateData.trackingCode = firstLabel.trackingNumber;
+  }
+  await prisma.order.update({
+    where: { id },
+    data: updateData,
+  });
+
+  // MED 28: audit-log every successful label purchase. One row per
+  // shipment so the admin can filter /admin/audit by action.
+  for (const label of labels) {
+    await writeAuditLog({
+      actor: user,
+      action: "LABEL_PURCHASED",
+      targetType: "Order",
+      targetId: id,
+      summary: `Printed ${label.carrier ?? "carrier"} ${label.service ?? ""} label for ${label.supplierName} on order ${order.reference} (${label.costCents} cents)`,
+      metadata: {
+        supplierId: label.supplierId,
+        transactionId: label.transactionId,
+        trackingNumber: label.trackingNumber,
+      },
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    labels,
+    failures: failures.length > 0 ? failures : undefined,
+    reprinted: reprint,
+    cachedFromPriorPrint: false,
+  });
 }

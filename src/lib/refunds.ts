@@ -1,5 +1,6 @@
 import "server-only";
 import Stripe from "stripe";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { writeAuditLog } from "./audit";
 import { captureError } from "./observability";
@@ -104,12 +105,19 @@ export async function refundOrder(args: {
   // PartsPort's DB so the order math stays honest. Owner reconciles
   // manually with the gateway in that case.
 
-  // Reserve draw-down: pull from each supplier's reserveBalanceCents
-  // proportional to their share of this order. This is best-effort:
-  // when the reserve is insufficient, we cap at the available balance
-  // and the remainder is clawed back from the supplier's next payouts
-  // via the payout-retry path. Recording the DRAW_DOWN gives an
-  // auditable trail either way.
+  // P9.5 CRIT 5: refund clawback with shortfall netting.
+  //
+  // For each supplier on the order, compute their pro-rata share of the
+  // refund. Draw what we can from their reserveBalanceCents. Anything
+  // beyond available reserve (typical for 60-day-old orders where the
+  // reserve already released to the supplier) accumulates on
+  // Supplier.owedToPlatformCents and is netted against the supplier's
+  // next Stripe transfer in lib/payouts.ts.
+  //
+  // Pre-P9.5 this comment claimed "remainder is clawed back via
+  // payout-retry" - but payout-retry only retries FAILED transfers,
+  // so the shortfall was silently eaten by the platform. The verify
+  // chat caught this.
   const supplierShares = new Map<string, number>();
   for (const item of order.items) {
     const id = item.product.supplierId;
@@ -135,14 +143,16 @@ export async function refundOrder(args: {
         supplierRefundCents,
         supplier.reserveBalanceCents
       );
+      const shortfallCents = supplierRefundCents - drawCents;
+      const writes: Prisma.PrismaPromise<unknown>[] = [];
       if (drawCents > 0) {
-        await prisma.$transaction([
+        writes.push(
           prisma.supplier.update({
             where: { id: supplierId },
-            data: {
-              reserveBalanceCents: { decrement: drawCents },
-            },
-          }),
+            data: { reserveBalanceCents: { decrement: drawCents } },
+          })
+        );
+        writes.push(
           prisma.supplierReserveTransaction.create({
             data: {
               supplierId,
@@ -151,8 +161,33 @@ export async function refundOrder(args: {
               orderId: order.id,
               reason: `Refund of ${amount} cents on order ${order.reference}`,
             },
-          }),
-        ]);
+          })
+        );
+      }
+      if (shortfallCents > 0) {
+        // Net against future payouts. Records as an OWE transaction so
+        // /admin/audit + the reserve transaction view show the running
+        // balance the supplier owes back to PartsPort.
+        writes.push(
+          prisma.supplier.update({
+            where: { id: supplierId },
+            data: { owedToPlatformCents: { increment: shortfallCents } },
+          })
+        );
+        writes.push(
+          prisma.supplierReserveTransaction.create({
+            data: {
+              supplierId,
+              type: "DRAW_DOWN",
+              amountCents: shortfallCents,
+              orderId: order.id,
+              reason: `Refund shortfall on order ${order.reference}: insufficient reserve, owed against future payouts`,
+            },
+          })
+        );
+      }
+      if (writes.length > 0) {
+        await prisma.$transaction(writes);
       }
     }
   }

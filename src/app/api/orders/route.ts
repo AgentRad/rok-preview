@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server";
+import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
@@ -12,6 +13,7 @@ import {
   type FreightShipment,
   type FreightSurcharges,
 } from "@/lib/freight";
+import { getFreightRates } from "@/lib/freight-server";
 
 export async function POST(req: Request) {
   // Role gate: OEMs and Suppliers cannot place orders. Core platform rule:
@@ -92,6 +94,47 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Your cart is empty." }, { status: 400 });
   }
 
+  // P9.5 CRIT 8: server-side idempotency. Hash a client-supplied key
+  // (Idempotency-Key header or body.idempotencyKey) with the buyer
+  // identifier so two different buyers can use the same key without
+  // colliding. A repeat POST short-circuits to the existing order.
+  const rawIdempotency =
+    req.headers.get("idempotency-key") ||
+    (typeof body.idempotencyKey === "string" ? body.idempotencyKey : "");
+  let idempotencyKey: string | null = null;
+  if (rawIdempotency) {
+    const buyerScope = sessionUser?.id || buyerEmail;
+    idempotencyKey = crypto
+      .createHash("sha256")
+      .update(`${rawIdempotency}|${buyerScope}`)
+      .digest("hex");
+    const existing = await prisma.order.findUnique({
+      where: { idempotencyKey },
+      select: {
+        id: true,
+        reference: true,
+        subtotalCents: true,
+        freightCents: true,
+        feeCents: true,
+        taxCents: true,
+        totalCents: true,
+      },
+    });
+    if (existing) {
+      return NextResponse.json({
+        ok: true,
+        orderId: existing.id,
+        reference: existing.reference,
+        subtotalCents: existing.subtotalCents,
+        freightCents: existing.freightCents,
+        feeCents: existing.feeCents,
+        taxCents: existing.taxCents,
+        totalCents: existing.totalCents,
+        idempotent: true,
+      });
+    }
+  }
+
   const products = await prisma.product.findMany({
     where: { sku: { in: items.map((i) => String(i.sku)) }, active: true },
     include: { supplier: true },
@@ -125,44 +168,142 @@ export async function POST(req: Request) {
     );
   }
 
-  // P9: optional freight selection from the checkout client. When the
-  // buyer picks a real-rate quote we honor it; otherwise computeOrderTotals
-  // falls back to the deterministic flat-rate calculator.
+  // P9.5 CRIT 2: server re-quotes freight via getFreightRates and only
+  // accepts client-supplied freight cents that match a rate Stripe / Shippo
+  // actually returned. Pre-P9.5 the route trusted body.freightBreakdown[].cents
+  // blindly, so a buyer could submit cents:0 and pay no freight.
   //
-  //   freightBreakdown: per-supplier shipment array (multi-supplier orders)
-  //   freightCarrier / freightService: top-level labels for the chosen rate
-  //   freightSurcharges: { liftgate, residential, insideDelivery } booleans
+  // Strategy:
+  //   1. Parse a destination ZIP out of shipTo (best effort regex).
+  //   2. For each supplier slot the client supplied (with rateId), re-quote
+  //      from the supplier's default warehouse to the dest ZIP.
+  //   3. Accept the slot's cents ONLY if the server-returned rate with the
+  //      same rateId has the same cents (or rateId matches at all).
+  //   4. If no rateId matches OR Shippo is unconfigured, fall through to
+  //      computeOrderTotals which runs the deterministic flat-rate path.
+  //
+  // P9.5 CRIT 3: surcharges always added to freight + always persisted
+  // regardless of whether freight quote was selected.
+  const submittedBreakdown: Array<{
+    supplierId: string;
+    supplierName: string;
+    originZip: string;
+    carrier: string;
+    service: string;
+    cents: number;
+    rateId: string | null;
+    etaDays: number | null;
+  }> = Array.isArray(body.freightBreakdown)
+    ? body.freightBreakdown
+        .map((s: Record<string, unknown>) => ({
+          supplierId: String(s.supplierId || ""),
+          supplierName: String(s.supplierName || ""),
+          originZip: String(s.originZip || ""),
+          carrier: String(s.carrier || "Carrier"),
+          service: String(s.service || "Standard"),
+          cents: Math.max(0, Math.floor(Number(s.cents) || 0)),
+          rateId:
+            typeof s.rateId === "string" && s.rateId ? s.rateId : null,
+          etaDays:
+            typeof s.etaDays === "number" && Number.isFinite(s.etaDays)
+              ? s.etaDays
+              : null,
+        }))
+        .filter((s: { supplierId: string }) => !!s.supplierId)
+    : [];
+
   let freightOverrideCents: number | undefined;
   let freightOverrideLabel: string | undefined;
   let freightBreakdown: FreightShipment[] = [];
-  if (Array.isArray(body.freightBreakdown) && body.freightBreakdown.length > 0) {
-    const parsed: FreightShipment[] = body.freightBreakdown
-      .map((s: Record<string, unknown>) => ({
-        supplierId: String(s.supplierId || ""),
-        supplierName: String(s.supplierName || ""),
-        originZip: String(s.originZip || ""),
-        carrier: String(s.carrier || "Carrier"),
-        service: String(s.service || "Standard"),
-        cents: Math.max(0, Math.floor(Number(s.cents) || 0)),
-        etaDays:
-          typeof s.etaDays === "number" && Number.isFinite(s.etaDays)
-            ? s.etaDays
-            : null,
-      }))
-      .filter((s: FreightShipment) => !!s.supplierId);
-    freightBreakdown = parsed;
-    freightOverrideCents = parsed.reduce((sum, s) => sum + s.cents, 0);
-    freightOverrideLabel =
-      parsed.length === 1
-        ? `${parsed[0].carrier} ${parsed[0].service}`
-        : `${parsed.length} shipments`;
+  if (submittedBreakdown.length > 0) {
+    // Extract the destination ZIP for the server re-quote.
+    const zipMatch = shipTo.match(/\b(\d{5})(?:-\d{4})?\b/);
+    const destZip = zipMatch?.[1] || "";
+
+    // Re-quote each supplier-shipment against the live Shippo API. If a
+    // slot's rateId matches a server-returned rate, take the server's
+    // cents (not the client's). If no match, drop that slot back to the
+    // flat-rate path.
+    const verified: FreightShipment[] = [];
+    for (const slot of submittedBreakdown) {
+      // Pull the supplier's items + dims out of the order line set the
+      // server already validated above.
+      const slotItems = orderItems
+        .filter((it) => {
+          const p = bySku.get(it.skuSnapshot);
+          return p && p.supplierId === slot.supplierId;
+        })
+        .map((it) => {
+          const p = bySku.get(it.skuSnapshot)!;
+          return {
+            qty: it.qty,
+            weightLbs: p.weightLbs,
+            lengthIn: p.lengthIn,
+            widthIn: p.widthIn,
+            heightIn: p.heightIn,
+          };
+        });
+
+      let serverCents = -1;
+      let serverCarrier = slot.carrier;
+      let serverService = slot.service;
+      let serverEta = slot.etaDays;
+      if (destZip && slot.originZip && slot.rateId) {
+        try {
+          const rates = await getFreightRates({
+            originZip: slot.originZip,
+            destZip,
+            items: slotItems,
+          });
+          const match = rates.find((r) => r.rateId === slot.rateId);
+          if (match) {
+            serverCents = match.cents;
+            serverCarrier = match.carrier;
+            serverService = match.service;
+            serverEta = match.etaDays;
+          }
+        } catch (err) {
+          captureError(err, {
+            subsystem: "freight",
+            op: "order-requote",
+            supplierId: slot.supplierId,
+          });
+        }
+      }
+      if (serverCents >= 0) {
+        verified.push({
+          supplierId: slot.supplierId,
+          supplierName: slot.supplierName,
+          originZip: slot.originZip,
+          carrier: serverCarrier,
+          service: serverService,
+          cents: serverCents,
+          etaDays: serverEta,
+        });
+      }
+      // Slots that didn't match a server rate are dropped from the
+      // override and the flat-rate fallback supplies their freight.
+    }
+    if (verified.length === submittedBreakdown.length && verified.length > 0) {
+      // Every slot matched a server quote: use the verified totals.
+      freightBreakdown = verified;
+      freightOverrideCents = verified.reduce((sum, s) => sum + s.cents, 0);
+      freightOverrideLabel =
+        verified.length === 1
+          ? `${verified[0].carrier} ${verified[0].service}`
+          : `${verified.length} shipments`;
+    }
+    // Partial matches fall through to the deterministic flat-rate so the
+    // buyer doesn't get a half-trusted total.
   } else if (
     typeof body.freightCents === "number" &&
     Number.isFinite(body.freightCents) &&
     body.freightCents >= 0
   ) {
-    freightOverrideCents = Math.floor(body.freightCents);
-    freightOverrideLabel = String(body.freightLabel || "Selected freight");
+    // No breakdown, but client submitted a flat cents number. We ignore
+    // this entirely now (the only legitimate source of trusted freight
+    // cents is the server re-quote path above). Comment retained for
+    // forward callers; falling through to flat-rate is the safe default.
   }
 
   const surcharges: FreightSurcharges = {
@@ -171,8 +312,19 @@ export async function POST(req: Request) {
     insideDelivery: !!body.freightSurcharges?.insideDelivery,
   };
   const surchargeAdd = surchargeCents(surcharges);
-  if (freightOverrideCents != null) {
-    freightOverrideCents += surchargeAdd;
+  // CRIT 3: surcharges always add to freight cents, regardless of whether
+  // the buyer selected a real-rate quote. Pre-P9.5 they were silently
+  // dropped when no quote was selected.
+  if (surchargeAdd > 0) {
+    if (freightOverrideCents == null) {
+      // No real-rate override: compute the flat-rate fallback first, then
+      // add the surcharges so the total is honest.
+      const fallbackTotals = computeOrderTotals(lines);
+      freightOverrideCents = fallbackTotals.freightCents + surchargeAdd;
+      freightOverrideLabel = `${fallbackTotals.freight.label}, +surcharges`;
+    } else {
+      freightOverrideCents += surchargeAdd;
+    }
   }
 
   const freightCarrier =
@@ -197,6 +349,7 @@ export async function POST(req: Request) {
   const order = await prisma.order.create({
     data: {
       reference: generateReference(),
+      idempotencyKey,
       status: "PENDING",
       buyerId: user?.id ?? null,
       buyerName,
@@ -225,6 +378,10 @@ export async function POST(req: Request) {
           ? (freightBreakdown as unknown as Prisma.InputJsonValue)
           : Prisma.JsonNull,
       freightSurcharges:
+        // CRIT 3: persist the surcharge flag set whenever ANY flag is
+        // true. Pre-P9.5 we only persisted when surchargeAdd > 0 AND a
+        // real-rate quote was selected, dropping the flags entirely on
+        // flat-rate orders even when the buyer ticked Liftgate.
         surchargeAdd > 0
           ? (surcharges as unknown as Prisma.InputJsonValue)
           : Prisma.JsonNull,

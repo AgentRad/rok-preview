@@ -121,42 +121,58 @@ export async function POST(req: Request) {
       }
 
       case "charge.refunded": {
-        // Out-of-band refunds (issued from the Stripe dashboard, not via
-        // our /api/admin/orders/[id]/refund route) land here. Match by
-        // payment_intent and bump Order.refundedCents to keep the totals
-        // honest. Refunds created through our admin route already wrote
-        // a Refund row inline, so we just record any extra delta.
-        if (event.paymentIntentId) {
+        // P9.5 CRIT 6: upsert each refund by stripeRefundId. Pre-P9.5
+        // matched by sum delta, which created phantom rows on
+        // out-of-order webhook replays. Stripe guarantees refund ids are
+        // unique so the Refund table's @unique(stripeRefundId) is the
+        // right de-dup primitive.
+        if (event.paymentIntentId && event.refunds.length > 0) {
           const order = await prisma.order.findFirst({
             where: { stripePaymentIntentId: event.paymentIntentId },
-            include: { refunds: true },
           });
           if (order) {
-            const known = order.refunds.reduce(
-              (sum, r) => sum + r.amountCents,
-              0
-            );
-            const delta = event.amountRefundedCents - known;
-            if (delta > 0) {
-              await prisma.refund.create({
-                data: {
-                  orderId: order.id,
-                  amountCents: delta,
-                  reason: "Out-of-band Stripe refund",
-                  status: "succeeded",
-                },
-              });
-              await prisma.order.update({
-                where: { id: order.id },
-                data: {
-                  refundedCents: event.amountRefundedCents,
-                  status:
-                    event.amountRefundedCents >= order.totalCents
-                      ? "REFUNDED"
-                      : order.status,
-                },
-              });
+            for (const r of event.refunds) {
+              // Try insert; if the stripeRefundId is already there,
+              // P2002 fires and we skip silently (Stripe replay).
+              try {
+                await prisma.refund.create({
+                  data: {
+                    orderId: order.id,
+                    stripeRefundId: r.id,
+                    amountCents: r.amountCents,
+                    reason: r.reason
+                      ? `Out-of-band Stripe refund: ${r.reason}`
+                      : "Out-of-band Stripe refund",
+                    status: "succeeded",
+                  },
+                });
+              } catch (err) {
+                const code = (err as { code?: string }).code;
+                if (code !== "P2002") {
+                  captureError(err, {
+                    subsystem: "payments",
+                    op: "webhook-refund-upsert",
+                    stripeRefundId: r.id,
+                  });
+                }
+              }
             }
+            // After upsert, recompute the order's refundedCents from the
+            // current rows (don't trust event.amountRefundedCents because
+            // a replay could undercount). Mirror to status REFUNDED at full.
+            const refundSum = await prisma.refund.aggregate({
+              where: { orderId: order.id, status: "succeeded" },
+              _sum: { amountCents: true },
+            });
+            const total = refundSum._sum.amountCents || 0;
+            await prisma.order.update({
+              where: { id: order.id },
+              data: {
+                refundedCents: total,
+                status:
+                  total >= order.totalCents ? "REFUNDED" : order.status,
+              },
+            });
           }
         }
         break;

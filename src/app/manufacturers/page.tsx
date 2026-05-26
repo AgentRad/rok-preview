@@ -4,6 +4,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ManufacturerForm from "@/components/ManufacturerForm";
 import { manufacturerSlug } from "@/lib/manufacturer-slug";
+import { publicProductFilter } from "@/lib/supplier-access";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,12 @@ async function getLiveBrands(): Promise<LiveBrand[]> {
     }),
     prisma.product.groupBy({
       by: ["manufacturer"],
-      where: { active: true },
+      // P9.5 CRIT 7: filter through publicProductFilter so the brand
+      // counts on the public /manufacturers index reflect only listings
+      // from publicly visible suppliers. Pre-P9.5 this leaked counts
+      // from hidden suppliers and surfaced brands whose listings come
+      // entirely from invisible distributors.
+      where: { active: true, ...publicProductFilter() },
       _count: { _all: true },
     }),
   ]);

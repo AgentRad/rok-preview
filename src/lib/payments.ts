@@ -97,11 +97,20 @@ export type WebhookEvent =
       // refund. We mostly act inline in the refund route, but ingest the
       // event so the audit trail is complete and out-of-band dashboard
       // refunds still flow through.
+      //
+      // P9.5 CRIT 6: ship the individual refund rows so the handler can
+      // upsert by stripeRefundId. Pre-P9.5 the handler matched by sum
+      // delta and created phantom Refund rows on out-of-order replays.
       type: "charge.refunded";
       paymentIntentId: string | null;
       chargeId: string;
       amountRefundedCents: number;
       reason: string | null;
+      refunds: Array<{
+        id: string;
+        amountCents: number;
+        reason: string | null;
+      }>;
     }
   | { type: "ignored" };
 
@@ -276,13 +285,18 @@ const stripeProvider: PaymentProvider = {
         typeof charge.payment_intent === "string"
           ? charge.payment_intent
           : charge.payment_intent?.id ?? null;
+      const refunds = (charge.refunds?.data || []).map((r) => ({
+        id: r.id,
+        amountCents: r.amount ?? 0,
+        reason: r.reason ?? null,
+      }));
       return {
         type: "charge.refunded",
         paymentIntentId: pi,
         chargeId: charge.id,
         amountRefundedCents: charge.amount_refunded ?? 0,
-        reason:
-          charge.refunds?.data?.[0]?.reason ?? null,
+        reason: refunds[0]?.reason ?? null,
+        refunds,
       };
     }
     return { type: "ignored" };
