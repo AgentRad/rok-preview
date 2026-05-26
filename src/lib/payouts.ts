@@ -96,7 +96,7 @@ export async function ensurePayoutsForOrder(orderId: string): Promise<void> {
               type: "DRAW_DOWN",
               amountCents: owedRecovery,
               orderId,
-              reason: `Netted ${owedRecovery} cents owed-to-platform against payout ${reference}`,
+              reason: `Owed to platform: ${owedRecovery} cents recovered against payout ${reference}`,
             },
           });
         }
@@ -123,6 +123,29 @@ export async function ensurePayoutsForOrder(orderId: string): Promise<void> {
         }
         return created;
       });
+
+      if (owedRecovery > 0) {
+        const updated = await prisma.supplier.findUnique({
+          where: { id: supplierId },
+          select: { owedToPlatformCents: true },
+        });
+        await writeAuditLog({
+          actor: { id: "system", email: "system@partsport" },
+          action: "OWED_RECOVERED",
+          targetType: "Supplier",
+          targetId: supplierId,
+          summary: `Recovered ${owedRecovery} cents owed by ${supplier.name} against payout ${reference}`,
+          metadata: {
+            supplierId,
+            supplierName: supplier.name,
+            orderId,
+            payoutId: payout.id,
+            payoutReference: reference,
+            amountCents: owedRecovery,
+            owedBalanceCents: updated?.owedToPlatformCents ?? 0,
+          },
+        });
+      }
 
       // Fire the actual Stripe Transfer only when the supplier is
       // Connect-active. Manual payouts (legacy bank-info path) stay

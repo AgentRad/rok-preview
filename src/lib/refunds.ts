@@ -204,7 +204,9 @@ export async function refundOrder(args: {
       if (shortfallCents > 0) {
         // Net against future payouts. Records as an OWE transaction so
         // /admin/audit + the reserve transaction view show the running
-        // balance the supplier owes back to PartsPort.
+        // balance the supplier owes back to PartsPort. Pairs with
+        // OWED_RECOVERED written from lib/payouts.ts when the next
+        // payout nets the balance back down.
         writes.push(
           prisma.supplier.update({
             where: { id: supplierId },
@@ -218,13 +220,35 @@ export async function refundOrder(args: {
               type: "DRAW_DOWN",
               amountCents: shortfallCents,
               orderId: order.id,
-              reason: `Refund shortfall on order ${order.reference}: insufficient reserve, owed against future payouts`,
+              reason: `Owed to platform: ${shortfallCents} cents shortfall on refund for order ${order.reference}`,
             },
           })
         );
       }
       if (writes.length > 0) {
         await prisma.$transaction(writes);
+      }
+      if (shortfallCents > 0) {
+        const updated = await prisma.supplier.findUnique({
+          where: { id: supplierId },
+          select: { owedToPlatformCents: true },
+        });
+        await writeAuditLog({
+          actor: { id: args.refundedByUserId, email: args.refundedByEmail },
+          action: "OWED_INCURRED",
+          targetType: "Supplier",
+          targetId: supplierId,
+          summary: `Supplier ${supplier.name} owes ${shortfallCents} more cents to platform (refund shortfall on order ${order.reference})`,
+          metadata: {
+            supplierId,
+            supplierName: supplier.name,
+            orderId: order.id,
+            orderReference: order.reference,
+            amountCents: shortfallCents,
+            owedBalanceCents: updated?.owedToPlatformCents ?? 0,
+            cause: "REFUND_SHORTFALL",
+          },
+        });
       }
     }
   }

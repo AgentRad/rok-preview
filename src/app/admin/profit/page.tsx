@@ -184,6 +184,7 @@ export default async function ProfitDashboard() {
                       <th className="num">Fee revenue</th>
                       <th className="num">Supplier earnings</th>
                       <th className="num">Reserve held</th>
+                      <th className="num">Owed to platform</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -197,6 +198,16 @@ export default async function ProfitDashboard() {
                         </td>
                         <td className="num">
                           {formatCents(s.reserveBalanceCents)}
+                        </td>
+                        <td
+                          className="num"
+                          style={
+                            s.owedToPlatformCents > 0
+                              ? { color: "var(--amber, #b45309)", fontWeight: 600 }
+                              : undefined
+                          }
+                        >
+                          {formatCents(s.owedToPlatformCents)}
                         </td>
                       </tr>
                     ))}

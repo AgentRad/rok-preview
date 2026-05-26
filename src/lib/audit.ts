@@ -33,6 +33,11 @@ export const AUDIT_ACTIONS = [
   "RETURN_RESOLVED",
   "ACCOUNT_IMPERSONATION_STARTED",
   "ACCOUNT_IMPERSONATION_STOPPED",
+  // Refund shortfall could not be drawn from the supplier's reserve, so
+  // it landed on Supplier.owedToPlatformCents. Paired with OWED_RECOVERED
+  // when the next payout nets it back down.
+  "OWED_INCURRED",
+  "OWED_RECOVERED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

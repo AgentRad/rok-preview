@@ -39,6 +39,7 @@ export type SupplierBreakdown = {
   feeRevenueCents: number;
   supplierEarningsCents: number;
   reserveBalanceCents: number;
+  owedToPlatformCents: number;
 };
 
 export type CategoryBreakdown = {
@@ -129,6 +130,7 @@ export async function getProfitDashboard() {
       id: true,
       name: true,
       reserveBalanceCents: true,
+      owedToPlatformCents: true,
       products: {
         select: {
           orderItems: {
@@ -164,9 +166,15 @@ export async function getProfitDashboard() {
         feeRevenueCents,
         supplierEarningsCents: volumeCents - feeRevenueCents,
         reserveBalanceCents: s.reserveBalanceCents,
+        owedToPlatformCents: s.owedToPlatformCents,
       };
     })
-    .filter((row) => row.volumeCents > 0 || row.reserveBalanceCents > 0)
+    .filter(
+      (row) =>
+        row.volumeCents > 0 ||
+        row.reserveBalanceCents > 0 ||
+        row.owedToPlatformCents > 0
+    )
     .sort((a, b) => b.volumeCents - a.volumeCents);
 
   // Per-category MTD breakdown.
