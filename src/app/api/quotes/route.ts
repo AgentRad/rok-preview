@@ -17,12 +17,21 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const product = await prisma.product.findUnique({
-    where: { sku },
+  const product = await prisma.product.findFirst({
+    where: {
+      sku,
+      active: true,
+      // PLH-1 commit 3: don't open an RFQ for a suspended or hidden
+      // supplier. Same gate as the orders route.
+      supplier: { is: { status: "APPROVED", publicVisible: true } },
+    },
     include: { supplier: true },
   });
-  if (!product || !product.active) {
-    return NextResponse.json({ error: "Product not found." }, { status: 404 });
+  if (!product) {
+    return NextResponse.json(
+      { error: "Product is not available.", unavailableSkus: [sku] },
+      { status: 400 }
+    );
   }
   const qty = Math.max(1, Math.floor(Number(b.qty) || 1));
   const user = await getCurrentUser();

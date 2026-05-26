@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { writeAuditLog, type AuditAction } from "@/lib/audit";
+import { computeReadiness } from "@/lib/supplier-access";
 
 export const runtime = "nodejs";
 
@@ -110,6 +111,48 @@ export async function PATCH(
       return NextResponse.json(
         {
           error: `Invalid onTimeRate "${String(body.onTimeRate)}". Must be 0 to 100.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
+  // PLH-1 commit 3: server-side go-live gate. Admin can hide a live
+  // supplier any time, but flipping hidden -> live requires all 10 readiness
+  // items to pass. UI gating is belt-and-braces; this is the real lock.
+  if (
+    data.publicVisible === true &&
+    supplier.publicVisible === false
+  ) {
+    const [docs, productCount] = await Promise.all([
+      prisma.supplierDocument.findMany({
+        where: { supplierId: supplier.id },
+        select: { kind: true, status: true },
+      }),
+      prisma.product.count({ where: { supplierId: supplier.id, active: true } }),
+    ]);
+    const readiness = computeReadiness(
+      {
+        status: data.status ?? supplier.status,
+        logoUrl: supplier.logoUrl,
+        description: data.description ?? supplier.description,
+        certifications: data.certifications ?? supplier.certifications,
+        website: data.website ?? supplier.website,
+        bankInfoStatus: supplier.bankInfoStatus,
+        stripePayoutsEnabled: supplier.stripePayoutsEnabled,
+        stripeAccountId: supplier.stripeAccountId,
+      },
+      docs,
+      productCount
+    );
+    if (!readiness.ready) {
+      const missingItems = readiness.items
+        .filter((i) => !i.done)
+        .map((i) => i.label);
+      return NextResponse.json(
+        {
+          error: `Cannot go live. ${readiness.done}/${readiness.total} onboarding items complete.`,
+          missing: missingItems,
         },
         { status: 400 }
       );

@@ -10,6 +10,7 @@ import TaxExemptReview from "@/components/TaxExemptReview";
 import SupplierDocsReview from "@/components/SupplierDocsReview";
 import { getAdminAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
+import { computeReadiness } from "@/lib/supplier-access";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,10 @@ export default async function AdminConsole() {
         orderBy: { createdAt: "desc" },
       }),
       prisma.supplier.findMany({
-        include: { _count: { select: { products: true } } },
+        include: {
+          _count: { select: { products: true } },
+          documents: { select: { kind: true, status: true } },
+        },
         orderBy: { createdAt: "asc" },
       }),
       prisma.product.count(),
@@ -520,30 +524,51 @@ export default async function AdminConsole() {
                   </tr>
                 </thead>
                 <tbody>
-                  {suppliers.map((s) => (
-                    <SupplierAdminRow
-                      key={s.id}
-                      supplier={{
-                        id: s.id,
-                        name: s.name,
-                        contactEmail: s.contactEmail,
-                        certifications: s.certifications,
-                        logoUrl: s.logoUrl,
-                        website: s.website,
-                        description: s.description,
+                  {suppliers.map((s) => {
+                    const r = computeReadiness(
+                      {
                         status: s.status,
-                        rating: s.rating,
-                        onTimeRate: s.onTimeRate,
-                        productCount: s._count.products,
-                        publicVisible: s.publicVisible,
+                        logoUrl: s.logoUrl,
+                        description: s.description,
+                        certifications: s.certifications,
+                        website: s.website,
                         bankInfoStatus: s.bankInfoStatus,
-                        bankInfoLast4: s.bankInfoLast4,
-                        bankInfoBankName: s.bankInfoBankName,
-                        bankInfoType: s.bankInfoType,
-                        bankInfoNote: s.bankInfoNote,
-                      }}
-                    />
-                  ))}
+                        stripePayoutsEnabled: s.stripePayoutsEnabled,
+                        stripeAccountId: s.stripeAccountId,
+                      },
+                      s.documents,
+                      s._count.products
+                    );
+                    return (
+                      <SupplierAdminRow
+                        key={s.id}
+                        supplier={{
+                          id: s.id,
+                          name: s.name,
+                          contactEmail: s.contactEmail,
+                          certifications: s.certifications,
+                          logoUrl: s.logoUrl,
+                          website: s.website,
+                          description: s.description,
+                          status: s.status,
+                          rating: s.rating,
+                          onTimeRate: s.onTimeRate,
+                          productCount: s._count.products,
+                          publicVisible: s.publicVisible,
+                          bankInfoStatus: s.bankInfoStatus,
+                          bankInfoLast4: s.bankInfoLast4,
+                          bankInfoBankName: s.bankInfoBankName,
+                          bankInfoType: s.bankInfoType,
+                          bankInfoNote: s.bankInfoNote,
+                          readinessDone: r.done,
+                          readinessTotal: r.total,
+                          readinessMissing: r.items
+                            .filter((i) => !i.done)
+                            .map((i) => i.label),
+                        }}
+                      />
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

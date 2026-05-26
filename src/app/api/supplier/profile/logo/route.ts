@@ -3,15 +3,17 @@ import { put } from "@vercel/blob";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveSupplierContext, canManageTeam } from "@/lib/supplier-access";
+import { detectMagic, safeExt } from "@/lib/upload-validation";
 
 export const runtime = "nodejs";
 
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+// PLH-1 commit 3: SVG removed. SVG executes embedded scripts in any
+// browser that renders it inline, so a malicious supplier could ship XSS
+// in their own logo. Raster only.
 const ALLOWED = new Set([
-  "image/svg+xml", // preferred: vector, infinite clarity
-  "image/png", // recommended for raster (supports transparency)
+  "image/png",
   "image/jpeg",
-  "image/jpg",
   "image/webp",
 ]);
 
@@ -20,7 +22,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "File uploads are not configured yet. Add a Vercel Blob store to the project (Storage > Create > Blob) and the BLOB_READ_WRITE_TOKEN will auto-populate. Until then, paste a logo URL in your profile.",
+          "File uploads are not configured yet. Add a Vercel Blob store to the project (Storage > Create > Blob) and the BLOB_READ_WRITE_TOKEN will auto-populate.",
       },
       { status: 503 }
     );
@@ -48,12 +50,6 @@ export async function POST(req: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file attached." }, { status: 400 });
   }
-  if (!ALLOWED.has(file.type)) {
-    return NextResponse.json(
-      { error: "Use SVG (preferred), PNG, JPG, or WEBP." },
-      { status: 400 }
-    );
-  }
   if (file.size > MAX_BYTES) {
     return NextResponse.json(
       { error: `Logo is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 2 MB.` },
@@ -61,18 +57,26 @@ export async function POST(req: Request) {
     );
   }
   if (file.size < 200) {
-    // Tiny files are almost certainly broken / accidental
     return NextResponse.json(
       { error: "Logo file is too small (under 200 bytes). Try again with a real export." },
       { status: 400 }
     );
   }
+  // PLH-1 commit 3: magic-byte sniff. file.type can lie; the actual bytes
+  // are what we trust + persist as the blob contentType.
+  const detected = await detectMagic(file);
+  if (!detected || !ALLOWED.has(detected)) {
+    return NextResponse.json(
+      { error: "Use PNG, JPG, or WEBP." },
+      { status: 400 }
+    );
+  }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+  const ext = safeExt(file.name, "png");
   const blob = await put(
     `suppliers/${ctx.supplier.id}/logo.${ext}`,
     file,
-    { access: "public", addRandomSuffix: true, contentType: file.type }
+    { access: "public", addRandomSuffix: true, contentType: detected }
   );
   await prisma.supplier.update({
     where: { id: ctx.supplier.id },

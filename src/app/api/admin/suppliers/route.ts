@@ -3,10 +3,11 @@ import crypto from "node:crypto";
 import type { SupplierMemberRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
-import { sendSupplierWelcome, sendSupplierInvite } from "@/lib/email";
+import { sendNewSupplierWelcome, sendSupplierInvite } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
 import { captureError } from "@/lib/observability";
 import { writeAuditLog } from "@/lib/audit";
+import { issuePasswordResetUrl } from "@/lib/password-reset";
 
 const VALID_ROLES: SupplierMemberRole[] = [
   "OWNER",
@@ -70,24 +71,26 @@ export async function POST(req: Request) {
     );
   }
 
-  // Reuse an existing user with this email if it already exists; otherwise
-  // create one with a generated temp password.
+  // PLH-1 commit 3: reuse an existing user with this email; otherwise create
+  // one with a random 32-byte secret we bcrypt and immediately discard. The
+  // new owner sets a real password via the reset link in the welcome email.
   const existing = await prisma.user.findUnique({ where: { email: contactEmail } });
-  let tempPassword: string | null = null;
   let user;
+  let isNewAccount = false;
   if (existing) {
     user = await prisma.user.update({
       where: { id: existing.id },
       data: { role: "SUPPLIER" },
     });
   } else {
-    tempPassword = crypto.randomBytes(6).toString("base64url").slice(0, 10);
+    isNewAccount = true;
+    const throwaway = crypto.randomBytes(32).toString("hex");
     user = await prisma.user.create({
       data: {
         email: contactEmail,
         name: contactName,
         role: "SUPPLIER",
-        passwordHash: await hashPassword(tempPassword),
+        passwordHash: await hashPassword(throwaway),
       },
     });
   }
@@ -140,14 +143,18 @@ export async function POST(req: Request) {
     },
   });
 
-  if (sendEmail) {
+  let setPasswordLink: string | null = null;
+  if (sendEmail && isNewAccount) {
+    setPasswordLink = await issuePasswordResetUrl(user.id);
+  }
+  if (sendEmail && isNewAccount && setPasswordLink) {
+    const link = setPasswordLink;
     after(async () => {
       try {
-        await sendSupplierWelcome({
+        await sendNewSupplierWelcome({
           to: user.email,
-          contactName: user.name,
-          companyName: supplier.name,
-          tempPassword,
+          name: user.name,
+          setPasswordLink: link,
         });
       } catch (err) {
         captureError(err, { subsystem: "email", op: "supplier-welcome", supplierId: supplier.id });
@@ -242,7 +249,6 @@ export async function POST(req: Request) {
     ok: true,
     supplierId: supplier.id,
     userId: user.id,
-    tempPassword, // shown to admin once; not stored
     invites: inviteSummary,
   });
 }

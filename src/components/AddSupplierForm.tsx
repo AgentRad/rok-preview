@@ -9,7 +9,6 @@ type Invite = { email: string; role: Role };
 
 type Result = {
   supplierId: string;
-  tempPassword: string | null;
   invites: Array<{ email: string; role: Role; status: string }>;
 };
 
@@ -81,7 +80,6 @@ export default function AddSupplierForm() {
       }
       setDone({
         supplierId: data.supplierId,
-        tempPassword: data.tempPassword,
         invites: data.invites || [],
       });
       setCompanyName("");
@@ -118,19 +116,7 @@ export default function AddSupplierForm() {
           {done ? (
             <div className="alert alert-ok" style={{ marginBottom: 14 }}>
               Supplier created.
-              {sendEmail ? " Login email sent." : " No email sent (per your selection)."}
-              {done.tempPassword && (
-                <>
-                  {" "}Temporary password (shown once):{" "}
-                  <code style={{
-                    fontFamily: "var(--mono)",
-                    background: "var(--bg)",
-                    border: "1px solid var(--line)",
-                    padding: "2px 6px",
-                    borderRadius: 3,
-                  }}>{done.tempPassword}</code>
-                </>
-              )}
+              {sendEmail ? " A welcome email with a password-reset link has been sent." : " No email sent (per your selection)."}
               {done.invites.length > 0 && (
                 <ul style={{ margin: "10px 0 0 18px", fontSize: 13 }}>
                   {done.invites.map((i) => (

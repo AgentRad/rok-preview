@@ -8,6 +8,7 @@ import {
   SUPPLIER_DOC_KINDS,
   type SupplierDocKind,
 } from "@/lib/supplier-access";
+import { detectMagic, safeExt } from "@/lib/upload-validation";
 
 export const runtime = "nodejs";
 
@@ -15,19 +16,12 @@ const MAX_BYTES = 12 * 1024 * 1024; // 12 MB; insurance COIs run large.
 const ALLOWED = new Set([
   "application/pdf",
   "image/jpeg",
-  "image/jpg",
   "image/png",
   "image/webp",
 ]);
 
 function isValidKind(k: string): k is SupplierDocKind {
   return (SUPPLIER_DOC_KINDS as readonly string[]).includes(k);
-}
-
-function safeExt(filename: string, fallback = "pdf"): string {
-  const ext = filename.split(".").pop()?.toLowerCase() || fallback;
-  // Keep it short so a malicious filename can't blow up the blob key.
-  return ext.replace(/[^a-z0-9]/g, "").slice(0, 6) || fallback;
 }
 
 /**
@@ -51,11 +45,11 @@ export async function GET() {
 }
 
 /**
- * Upload a new legal document. Two paths, matching the tax-exempt cert route:
- *   - multipart/form-data with `file` + `kind`: uploaded to Vercel Blob.
- *   - application/json with `{ kind, url, filename? }`: URL-paste fallback for
- *     when Blob isn't configured or the supplier already hosts the file.
- * Either way: new row created in PENDING status. Admin reviews from /admin.
+ * Upload a new legal document. PLH-1 commit 3: file uploads only (the
+ * URL-paste fallback was a privacy risk: there was no proof the supplier
+ * actually controlled the URL, and any URL pasted into the field became a
+ * "verified" document slot). Blob is now uploaded with access:"private";
+ * download routes stream the bytes back behind a role check + audit log.
  */
 export async function POST(req: Request) {
   const user = await getCurrentUser();
@@ -76,51 +70,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const contentType = req.headers.get("content-type") || "";
-
-  // ---- URL-paste fallback (JSON) ----------------------------------------
-  if (contentType.includes("application/json")) {
-    const body = await req.json().catch(() => ({}));
-    const kind = String(body.kind || "").toUpperCase();
-    const url = String(body.url || "").trim();
-    const filename =
-      String(body.filename || "").trim() || url.split("/").pop() || "document";
-    if (!isValidKind(kind)) {
-      return NextResponse.json(
-        { error: "Unknown document kind." },
-        { status: 400 }
-      );
-    }
-    if (!url) {
-      return NextResponse.json(
-        { error: "Provide a document URL." },
-        { status: 400 }
-      );
-    }
-    if (!/^https?:\/\//i.test(url)) {
-      return NextResponse.json(
-        { error: "URL must start with https:// or http://." },
-        { status: 400 }
-      );
-    }
-    const doc = await prisma.supplierDocument.create({
-      data: {
-        supplierId: ctx.supplier.id,
-        kind,
-        filename,
-        url,
-        status: "PENDING",
-      },
-    });
-    return NextResponse.json({ ok: true, document: doc });
-  }
-
-  // ---- File upload via Vercel Blob -------------------------------------
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return NextResponse.json(
       {
         error:
-          "File uploads are not configured. Either ask an admin to add a Vercel Blob store (BLOB_READ_WRITE_TOKEN auto-populates), or paste a hosted document URL instead.",
+          "File uploads are not configured. Ask an admin to add a Vercel Blob store (BLOB_READ_WRITE_TOKEN auto-populates).",
       },
       { status: 503 }
     );
@@ -143,12 +97,6 @@ export async function POST(req: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file attached." }, { status: 400 });
   }
-  if (!ALLOWED.has(file.type)) {
-    return NextResponse.json(
-      { error: "Use PDF, JPG, PNG, or WEBP." },
-      { status: 400 }
-    );
-  }
   if (file.size > MAX_BYTES) {
     return NextResponse.json(
       {
@@ -157,11 +105,21 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  // PLH-1 commit 3: magic-byte sniff. The client-supplied file.type is
+  // ignored; we trust the actual bytes. Rejecting null catches both
+  // "unknown format" and "renamed .exe with image/png label".
+  const detected = await detectMagic(file);
+  if (!detected || !ALLOWED.has(detected)) {
+    return NextResponse.json(
+      { error: "Use PDF, JPG, PNG, or WEBP." },
+      { status: 400 }
+    );
+  }
   const ext = safeExt(file.name);
   const blob = await put(
     `supplier-docs/${ctx.supplier.id}/${kind}.${ext}`,
     file,
-    { access: "public", addRandomSuffix: true, contentType: file.type }
+    { access: "private", addRandomSuffix: true, contentType: detected }
   );
   const doc = await prisma.supplierDocument.create({
     data: {

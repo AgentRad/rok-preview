@@ -136,11 +136,31 @@ export async function POST(req: Request) {
     );
   }
 
+  // PLH-1 commit 3: block orders for suspended or hidden suppliers. A
+  // product row may still be marked active while the parent supplier is
+  // suspended / hidden during onboarding, so we filter at the supplier
+  // join instead of relying on Product.active alone.
+  const requestedSkus = items.map((i) => String(i.sku));
   const products = await prisma.product.findMany({
-    where: { sku: { in: items.map((i) => String(i.sku)) }, active: true },
+    where: {
+      sku: { in: requestedSkus },
+      active: true,
+      supplier: { is: { status: "APPROVED", publicVisible: true } },
+    },
     include: { supplier: true },
   });
   const bySku = new Map(products.map((p) => [p.sku, p]));
+  const unavailableSkus = requestedSkus.filter((s) => !bySku.has(s));
+  if (unavailableSkus.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "One or more items are no longer available. Remove them from your cart and try again.",
+        unavailableSkus,
+      },
+      { status: 400 }
+    );
+  }
 
   const orderItems = [];
   const lines = [];

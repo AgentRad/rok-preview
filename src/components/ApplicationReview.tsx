@@ -32,9 +32,7 @@ function Row({ app }: { app: PendingApplication }) {
     }
     if (action === "approve") {
       setResult(
-        data.tempPassword
-          ? `Approved. Supplier login ${data.loginEmail} / password ${data.tempPassword}`
-          : `Approved. Existing account ${data.loginEmail} upgraded to supplier.`
+        `Approved. ${data.loginEmail} has been emailed a password-reset link to finish setup.`
       );
     } else {
       setResult("Application rejected.");

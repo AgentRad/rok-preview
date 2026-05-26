@@ -428,29 +428,27 @@ export async function sendThreadMessage(args: {
   });
 }
 
-export async function sendSupplierWelcome(args: {
+/**
+ * PLH-1 commit 3: replaces the old tempPassword welcome. We never email a
+ * password (and never write one we could email). Instead, we mint a single
+ * password-reset token and let the new supplier set their own password.
+ */
+export async function sendNewSupplierWelcome(args: {
   to: string;
-  contactName: string;
-  companyName: string;
-  tempPassword: string | null;
+  name: string;
+  setPasswordLink: string;
 }): Promise<void> {
-  const url = siteUrl("/login");
-  const credsBlock = args.tempPassword
-    ? `<p>A temporary sign-in has been created. Please change your password after the first sign-in (use the Forgot password link if needed).</p>
-       <p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:13px;">
-         <strong>Email:</strong> ${esc(args.to)}<br><strong>Temporary password:</strong> ${esc(args.tempPassword)}
-       </p>`
-    : "<p>Use your existing PartsPort account to sign in. Your supplier dashboard is ready.</p>";
   const body = `
-    <p>Hi ${esc(args.contactName)},</p>
-    <p>${esc(args.companyName)} has been set up on PartsPort as a verified supplier. Welcome aboard.</p>
-    ${credsBlock}
-    <p>Once you sign in, you can list parts, manage stock and pricing, respond to RFQs, see incoming orders, and invite your team to specific roles.</p>
-    <p style="margin-top:22px;">${btn(url, "Sign in to PartsPort")}</p>`;
+    <p>Hi ${esc(args.name)},</p>
+    <p>Welcome to PartsPort. Your supplier account has been approved and is ready to go.</p>
+    <p>Click below to set your password. Once you're in, you can list parts, manage stock and pricing, respond to RFQs, see incoming orders, and invite your team.</p>
+    <p style="margin-top:22px;">${btn(args.setPasswordLink, "Set your password")}</p>
+    <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">For your security, this link expires in 60 minutes. If it expires, use the Forgot password link on the sign-in page to request a new one.</p>`;
   await send({
     to: args.to,
-    subject: `${args.companyName} is live on PartsPort`,
-    html: wrap("You're set up on PartsPort", body),
+    subject: "Welcome to PartsPort, set your password",
+    html: wrap("Welcome to PartsPort", body),
+    from: FROM_AUTH,
   });
 }
 

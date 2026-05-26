@@ -101,9 +101,7 @@ export default function SupplierDocsReview({
                   {KIND_LABEL[r.kind] || r.kind}
                 </div>
                 <a
-                  href={r.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`/api/admin/supplier-documents/${r.id}/download`}
                   style={{
                     fontSize: 12,
                     color: "var(--blue)",

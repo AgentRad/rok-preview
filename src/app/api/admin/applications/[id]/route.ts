@@ -1,11 +1,14 @@
 import { NextResponse, after } from "next/server";
+import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
-import { sendApplicationStatus } from "@/lib/email";
+import {
+  sendApplicationStatus,
+  sendNewSupplierWelcome,
+} from "@/lib/email";
 import { writeAuditLog } from "@/lib/audit";
 import { captureError } from "@/lib/observability";
-
-const TEMP_PASSWORD = "demo1234";
+import { issuePasswordResetUrl } from "@/lib/password-reset";
 
 export async function POST(
   req: Request,
@@ -62,6 +65,11 @@ export async function POST(
     const existingUser = await prisma.user.findUnique({
       where: { email: app.email },
     });
+    // PLH-1 commit 3: no shared "demo1234" temp password. New accounts get
+    // a random 32-byte secret which is bcrypt-hashed and then thrown away.
+    // The user sets a real password by clicking through the reset link in
+    // the welcome email below.
+    let isNewAccount = false;
     const account = existingUser
       ? await prisma.user.update({
           where: { id: existingUser.id },
@@ -70,15 +78,20 @@ export async function POST(
             ...(isOem ? { manufacturerName: app.companyName } : {}),
           },
         })
-      : await prisma.user.create({
-          data: {
-            email: app.email,
-            name: app.contactName,
-            role,
-            passwordHash: await hashPassword(TEMP_PASSWORD),
-            ...(isOem ? { manufacturerName: app.companyName } : {}),
-          },
-        });
+      : await (async () => {
+          isNewAccount = true;
+          const throwaway = crypto.randomBytes(32).toString("hex");
+          const passwordHash = await hashPassword(throwaway);
+          return prisma.user.create({
+            data: {
+              email: app.email,
+              name: app.contactName,
+              role,
+              passwordHash,
+              ...(isOem ? { manufacturerName: app.companyName } : {}),
+            },
+          });
+        })();
 
     if (!isOem) {
       const supplier = await prisma.supplier.create({
@@ -112,15 +125,31 @@ export async function POST(
       summary: `Approved application from ${app.companyName} (${app.email}) as ${role}`,
       metadata: { category: app.category, role, userId: account.id },
     });
+
+    // Mint a password-reset link for new accounts. Existing accounts keep
+    // their existing password.
+    let setPasswordLink: string | null = null;
+    if (isNewAccount) {
+      setPasswordLink = await issuePasswordResetUrl(account.id);
+    }
+
     after(async () => {
       try {
-        await sendApplicationStatus({
-          to: app.email,
-          contactName: app.contactName,
-          companyName: app.companyName,
-          approved: true,
-          tempPassword: existingUser ? null : TEMP_PASSWORD,
-        });
+        if (isNewAccount && setPasswordLink) {
+          await sendNewSupplierWelcome({
+            to: app.email,
+            name: app.contactName,
+            setPasswordLink,
+          });
+        } else {
+          await sendApplicationStatus({
+            to: app.email,
+            contactName: app.contactName,
+            companyName: app.companyName,
+            approved: true,
+            tempPassword: null,
+          });
+        }
       } catch (err) {
         captureError(err, { subsystem: "email", op: "application-approved", applicationId: app.id });
       }
@@ -128,7 +157,6 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       loginEmail: app.email,
-      tempPassword: existingUser ? null : TEMP_PASSWORD,
     });
   }
 

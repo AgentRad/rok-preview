@@ -70,7 +70,6 @@ export default function SupplierDocuments({
   const [docs, setDocs] = useState<SupplierDocRow[]>(initialDocuments);
   const [busyKind, setBusyKind] = useState<string | null>(null);
   const [errorByKind, setErrorByKind] = useState<Record<string, string>>({});
-  const [urlByKind, setUrlByKind] = useState<Record<string, string>>({});
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   function setError(kind: string, msg: string) {
@@ -94,33 +93,6 @@ export default function SupplierDocuments({
         return;
       }
       setDocs((prev) => [data.document, ...prev]);
-      router.refresh();
-    } finally {
-      setBusyKind(null);
-    }
-  }
-
-  async function submitUrl(kind: string) {
-    const url = (urlByKind[kind] || "").trim();
-    if (!url) {
-      setError(kind, "Paste a URL or pick a file.");
-      return;
-    }
-    setError(kind, "");
-    setBusyKind(kind);
-    try {
-      const res = await fetch("/api/supplier/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, url }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(kind, data.error || "Could not save URL.");
-        return;
-      }
-      setDocs((prev) => [data.document, ...prev]);
-      setUrlByKind((prev) => ({ ...prev, [kind]: "" }));
       router.refresh();
     } finally {
       setBusyKind(null);
@@ -161,9 +133,8 @@ export default function SupplierDocuments({
           className="alert alert-info"
           style={{ fontSize: 13, marginBottom: 14 }}
         >
-          File uploads aren&rsquo;t enabled on this deployment yet. Paste a
-          hosted URL for each document instead, or ask an admin to enable
-          Vercel Blob.
+          File uploads aren&rsquo;t enabled on this deployment yet. Ask an
+          admin to enable Vercel Blob before uploading documents.
         </div>
       )}
       <div className="doc-slot-grid">
@@ -198,9 +169,7 @@ export default function SupplierDocuments({
                     <li key={d.id} className="doc-row">
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <a
-                          href={d.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          href={`/api/supplier/documents/${d.id}/download`}
                           className="doc-link"
                         >
                           {d.filename || "Document"}
@@ -266,27 +235,6 @@ export default function SupplierDocuments({
                         ? `Upload another ${slot.title.toLowerCase()}`
                         : `Upload ${slot.title.toLowerCase()}`}
                   </button>
-                  <div className="doc-url-row">
-                    <input
-                      type="url"
-                      placeholder="…or paste a hosted URL"
-                      value={urlByKind[slot.kind] || ""}
-                      onChange={(e) =>
-                        setUrlByKind((prev) => ({
-                          ...prev,
-                          [slot.kind]: e.target.value,
-                        }))
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => submitUrl(slot.kind)}
-                      disabled={busy || !(urlByKind[slot.kind] || "").trim()}
-                    >
-                      Save URL
-                    </button>
-                  </div>
                 </div>
               )}
 

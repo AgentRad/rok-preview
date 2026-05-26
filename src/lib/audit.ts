@@ -53,6 +53,8 @@ export const AUDIT_ACTIONS = [
   "USER_DELETED_UNVERIFIED",
   "USER_ANONYMIZED",
   "TWO_FACTOR_DISABLED",
+  // PLH-1 commit 3: who pulled a supplier's legal document and when.
+  "SUPPLIER_DOC_VIEWED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

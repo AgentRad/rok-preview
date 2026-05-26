@@ -21,6 +21,9 @@ export type AdminSupplier = {
   bankInfoBankName: string | null;
   bankInfoType: string | null;
   bankInfoNote: string;
+  readinessDone: number;
+  readinessTotal: number;
+  readinessMissing: string[];
 };
 
 const BANK_BADGE: Record<string, string> = {
@@ -78,7 +81,10 @@ export default function SupplierAdminRow({ supplier }: { supplier: AdminSupplier
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || "Could not save.");
+        const missing = Array.isArray(data.missing) && data.missing.length > 0
+          ? ` Missing: ${data.missing.join(", ")}.`
+          : "";
+        setError((data.error || "Could not save.") + missing);
         return;
       }
       // Bank info has its own dedicated endpoint so the supplier-facing API
@@ -220,14 +226,40 @@ export default function SupplierAdminRow({ supplier }: { supplier: AdminSupplier
             </div>
             <div className="form-row two">
               <div>
-                <label>Publicly visible</label>
+                <label>
+                  Publicly visible{" "}
+                  <span className="muted-text" style={{ fontSize: 11.5 }}>
+                    (readiness {supplier.readinessDone}/{supplier.readinessTotal})
+                  </span>
+                </label>
                 <select
                   value={publicVisible ? "true" : "false"}
                   onChange={(e) => setPublicVisible(e.target.value === "true")}
                 >
                   <option value="false">Hidden (still onboarding)</option>
-                  <option value="true">Live (products in catalog)</option>
+                  <option
+                    value="true"
+                    disabled={
+                      !supplier.publicVisible &&
+                      supplier.readinessDone < supplier.readinessTotal
+                    }
+                  >
+                    Live (products in catalog)
+                    {!supplier.publicVisible &&
+                    supplier.readinessDone < supplier.readinessTotal
+                      ? " · blocked, see missing items below"
+                      : ""}
+                  </option>
                 </select>
+                {!supplier.publicVisible &&
+                  supplier.readinessDone < supplier.readinessTotal && (
+                    <div
+                      className="muted-text"
+                      style={{ fontSize: 11.5, marginTop: 4 }}
+                    >
+                      Missing: {supplier.readinessMissing.join(", ")}.
+                    </div>
+                  )}
               </div>
               <div>
                 <label>Bank info status</label>
