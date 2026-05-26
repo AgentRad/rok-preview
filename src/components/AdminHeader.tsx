@@ -30,6 +30,7 @@ export default async function AdminHeader() {
             <Link href="/admin#quotes">Quotes</Link>
             <Link href="/admin#returns">Returns</Link>
             <Link href="/admin#invoices">Invoices</Link>
+            <Link href="/admin/supplier-health">Supplier health</Link>
             <Link href="/ops">Ops console</Link>
           </div>
           {user && <AdminUserMenu user={{ name: user.name, role: user.role }} />}

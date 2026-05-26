@@ -254,13 +254,22 @@ export default async function AdminConsole() {
             <div className="card-head">
               <h2>Invoices</h2>
               {invoices.length > 0 && (
-                <a
-                  href="/api/admin/invoices.csv"
-                  className="btn btn-ghost btn-sm"
-                  download
-                >
-                  Export for QuickBooks (CSV)
-                </a>
+                <div className="row-gap">
+                  <a
+                    href="/api/admin/invoices-quickbooks.csv"
+                    className="btn btn-ghost btn-sm"
+                    download
+                  >
+                    Export for QuickBooks (CSV)
+                  </a>
+                  <a
+                    href="/api/admin/invoices.csv"
+                    className="btn btn-ghost btn-sm"
+                    download
+                  >
+                    All invoice lines (CSV)
+                  </a>
+                </div>
               )}
             </div>
             {invoices.length === 0 ? (

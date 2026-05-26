@@ -49,8 +49,49 @@ What shipped (in order):
   removed `@sentry/nextjs` from client bundle (-77 KB), split globals.css per route,
   trimmed Hanken to non-italic only, quality-65 transcodes.
 
-**Next up: real-world verification + production cutover.** No more code-side polish
-rounds planned. See ship-ready playbook in the orchestrator chat or `LAUNCH_PLAN.md`.
+**P12 (2026-05-26)**: Pre-launch audit fixes (real bugs, not polish). 5 sequential
+commits landed all CRIT + HIGH + MEDIUM items from the audit round:
+- Commit 1 (C1+C2): RFQ /accept now requires owner session or guest email match
+  (rate-limited 5/hour/IP) and no longer creates an Order with freight=0 / tax=0 /
+  shipTo="To be confirmed". Accept marks the quote ACCEPTED and routes to a new
+  /checkout-from-quote/[id] bridge page that collects ship-to, computes
+  server-trusted Shippo freight, creates a PENDING Order with locked unit price,
+  then hands off to Stripe Checkout where Stripe Tax computes the real tax.
+- Commit 2 (C3): money leak fix in lib/payouts.ts. Old ordering decremented
+  Supplier.owedToPlatformCents BEFORE the Stripe transfer; failure wiped the
+  debt without recovering cash. New 3-stage flow: Stage 1 creates Payout with
+  planned recovery stashed on note, Stage 2 fires transfer, Stage 3a settles
+  with fresh re-read + Math.min on success, Stage 3b leaves owed alone on
+  failure. payout-retry cron uses the same settlePayoutSuccess primitive and
+  re-derives planned recovery against current owed at retry time.
+- Commit 3 (H1..H8): QuoteRequest.quoteExpiresAt (30-day default at price time,
+  410 on accept past expiry), unique filtered index on QuoteRequest.orderId
+  with $transaction-wrapped create-order + update-quote and P2002-idempotent
+  fallback, email-verify gate on /accept for signed-in users, return-PATCH
+  approve now requires amountCents + routes through refundOrder, four return
+  emails (approved/rejected/resolved/notify-supplier), 409 on duplicate OPEN
+  returns, and Postgres CHECK constraints supplier_owed_nonneg +
+  supplier_reserve_nonneg as the belt for the suspenders.
+- Commit 4 (M3..M12, L4): quote lifecycle audit-logged (QUOTE_SUBMITTED,
+  QUOTE_PRICED, QUOTE_DECLINED, QUOTE_ACCEPTED, plus QUOTE_EXPIRED reserved
+  for the lazy-detect path), sendQuoteDeclined email, OPEN-quote dedupe on
+  (productId, buyerEmail), refunds.ts per-supplier clawback loop wrapped in
+  $transaction with fresh re-read, OWED_INCURRED reserve-transaction type for
+  shortfalls (so DRAW_DOWN keeps its narrow meaning), supplier dashboard
+  Reserve & balance card (reserve held + owed + 10 most recent transactions).
+- Commit 5: QuickBooks Online "Import Customers and Invoices" CSV at
+  /api/admin/invoices-quickbooks.csv (PAID invoices only, QBO column ordering),
+  /admin/supplier-health page with per-supplier metrics (stock, avg
+  days-to-ship 30d, order volume 30/90/YTD, refund rate 90d, reserve, owed,
+  last activity) and alerts (refund > 5%, days-to-ship > 7, owed > 0,
+  inactive > 30d). Linked from the admin top nav.
+
+Migration: prisma/migrations/20260601120000_p12_quote_expiry_and_constraints
+adds QuoteRequest.quoteExpiresAt + unique orderId index + the two CHECK
+constraints.
+
+**Next up after P12: real-world verification + production cutover.** No more
+code-side polish rounds planned. See ship-ready playbook in `LAUNCH_PLAN.md`.
 
 Live preview URL (this serves the public-facing site today):
 https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app
