@@ -9,6 +9,10 @@ const nextConfig = {
     // still requested with media="print" + onload swap so subsequent
     // paints get the rest.
     optimizeCss: true,
+    // Honor the package.json browserslist target inside SWC so legacy
+    // polyfills for already-supported features get dropped from the
+    // client bundle. We target Chrome/Firefox/Edge >= 90 and Safari >= 14.
+    browsersListForSwc: true,
   },
   images: {
     // Allow-list for next/image optimizer. Anything outside this list is
