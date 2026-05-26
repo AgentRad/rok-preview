@@ -307,11 +307,11 @@ export default async function AdminConsole() {
             )}
           </div>
 
-          {returns.length > 0 && (
-            <div className="card" id="returns">
-              <div className="card-head">
-                <h2>Return requests</h2>
-              </div>
+          <div className="card" id="returns">
+            <div className="card-head">
+              <h2>Return requests</h2>
+            </div>
+            {returns.length > 0 ? (
               <div className="table-wrap">
                 <table className="table">
                   <thead>
@@ -357,8 +357,13 @@ export default async function AdminConsole() {
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="muted-text" style={{ fontSize: 13.5 }}>
+                No return requests right now. RMAs from buyers land here for
+                approve or reject decisions.
+              </p>
+            )}
+          </div>
 
           <div className="card">
             <div className="card-head">

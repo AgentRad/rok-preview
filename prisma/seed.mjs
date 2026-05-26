@@ -56,7 +56,7 @@ const PRODUCTS = [
   { sku: "TXF-PM25", name: "25 kVA Pad-Mount Distribution Transformer", category: "Transformers", manufacturer: "Eaton", icon: "transformer", price: 5300.0, unit: "each", etaDays: 24, stock: 4, supplier: "Substation Components Co.", specs: { Rating: "25 kVA", Primary: "12.47 kV", Secondary: "120/240 V", Type: "Pad-mount", Cooling: "ONAN" }, description: "Single-phase pad-mounted distribution transformer for residential service. Tamper-resistant, dead-front design suited to underground laterals." },
   { sku: "TXF-PM167", name: "167 kVA Pad-Mount Distribution Transformer", category: "Transformers", manufacturer: "Howard Industries", icon: "transformer", price: 14200.0, unit: "each", etaDays: 34, stock: 2, supplier: "Substation Components Co.", specs: { Rating: "167 kVA", Primary: "12.47 kV", Secondary: "208Y/120 V", Type: "Three-phase pad-mount" }, description: "Three-phase pad-mounted transformer for light-commercial and multi-tenant service drops. Optional radial or loop-feed bushing layout." },
   { sku: "TXF-OL50", name: "50 kVA Single-Phase Pole-Top Transformer", category: "Transformers", manufacturer: "ABB", icon: "transformer", price: 6900.0, unit: "each", etaDays: 18, stock: 7, supplier: "Substation Components Co.", specs: { Rating: "50 kVA", Primary: "14.4 kV", Secondary: "120/240 V", Type: "Overhead pole-top", Cooling: "ONAN" }, description: "Conventional overhead distribution transformer for rural feeders. CSP fusing and built-in lightning arrester optional." },
-  { sku: "TXF-DRY15", name: "15 kVA Dry-Type Indoor Transformer", category: "Transformers", manufacturer: "Square D", icon: "transformer", price: 1850.0, unit: "each", etaDays: 9, stock: 18, supplier: "Meridian Electric Distribution", specs: { Rating: "15 kVA", Primary: "480 V", Secondary: "208Y/120 V", Type: "Dry-type, NEMA 3R", Insulation: "Class H 180 °C" }, description: "Dry-type general-purpose transformer for commercial step-down service. Quiet, low-loss core suitable for office and retail environments." },
+  { sku: "TXF-DRY15", name: "15 kVA Dry-Type Indoor Transformer", category: "Transformers", manufacturer: "Square D", icon: "transformer", price: 1850.0, unit: "each", etaDays: 9, stock: 0, supplier: "Meridian Electric Distribution", specs: { Rating: "15 kVA", Primary: "480 V", Secondary: "208Y/120 V", Type: "Dry-type, NEMA 3R", Insulation: "Class H 180 °C" }, description: "Dry-type general-purpose transformer for commercial step-down service. Quiet, low-loss core suitable for office and retail environments." },
   { sku: "TXF-AUTO500", name: "500 kVA 480/240 V Autotransformer", category: "Transformers", manufacturer: "ACME Electric", icon: "transformer", price: 11200.0, unit: "each", etaDays: 22, stock: 3, supplier: "Substation Components Co.", specs: { Rating: "500 kVA", Voltage: "480-240 V auto", Type: "Dry, ventilated", Use: "Step-down service" }, description: "Buck-boost autotransformer for industrial 480-to-240 V step-down conversion. Optional copper or aluminum winding." },
 
   // Switchgear & Breakers
@@ -238,6 +238,16 @@ async function main() {
     if (Object.keys(update).length > 0) {
       await prisma.product.update({ where: { sku }, data: update });
     }
+  }
+
+  // P11.8 commit 4 (M): force one SKU to zero stock so the out-of-stock
+  // buy buttons (Add to cart and Buy now disabled, Backorder badge on the
+  // catalog card) can be regression-tested without waiting for a real
+  // supplier to draw inventory down to zero. Touches only this one SKU.
+  const OOS_SKU = "TXF-DRY15";
+  const oosTarget = await prisma.product.findUnique({ where: { sku: OOS_SKU } });
+  if (oosTarget && oosTarget.stock !== 0) {
+    await prisma.product.update({ where: { sku: OOS_SKU }, data: { stock: 0 } });
   }
 
   // Seed real product photos from seed-images.json. Idempotent top-up:

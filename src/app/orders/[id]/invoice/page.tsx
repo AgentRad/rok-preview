@@ -46,9 +46,15 @@ export default async function OrderInvoicePage({
         <SiteHeader />
         <main id="main" className="app-page">
           <div className="page-pad narrow">
-            <h1 className="sr-only">Invoice for order {order.reference}</h1>
+            <h1 style={{ marginBottom: 16 }}>
+              {order.status === "PENDING" ? "Invoice pending" : "No invoice"}
+            </h1>
             <div className="alert alert-info">
-              <strong>No invoice issued yet.</strong>
+              <strong>
+                {order.status === "PENDING"
+                  ? "No invoice issued yet."
+                  : "No invoice for this order."}
+              </strong>
               <br />
               Order {order.reference} is{" "}
               {order.status === "PENDING" ? "awaiting payment" : "cancelled"}.{" "}
