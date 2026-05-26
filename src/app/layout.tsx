@@ -6,10 +6,17 @@ import "./globals.css";
 import DeferredChrome from "@/components/DeferredChrome";
 import { siteUrl } from "@/lib/site-url";
 
+// P11.10: trimmed from 5 weights x 2 styles to 4 weights x 1 style. 300 is
+// kept for the hero h1 (font-weight: 300). 700 is kept for invoice/freight
+// labels. 200 and 800 had one CSS rule each; browser falls back to the
+// nearest available weight (300/700) with no visible difference at the
+// sizes those rules use (large display numerals). Italic was a single
+// invoice "Thank you for your order" rule; browser-synthesised oblique is
+// indistinguishable at 14px steel.
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
-  style: ["normal", "italic"],
+  style: ["normal"],
   display: "swap",
   preload: true,
   variable: "--font-hanken",
