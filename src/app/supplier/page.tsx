@@ -33,6 +33,7 @@ import ActingAsBanner from "@/components/ActingAsBanner";
 import AttentionFeed from "@/components/AttentionFeed";
 import { getSupplierAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
+import SupplierAIAssistant from "@/components/SupplierAIAssistant";
 
 export const dynamic = "force-dynamic";
 
@@ -206,6 +207,8 @@ export default async function SupplierDashboard({
               <div className="k-foot">your share, fees excluded</div>
             </div>
           </div>
+
+          <SupplierAIAssistant enabled={Boolean(process.env.ANTHROPIC_API_KEY)} />
 
           <AttentionFeed
             items={attention}

@@ -58,6 +58,8 @@ export const AUDIT_ACTIONS = [
   // PLH-1 commit 4: Stripe Connect went from active to disabled; admin
   // is alerted via attention feed + supplier may be auto-hidden.
   "SUPPLIER_CONNECT_DISABLED",
+  // PLH-2 Phase 2: supplier asked the AI assistant a question.
+  "SUPPLIER_AI_ASKED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

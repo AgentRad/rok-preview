@@ -60,6 +60,11 @@ const BUCKETS: Record<string, Bucket> = {
   // a runaway client retrying every second hits this before it hits the
   // Stripe limit and gets a clean 429.
   "stripe-connect": { capacity: 5, windowMs: 60 * 60_000 },
+  // PLH-2 Phase 2: supplier-facing AI assistant. Each question hits the
+  // Anthropic API at real-money cost, so we cap per-supplier traffic at
+  // 30/hour. A normal supplier asking 5 to 10 things in a session never
+  // touches this; a runaway client loop gets clean 429s.
+  "ai-assistant": { capacity: 30, windowMs: 60 * 60_000 },
   generic: { capacity: 60, windowMs: 60_000 },
 };
 
