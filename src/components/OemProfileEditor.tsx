@@ -129,7 +129,7 @@ export default function OemProfileEditor({
           <input
             ref={fileInput}
             type="file"
-            accept="image/svg+xml,image/png,image/jpeg,image/webp"
+            accept="image/png,image/jpeg,image/webp"
             style={{ display: "none" }}
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -159,7 +159,7 @@ export default function OemProfileEditor({
             )}
           </div>
           <div className="muted-text" style={{ fontSize: 11.5, marginTop: 8 }}>
-            SVG (best) or PNG, square, under 2 MB.
+            PNG, JPG, or WEBP, square, under 2 MB.
             {!blobConfigured && (
               <>
                 <br />

@@ -2,15 +2,18 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
+import { detectMagic, safeExt } from "@/lib/upload-validation";
 
 export const runtime = "nodejs";
 
 const MAX_BYTES = 2 * 1024 * 1024;
+// PLH-2 Phase 4c (C2): SVG removed. SVG can execute embedded scripts when
+// rendered inline on the public storefront, so a malicious OEM could ship
+// XSS in their own logo. Raster only. Mirrors the PLH-1 supplier-logo call.
 const ALLOWED = new Set([
-  "image/svg+xml",
   "image/png",
   "image/jpeg",
-  "image/jpg",
   "image/webp",
 ]);
 
@@ -28,6 +31,14 @@ export async function POST(req: Request) {
   if (!user || user.role !== "MANUFACTURER") {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
+  // PLH-2 Phase 4c (C3): rate-limit OEM logo uploads.
+  const rl = await rateLimit("generic", `oem:${user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
+  }
   const form = await req.formData().catch(() => null);
   if (!form) {
     return NextResponse.json({ error: "Invalid upload payload." }, { status: 400 });
@@ -35,12 +46,6 @@ export async function POST(req: Request) {
   const file = form.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file attached." }, { status: 400 });
-  }
-  if (!ALLOWED.has(file.type)) {
-    return NextResponse.json(
-      { error: "Use SVG (best), PNG, JPG, or WEBP." },
-      { status: 400 }
-    );
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json(
@@ -57,11 +62,20 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+  // PLH-2 Phase 4c (C1): magic-byte sniff. file.type can lie; the actual
+  // bytes are what we trust + persist as the blob contentType.
+  const detected = await detectMagic(file);
+  if (!detected || !ALLOWED.has(detected)) {
+    return NextResponse.json(
+      { error: "Use PNG, JPG, or WEBP." },
+      { status: 400 }
+    );
+  }
+  const ext = safeExt(file.name, "png");
   const blob = await put(
     `oems/${user.id}/logo.${ext}`,
     file,
-    { access: "public", addRandomSuffix: true, contentType: file.type }
+    { access: "public", addRandomSuffix: true, contentType: detected }
   );
   await prisma.user.update({
     where: { id: user.id },

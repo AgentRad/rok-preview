@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,14 @@ export async function PATCH(req: Request) {
   const user = await getCurrentUser();
   if (!user || user.role !== "MANUFACTURER") {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+  }
+  // PLH-2 Phase 4c (C3): rate-limit OEM profile edits.
+  const rl = await rateLimit("generic", `oem:${user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
   }
   const body = await req.json().catch(() => ({}));
   const data: {
@@ -27,14 +36,39 @@ export async function PATCH(req: Request) {
     data.manufacturerBio = body.bio.slice(0, 1200).trim();
   }
   if (typeof body.website === "string") {
-    const w = body.website.trim();
-    if (w && !/^https?:\/\//i.test(w)) {
-      return NextResponse.json(
-        { error: "Website URL must start with https:// or http://." },
-        { status: 400 }
-      );
+    // PLH-2 Phase 4c (C4): hard validation of the website URL. Reject
+    // anything that isn't http(s), parse-fail, or longer than 200 chars.
+    // Blocks javascript:, data:, file:, and other smuggle vectors that
+    // would otherwise render as a clickable link on the public storefront.
+    const raw = body.website.trim();
+    if (raw === "") {
+      data.manufacturerWebsite = "";
+    } else {
+      if (raw.length > 200) {
+        return NextResponse.json(
+          { error: "Website URL is too long (max 200 characters)." },
+          { status: 400 }
+        );
+      }
+      let parsed: URL;
+      try {
+        parsed = new URL(raw);
+      } catch {
+        return NextResponse.json(
+          { error: "Website URL is malformed. Include https:// at the start." },
+          { status: 400 }
+        );
+      }
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return NextResponse.json(
+          { error: "Website URL must use http:// or https://." },
+          { status: 400 }
+        );
+      }
+      // Normalize host to lowercase. Keep path/query case as the OEM typed it.
+      parsed.hostname = parsed.hostname.toLowerCase();
+      data.manufacturerWebsite = parsed.toString();
     }
-    data.manufacturerWebsite = w;
   }
   if (typeof body.logoUrl === "string") {
     data.manufacturerLogoUrl = body.logoUrl.trim() || null;

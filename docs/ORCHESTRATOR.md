@@ -195,6 +195,15 @@ These are MEDIUM/LOW catalog-import findings explicitly skipped at PLH-2 Phase 4
 - **quoteOnly heuristic.** `price >= 3000` default is reasonable but invisible to the user. Surface in the preview table so they can confirm before commit.
 - **Description fallback.** `${r.name} supplied by ${supplier.name}.` writes the supplier name as authored text, not data. Move to a runtime template or store empty + render the fallback at read time so a supplier rename does not require a backfill.
 
+## Post-launch backlog (deferred from PLH-2 Phase 4c OEM-storefront audit)
+
+These are MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4c. The Phase 4c commit closed the four CRITICAL/HIGH items (C1 magic-byte sniff + safeExt on OEM logo upload, C2 SVG removed from OEM logo allow-list to kill the public-storefront XSS vector, C3 rate limits on `/api/oem/profile` PATCH and `/api/oem/profile/logo` POST keyed on `oem:${user.id}`, C4 strict URL parse + http(s) protocol check + 200-char cap on `manufacturerWebsite`). The list below is queued for a post-launch polish round, not for soft launch.
+
+- **OEM approval gate.** Anyone signing up as MANUFACTURER can immediately edit a public storefront. Add an admin-approval step (similar to SupplierApplication) so brand pages are not stood up by impostors.
+- **Brand uniqueness DB constraint.** `User.manufacturerName` has no unique index. Two OEM accounts can claim the same brand name and race for the slug. Add a partial unique index `(manufacturerName) WHERE role = 'MANUFACTURER'`.
+- **Slice / trim edge cases.** `tagline.slice(0, 140).trim()` can produce a string shorter than 140 chars and then a different-length string after trim; user-visible character count drifts. Trim first, then slice.
+- **Blob path leaks user id.** `oems/${user.id}/logo.${ext}` exposes the OEM's User id in the public blob URL. Use a hash or per-OEM random suffix instead.
+
 ## Project context
 
 PartsPort is a B2B industrial parts marketplace on `claude/industrial-marketplace-ROwAU`. Three user types beyond admin: buyers (free), suppliers/distributors (6% fee), OEMs/manufacturers (free, no direct sales). RFQ flow for big-ticket items. Stripe Checkout + Stripe Tax. Resend for email.
