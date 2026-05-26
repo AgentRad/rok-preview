@@ -332,7 +332,12 @@ export default async function ProductPage({
                     />
                   </div>
                 ) : (
-                  <AddToCart sku={product.sku} inStock={inStock} />
+                  <AddToCart
+                    sku={product.sku}
+                    inStock={inStock}
+                    supplierId={product.supplierId}
+                    supplierName={product.supplier.name}
+                  />
                 )}
 
                 <div className="fee-note">

@@ -3,27 +3,52 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { addToCart } from "@/lib/cart";
+import { addToCart, clearCart, DifferentSupplierError } from "@/lib/cart";
 
 export default function AddToCart({
   sku,
   inStock,
+  supplierId,
+  supplierName,
 }: {
   sku: string;
   inStock: boolean;
+  supplierId: string;
+  supplierName: string;
 }) {
   const router = useRouter();
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
+  const [conflict, setConflict] = useState<{
+    existingSupplierName: string;
+    pendingAction: "add" | "buy";
+  } | null>(null);
 
-  function add() {
-    addToCart(sku, qty);
-    setAdded(true);
+  function tryAdd(action: "add" | "buy") {
+    try {
+      addToCart(sku, qty, { id: supplierId, name: supplierName });
+      if (action === "buy") router.push("/checkout");
+      else setAdded(true);
+    } catch (err) {
+      if (err instanceof DifferentSupplierError) {
+        setConflict({
+          existingSupplierName: err.existingSupplierName,
+          pendingAction: action,
+        });
+        return;
+      }
+      throw err;
+    }
   }
 
-  function buyNow() {
-    addToCart(sku, qty);
-    router.push("/checkout");
+  function confirmReplaceCart() {
+    if (!conflict) return;
+    const action = conflict.pendingAction;
+    clearCart();
+    addToCart(sku, qty, { id: supplierId, name: supplierName });
+    setConflict(null);
+    if (action === "buy") router.push("/checkout");
+    else setAdded(true);
   }
 
   return (
@@ -58,7 +83,7 @@ export default function AddToCart({
       </div>
       <button
         className="btn btn-primary btn-block"
-        onClick={add}
+        onClick={() => tryAdd("add")}
         disabled={!inStock}
       >
         {inStock ? "Add to cart" : "Out of stock"}
@@ -66,7 +91,7 @@ export default function AddToCart({
       <button
         className="btn btn-ghost btn-block"
         style={{ marginTop: 9 }}
-        onClick={buyNow}
+        onClick={() => tryAdd("buy")}
         disabled={!inStock}
       >
         {inStock ? "Buy now" : "Backorder unavailable"}
@@ -77,6 +102,66 @@ export default function AddToCart({
           <Link href="/cart" style={{ fontWeight: 700, color: "inherit" }}>
             View cart →
           </Link>
+        </div>
+      )}
+      {conflict && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="diff-supplier-title"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 16,
+          }}
+          onClick={() => setConflict(null)}
+        >
+          <div
+            className="card"
+            style={{ maxWidth: 460, width: "100%" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="card-body">
+              <h2
+                id="diff-supplier-title"
+                style={{ fontSize: 17, fontWeight: 700, marginBottom: 10 }}
+              >
+                Start a new cart?
+              </h2>
+              <p style={{ fontSize: 14, lineHeight: 1.5 }}>
+                Your cart contains items from {conflict.existingSupplierName}.
+                PartsPort routes shipments and payments per supplier, so each
+                order can only contain items from one supplier. Start a new
+                cart?
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  marginTop: 16,
+                  justifyContent: "flex-end",
+                }}
+              >
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setConflict(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={confirmReplaceCart}
+                >
+                  Start a new cart
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

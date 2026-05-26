@@ -306,6 +306,7 @@ export default async function ManufacturerStorefront({
                       stock: p.stock,
                       quoteOnly: p.quoteOnly,
                       _count: { images: p._count.images },
+                      supplierId: p.supplierId,
                       supplier: {
                         name: p.supplier.name,
                         rating: p.supplier.rating,

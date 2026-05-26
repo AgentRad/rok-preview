@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { addToCart } from "@/lib/cart";
+import { addToCart, clearCart, DifferentSupplierError } from "@/lib/cart";
 
 export default function ReorderButton({ orderId }: { orderId: string }) {
   const router = useRouter();
@@ -21,8 +21,48 @@ export default function ReorderButton({ orderId }: { orderId: string }) {
         setError(data.error || "Could not reorder.");
         return;
       }
-      const items = (data.items || []) as { sku: string; qty: number }[];
-      for (const i of items) addToCart(i.sku, i.qty);
+      const items = (data.items || []) as {
+        sku: string;
+        qty: number;
+        supplierId: string;
+        supplierName: string;
+      }[];
+
+      // PLH-1 commit 5: orders are single-supplier so a reorder set is also
+      // single-supplier. If the existing cart contains a different supplier,
+      // prompt to replace before adding.
+      const newSupplierId = items[0]?.supplierId;
+      const newSupplierName = items[0]?.supplierName;
+      if (newSupplierId) {
+        try {
+          for (const i of items) {
+            addToCart(i.sku, i.qty, {
+              id: i.supplierId,
+              name: i.supplierName,
+            });
+          }
+        } catch (err) {
+          if (err instanceof DifferentSupplierError) {
+            const ok = window.confirm(
+              `Your cart contains items from ${err.existingSupplierName}. PartsPort routes shipments and payments per supplier, so each order can only contain items from one supplier. Start a new cart with items from ${newSupplierName}?`
+            );
+            if (!ok) {
+              return;
+            }
+            clearCart();
+            for (const i of items) {
+              addToCart(i.sku, i.qty, {
+                id: i.supplierId,
+                name: i.supplierName,
+              });
+            }
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        for (const i of items) addToCart(i.sku, i.qty);
+      }
 
       const skipped = (data.skipped || []) as Array<{
         sku: string;

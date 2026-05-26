@@ -90,8 +90,60 @@ Migration: prisma/migrations/20260601120000_p12_quote_expiry_and_constraints
 adds QuoteRequest.quoteExpiresAt + unique orderId index + the two CHECK
 constraints.
 
-**Next up after P12: real-world verification + production cutover.** No more
-code-side polish rounds planned. See ship-ready playbook in `LAUNCH_PLAN.md`.
+**PLH-1 (2026-05-26)**: Pre-launch hardening audit. 5 sequential commits
+closed the remaining 16 CRITICAL plus relevant HIGH bugs across Auth/Account,
+Supplier Onboarding, and Multi-Supplier Orders.
+- Commit 1: server-side session invalidation (User.sessionsValidFrom + svf
+  JWT claim, bumped on password reset/change, 2FA disable, email change
+  confirm, account self-delete). Password floor 8 cap 128. SESSION_SECRET
+  refuses < 32 chars in production. Email verify token hashed at rest.
+- Commit 2: auth UX + enumeration suppression (HTML-escape email bodies,
+  normalize name/email, suppress register and login enumeration, register
+  no longer auto-signs-in, session-fixation interstitial on three GET
+  state-mutators, account delete blocked on open orders, anonymize cron,
+  unverified cleanup cron, broad rate-limit coverage).
+- Commit 3: supplier onboarding security. Approval flow no longer mints
+  "demo1234" temp passwords; new suppliers get a reset-token link via the
+  same path as forgot-password. Server-side go-live gate. SupplierDocument
+  blobs uploaded private with download routes behind canManageDocuments
+  and an audit row per fetch. Magic-byte MIME detection on document and
+  logo uploads. URL-paste branch removed. Suspended suppliers can no
+  longer accept new orders or RFQs. SVG removed from logo allow-list.
+- Commit 4: supplier onboarding UX + rate limits. /api/applications POST
+  rate-limited + soft idempotency on (email + companyName + PENDING + 24h).
+  rateLimit("generic", supplier:<userId>) on supplier mutating endpoints.
+  Bank-info PATCH writes a diff audit row + admin attention card.
+  sendSupplierDocReviewed email. New /api/cron/connect-sync auto-flips
+  publicVisible false on a Stripe Connect payouts-enabled true to false
+  transition.
+- Commit 5: multi-supplier orders + webhook clawback. Single-supplier cart
+  constraint enforced client-side (DifferentSupplierError + modal in
+  AddToCart and QuickAddButton, banner in CartClient) and server-side
+  (/api/orders POST rejects mixed-supplier carts 400). charge.refunded
+  webhook now calls applySupplierClawback so out-of-band Stripe-dashboard
+  refunds move reserveBalanceCents and owedToPlatformCents the same way
+  admin-initiated refunds do. Clawback extracted from refunds.ts into a
+  shared primitive, called from both refundOrder() and the webhook.
+
+**Next up after PLH-1: real-world verification + production cutover.** No
+more code-side polish rounds planned. See ship-ready playbook in
+`LAUNCH_PLAN.md`.
+
+## Launch-time constraints
+
+These are intentional limitations the platform ships with at soft launch.
+Each has a follow-up queued in `docs/ORCHESTRATOR.md` for the post-launch
+roadmap.
+
+- **Single-supplier carts.** A buyer's cart can only contain items from one
+  supplier. PartsPort routes shipments and payments per supplier; the
+  multi-shipment freight split exists in code but the Order model is still
+  one-supplier-per-order. Enforced in `src/lib/cart.ts` (client) and
+  `src/app/api/orders/route.ts` POST (server). UI prompt: "Your cart
+  contains items from <supplier>. Start a new cart?" The full
+  multi-supplier Shipment refactor (one Order, N Shipments, per-supplier
+  payment intent splits via Stripe Connect destination charges) is queued
+  for post-launch.
 
 Live preview URL (this serves the public-facing site today):
 https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app

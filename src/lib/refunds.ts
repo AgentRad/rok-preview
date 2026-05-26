@@ -24,6 +24,131 @@ function client(): Stripe | null {
   return _client;
 }
 
+/**
+ * PLH-1 commit 5: per-supplier refund clawback. Computes each supplier's
+ * pro-rata share of the refund (by line subtotal), draws what's available
+ * from their reserveBalanceCents, and accumulates any shortfall on
+ * Supplier.owedToPlatformCents (netted against the next Stripe transfer
+ * in lib/payouts.ts).
+ *
+ * Wrapped in $transaction with fresh re-reads INSIDE the tx so a
+ * concurrent payout-success owed-recovery can't push the values past the
+ * supplier_*_nonneg CHECK constraints (P12 H8 atomicity guarantee).
+ *
+ * Called from:
+ *   - refundOrder() in this file (admin-initiated refund path)
+ *   - charge.refunded webhook handler (out-of-band Stripe refund path)
+ *
+ * Pre-PLH-1 the webhook path only upserted the Refund row + bumped
+ * Order.refundedCents, so reserve/owed never moved for refunds that
+ * originated in the Stripe dashboard. This function closes that gap.
+ */
+export async function applySupplierClawback(
+  orderId: string,
+  refundAmountCents: number,
+  refundRef: string,
+  audit?: { actorId: string; actorEmail: string }
+): Promise<void> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: { include: { product: true } } },
+  });
+  if (!order) return;
+  const amount = Math.max(0, Math.floor(refundAmountCents));
+  if (amount <= 0) return;
+
+  const supplierShares = new Map<string, number>();
+  for (const item of order.items) {
+    const id = item.product.supplierId;
+    supplierShares.set(
+      id,
+      (supplierShares.get(id) ?? 0) + item.unitPriceCents * item.qty
+    );
+  }
+  const totalShare = Array.from(supplierShares.values()).reduce(
+    (sum, n) => sum + n,
+    0
+  );
+  if (totalShare <= 0) return;
+
+  for (const [supplierId, share] of supplierShares) {
+    const supplierRefundCents = Math.round((amount * share) / totalShare);
+    if (supplierRefundCents <= 0) continue;
+    const { supplierName, drawCents, shortfallCents } =
+      await prisma.$transaction(async (tx) => {
+        const supplier = await tx.supplier.findUnique({
+          where: { id: supplierId },
+        });
+        if (!supplier) {
+          return { supplierName: "", drawCents: 0, shortfallCents: 0 };
+        }
+        const fresh = Math.max(0, supplier.reserveBalanceCents);
+        const drawC = Math.min(supplierRefundCents, fresh);
+        const shortC = supplierRefundCents - drawC;
+        if (drawC > 0) {
+          await tx.supplier.update({
+            where: { id: supplierId },
+            data: { reserveBalanceCents: { decrement: drawC } },
+          });
+          await tx.supplierReserveTransaction.create({
+            data: {
+              supplierId,
+              type: "DRAW_DOWN",
+              amountCents: drawC,
+              orderId: order.id,
+              reason: `Refund of ${amount} cents on ${refundRef}`,
+            },
+          });
+        }
+        if (shortC > 0) {
+          await tx.supplier.update({
+            where: { id: supplierId },
+            data: { owedToPlatformCents: { increment: shortC } },
+          });
+          await tx.supplierReserveTransaction.create({
+            data: {
+              supplierId,
+              type: "OWED_INCURRED",
+              amountCents: shortC,
+              orderId: order.id,
+              reason: `Owed to platform: ${shortC} cents shortfall on refund for ${refundRef}`,
+            },
+          });
+        }
+        return {
+          supplierName: supplier.name,
+          drawCents: drawC,
+          shortfallCents: shortC,
+        };
+      });
+    void drawCents;
+    if (shortfallCents > 0) {
+      const updated = await prisma.supplier.findUnique({
+        where: { id: supplierId },
+        select: { owedToPlatformCents: true },
+      });
+      await writeAuditLog({
+        actor: audit
+          ? { id: audit.actorId, email: audit.actorEmail }
+          : { id: "system", email: "system@partsport" },
+        action: "OWED_INCURRED",
+        targetType: "Supplier",
+        targetId: supplierId,
+        summary: `Supplier ${supplierName} owes ${shortfallCents} more cents to platform (refund shortfall on ${refundRef})`,
+        metadata: {
+          supplierId,
+          supplierName,
+          orderId: order.id,
+          orderReference: order.reference,
+          amountCents: shortfallCents,
+          owedBalanceCents: updated?.owedToPlatformCents ?? 0,
+          cause: "REFUND_SHORTFALL",
+        },
+      });
+    }
+  }
+}
+
 export type RefundResult =
   | { ok: true; refundId: string; stripeRefundId: string | null }
   | { ok: false; error: string; status: number };
@@ -141,111 +266,18 @@ export async function refundOrder(args: {
   // PartsPort's DB so the order math stays honest. Owner reconciles
   // manually with the gateway in that case.
 
-  // P9.5 CRIT 5: refund clawback with shortfall netting.
-  //
-  // For each supplier on the order, compute their pro-rata share of the
-  // refund. Draw what we can from their reserveBalanceCents. Anything
-  // beyond available reserve (typical for 60-day-old orders where the
-  // reserve already released to the supplier) accumulates on
-  // Supplier.owedToPlatformCents and is netted against the supplier's
-  // next Stripe transfer in lib/payouts.ts.
-  //
-  // Pre-P9.5 this comment claimed "remainder is clawed back via
-  // payout-retry" - but payout-retry only retries FAILED transfers,
-  // so the shortfall was silently eaten by the platform. The verify
-  // chat caught this.
-  const supplierShares = new Map<string, number>();
-  for (const item of order.items) {
-    const id = item.product.supplierId;
-    supplierShares.set(
-      id,
-      (supplierShares.get(id) ?? 0) + item.unitPriceCents * item.qty
-    );
-  }
-  const totalShare = Array.from(supplierShares.values()).reduce(
-    (sum, n) => sum + n,
-    0
-  );
-  if (totalShare > 0) {
-    for (const [supplierId, share] of supplierShares) {
-      // Proportion of this refund attributable to this supplier.
-      const supplierRefundCents = Math.round((amount * share) / totalShare);
-      if (supplierRefundCents <= 0) continue;
-      // Polish 12 M6 + H8: wrap the per-supplier clawback inside a single
-      // $transaction with the balance re-fetched fresh INSIDE the tx, so
-      // a concurrent payout-success owed-recovery can't push the values
-      // past the supplier_*_nonneg CHECK constraints.
-      const { supplierName, drawCents, shortfallCents } = await prisma.$transaction(async (tx) => {
-        const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
-        if (!supplier) {
-          return { supplierName: "", drawCents: 0, shortfallCents: 0 };
-        }
-        const fresh = Math.max(0, supplier.reserveBalanceCents);
-        const drawC = Math.min(supplierRefundCents, fresh);
-        const shortC = supplierRefundCents - drawC;
-        if (drawC > 0) {
-          await tx.supplier.update({
-            where: { id: supplierId },
-            data: { reserveBalanceCents: { decrement: drawC } },
-          });
-          await tx.supplierReserveTransaction.create({
-            data: {
-              supplierId,
-              type: "DRAW_DOWN",
-              amountCents: drawC,
-              orderId: order.id,
-              reason: `Refund of ${amount} cents on order ${order.reference}`,
-            },
-          });
-        }
-        if (shortC > 0) {
-          await tx.supplier.update({
-            where: { id: supplierId },
-            data: { owedToPlatformCents: { increment: shortC } },
-          });
-          // Polish 12 M9: shortfall accumulation uses OWED_INCURRED type
-          // (not the DRAW_DOWN bucket; DRAW_DOWN is reserved for the
-          // reserve-balance debit so the supplier ledger reads honest).
-          await tx.supplierReserveTransaction.create({
-            data: {
-              supplierId,
-              type: "OWED_INCURRED",
-              amountCents: shortC,
-              orderId: order.id,
-              reason: `Owed to platform: ${shortC} cents shortfall on refund for order ${order.reference}`,
-            },
-          });
-        }
-        return { supplierName: supplier.name, drawCents: drawC, shortfallCents: shortC };
-      });
-      void drawCents;
-      if (shortfallCents > 0) {
-        // Use the captured supplier name for the audit log (avoid an
-        // extra read after the tx commits).
-        const supplier = { name: supplierName };
-        const updated = await prisma.supplier.findUnique({
-          where: { id: supplierId },
-          select: { owedToPlatformCents: true },
-        });
-        await writeAuditLog({
-          actor: { id: args.refundedByUserId, email: args.refundedByEmail },
-          action: "OWED_INCURRED",
-          targetType: "Supplier",
-          targetId: supplierId,
-          summary: `Supplier ${supplier.name} owes ${shortfallCents} more cents to platform (refund shortfall on order ${order.reference})`,
-          metadata: {
-            supplierId,
-            supplierName: supplier.name,
-            orderId: order.id,
-            orderReference: order.reference,
-            amountCents: shortfallCents,
-            owedBalanceCents: updated?.owedToPlatformCents ?? 0,
-            cause: "REFUND_SHORTFALL",
-          },
-        });
-      }
+  // P9.5 CRIT 5 / PLH-1 commit 5: refund clawback with shortfall netting.
+  // Extracted into applySupplierClawback so the charge.refunded webhook
+  // can call the same primitive when an out-of-band Stripe refund lands.
+  await applySupplierClawback(
+    order.id,
+    amount,
+    `order ${order.reference}`,
+    {
+      actorId: args.refundedByUserId,
+      actorEmail: args.refundedByEmail,
     }
-  }
+  );
 
   // Record the Refund row and update Order totals atomically.
   const refund = await prisma.$transaction(async (tx) => {

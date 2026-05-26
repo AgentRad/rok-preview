@@ -18,6 +18,7 @@ export type CardProduct = {
   quoteOnly: boolean;
   imageCount?: number;
   _count?: { images?: number };
+  supplierId: string;
   supplier: { name: string; rating: number; logoUrl?: string | null };
 };
 
@@ -85,7 +86,12 @@ export default function ProductCard({
       </Link>
       {viewerCanBuy && (
         <div className="product-action">
-          <QuickAddButton sku={product.sku} quoteOnly={product.quoteOnly} />
+          <QuickAddButton
+            sku={product.sku}
+            quoteOnly={product.quoteOnly}
+            supplierId={product.supplierId}
+            supplierName={product.supplier.name}
+          />
         </div>
       )}
     </div>

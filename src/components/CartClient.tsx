@@ -87,9 +87,19 @@ export default function CartClient() {
     );
   }
 
+  const supplierName = valid.length > 0 ? products[valid[0].sku].supplierName : "";
+
   return (
     <div className="checkout-grid">
       <div>
+        {supplierName && (
+          <div
+            className="alert alert-info"
+            style={{ marginBottom: 14, fontSize: 13 }}
+          >
+            All items in this cart ship from {supplierName}.
+          </div>
+        )}
         {valid.map((l) => {
           const p = products[l.sku];
           return (

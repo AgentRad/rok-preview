@@ -162,6 +162,22 @@ export async function POST(req: Request) {
     );
   }
 
+  // PLH-1 commit 5: single-supplier cart constraint (server side).
+  // PartsPort routes shipments and payments per supplier, so each Order
+  // can only contain items from one supplier at launch. The client
+  // enforces this in addToCart, this is defense in depth for callers
+  // that bypass the UI (curl, scripts, replayed requests).
+  const supplierIds = new Set(products.map((p) => p.supplierId));
+  if (supplierIds.size > 1) {
+    return NextResponse.json(
+      {
+        error:
+          "An order can only contain items from one supplier. Please split your cart.",
+      },
+      { status: 400 }
+    );
+  }
+
   const orderItems = [];
   const lines = [];
   for (const it of items) {

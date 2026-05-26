@@ -30,11 +30,23 @@ export async function POST(
   const skus = order.items.map((i) => i.skuSnapshot);
   const products = await prisma.product.findMany({
     where: { sku: { in: skus }, active: true },
-    select: { sku: true, name: true, stock: true, quoteOnly: true },
+    select: {
+      sku: true,
+      name: true,
+      stock: true,
+      quoteOnly: true,
+      supplierId: true,
+      supplier: { select: { name: true } },
+    },
   });
   const liveBySku = new Map(products.map((p) => [p.sku, p]));
 
-  const items: { sku: string; qty: number }[] = [];
+  const items: {
+    sku: string;
+    qty: number;
+    supplierId: string;
+    supplierName: string;
+  }[] = [];
   const skipped: { sku: string; name: string; reason: string }[] = [];
 
   for (const it of order.items) {
@@ -55,7 +67,12 @@ export async function POST(
       });
       continue;
     }
-    items.push({ sku: it.skuSnapshot, qty: it.qty });
+    items.push({
+      sku: it.skuSnapshot,
+      qty: it.qty,
+      supplierId: live.supplierId,
+      supplierName: live.supplier.name,
+    });
   }
 
   return NextResponse.json({ ok: true, items, skipped });

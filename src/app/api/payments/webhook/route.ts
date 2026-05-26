@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getProvider } from "@/lib/payments";
 import { markOrderPaid } from "@/lib/order-utils";
+import { applySupplierClawback } from "@/lib/refunds";
 import { syncSupplierConnectStatus } from "@/lib/stripe-connect";
 import { writeAuditLog } from "@/lib/audit";
 import { captureError } from "@/lib/observability";
@@ -145,6 +146,7 @@ export async function POST(req: Request) {
             for (const r of event.refunds) {
               // Try insert; if the stripeRefundId is already there,
               // P2002 fires and we skip silently (Stripe replay).
+              let isNew = true;
               try {
                 await prisma.refund.create({
                   data: {
@@ -159,10 +161,34 @@ export async function POST(req: Request) {
                 });
               } catch (err) {
                 const code = (err as { code?: string }).code;
-                if (code !== "P2002") {
+                if (code === "P2002") {
+                  isNew = false;
+                } else {
+                  isNew = false;
                   captureError(err, {
                     subsystem: "payments",
                     op: "webhook-refund-upsert",
+                    stripeRefundId: r.id,
+                  });
+                }
+              }
+              // PLH-1 commit 5: out-of-band Stripe refund. Run the
+              // per-supplier clawback so reserve / owedToPlatformCents
+              // move the same way refundOrder() would have moved them
+              // if the refund had been triggered through the admin UI.
+              // Gated on isNew so a Stripe webhook replay doesn't
+              // double-claw a supplier's reserve.
+              if (isNew) {
+                try {
+                  await applySupplierClawback(
+                    order.id,
+                    r.amountCents,
+                    `order ${order.reference} (Stripe refund ${r.id})`
+                  );
+                } catch (err) {
+                  captureError(err, {
+                    subsystem: "payments",
+                    op: "webhook-refund-clawback",
                     stripeRefundId: r.id,
                   });
                 }

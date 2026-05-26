@@ -98,6 +98,62 @@ If the autonomous loop hits stop criteria, it posts a PR comment saying so and e
 
 If the autonomous loop crashes or gets stuck, Rad can resume the chat-based loop seamlessly — the docs in the repo brief any chat instantly.
 
+## Pre-launch hardening (P12 + PLH-1) — DONE
+
+**P12 (2026-05-26).** RFQ accept auth, real freight/tax via checkout
+bridge, refund clawback ordering money-leak fix, quote expiry + idempotent
+quote-to-order create, return refund routing, supplier reserve CHECK
+constraints, quote lifecycle audit, supplier balance card, QuickBooks CSV
+export, supplier-health dashboard. Migration:
+`prisma/migrations/20260601120000_p12_quote_expiry_and_constraints`.
+
+**PLH-1 (2026-05-26).** Pre-launch hardening audit, 5 commits, closed all
+remaining CRITICAL plus relevant HIGH bugs across three surfaces:
+1. **Auth / Account.** Server-side session invalidation via
+   sessionsValidFrom + svf JWT claim. Password floor 8 cap 128.
+   SESSION_SECRET refuses < 32 chars in production. Email verify token
+   hashed at rest. Enumeration suppression on register + login. Register
+   no longer auto-signs-in. Session-fixation interstitial on GET
+   state-mutators. Account delete blocked on open orders. Anonymize and
+   unverified-cleanup crons. Rate limits across all auth mutators.
+2. **Supplier Onboarding.** Approval flow no longer mints "demo1234"
+   temp passwords (reset-token email via forgot-password path). Server
+   side go-live gate that re-runs the 10-item readiness check on
+   publicVisible flip. SupplierDocument blobs private with audited
+   download routes. Magic-byte MIME detection on document + logo
+   uploads. URL-paste branch removed. Suspended suppliers blocked from
+   orders and quotes. SVG removed from logo allow-list. Application
+   rate-limit + soft idempotency. Bank-info PATCH writes a diff audit
+   row + admin attention card. New connect-sync daily cron auto-flips
+   publicVisible false when Stripe Connect payouts go from enabled to
+   disabled.
+3. **Multi-Supplier Orders.** Single-supplier cart constraint at launch
+   (see Launch-time constraints in CLAUDE.md). charge.refunded webhook
+   now runs the per-supplier clawback via the shared
+   applySupplierClawback primitive, so out-of-band Stripe-dashboard
+   refunds move reserveBalanceCents and owedToPlatformCents the same
+   way admin-initiated refunds do.
+
+Migrations:
+- `prisma/migrations/20260602000000_plh1_session_security`
+- `prisma/migrations/20260602010000_plh1_commit2_anonymized_at`
+
+## Launch-time decisions
+
+**Single-supplier carts.** A buyer's cart can only contain items from one
+supplier at soft launch. PartsPort routes shipments and payments per
+supplier; the multi-shipment freight split exists in code but the Order
+model is still one-supplier-per-order. The full multi-supplier Shipment
+refactor (one Order, N Shipments, per-supplier payment intent splits via
+Stripe Connect destination charges, per-supplier refund flows) is queued
+post-launch. Trade-off: a buyer shopping across two suppliers places two
+orders, gets two confirmation emails, two tracking timelines, two
+invoices. Acceptable at the volume the marketplace will see in the first
+quarter, and the constraint keeps payout math and refund clawback simple
+(one Stripe payment intent maps to one supplier transfer). Enforced
+client-side in `src/lib/cart.ts` and server-side in
+`/api/orders/route.ts` POST as defense in depth.
+
 ## Pre-launch polish roadmap (Polish 6 → 11) — COMPLETE
 
 All polish rounds shipped and verified. Final PageSpeed Mobile: Performance 92 / Accessibility 100 / Best Practices 100 / SEO 100. First Load JS = 102 kB.
