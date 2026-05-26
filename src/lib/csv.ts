@@ -4,6 +4,13 @@
  * Sufficient for supplier bulk uploads in the hundreds-of-rows range.
  */
 export function parseCsv(text: string): string[][] {
+  // PLH-2 Phase 4a (A5): strip leading UTF-8 BOM. Excel and many other
+  // tools prepend U+FEFF to CSV exports; without this, the first header
+  // cell is silently "﻿sku" instead of "sku" and every column
+  // lookup against that header fails.
+  if (text.charCodeAt(0) === 0xfeff) {
+    text = text.slice(1);
+  }
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -80,4 +87,26 @@ export function parseCsvWithHeader(text: string): Record<string, string>[] {
     }
     return obj;
   });
+}
+
+/**
+ * PLH-2 Phase 4a (A6): defuse CSV formula injection. Cells beginning with
+ * `=`, `+`, `-`, `@`, TAB, or CR are interpreted as a formula by Excel,
+ * LibreOffice, Google Sheets, and Numbers. A malicious supplier name like
+ * `=HYPERLINK("http://evil","Click")` becomes a live link when an admin
+ * opens the export. Prefixing such cells with a single quote stops the
+ * spreadsheet from evaluating them. The quote is invisible in the cell.
+ * Wrap this output the same way other escaping wraps it (quotes, commas,
+ * newlines): the caller still has to do the CSV-quote step.
+ */
+export function csvSafeCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  if (s.length === 0) return s;
+  const c = s.charCodeAt(0);
+  // = + - @ TAB(0x09) CR(0x0d)
+  if (c === 0x3d || c === 0x2b || c === 0x2d || c === 0x40 || c === 0x09 || c === 0x0d) {
+    return "'" + s;
+  }
+  return s;
 }

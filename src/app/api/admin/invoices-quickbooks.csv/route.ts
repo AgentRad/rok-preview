@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { localDateStamp } from "@/lib/date-fns";
+import { csvSafeCell } from "@/lib/csv";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,11 +15,14 @@ export const dynamic = "force-dynamic";
  * Columns: Invoice No, Customer, Customer Email, Date, Due Date, Item,
  * Qty, Rate, Amount, Tax, Freight, Status.
  */
+// PLH-2 Phase 4a (A6): csvSafeCell defangs leading =, +, -, @, TAB, CR so
+// the spreadsheet does not evaluate them as formulas when an admin opens
+// this file. The CSV quoting below still handles commas, quotes, newlines.
 function csvCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const s = String(value);
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  const safe = csvSafeCell(value);
+  if (safe.length === 0) return "";
+  if (/[",\n\r]/.test(safe)) return `"${safe.replace(/"/g, '""')}"`;
+  return safe;
 }
 function csvRow(cells: unknown[]): string {
   return cells.map(csvCell).join(",");

@@ -4,15 +4,17 @@ import { getCurrentUser } from "@/lib/auth";
 import { canRunExports, getActiveSupplierContext } from "@/lib/supplier-access";
 import { localDateStamp } from "@/lib/date-fns";
 import { manufacturerSlug } from "@/lib/manufacturer-slug";
+import { csvSafeCell } from "@/lib/csv";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// PLH-2 Phase 4a (A6): csvSafeCell defangs leading =, +, -, @, TAB, CR.
 function cell(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  const s = String(v);
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  const safe = csvSafeCell(v);
+  if (safe.length === 0) return "";
+  if (/[",\n\r]/.test(safe)) return `"${safe.replace(/"/g, '""')}"`;
+  return safe;
 }
 
 function row(cells: unknown[]): string {

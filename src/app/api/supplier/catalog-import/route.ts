@@ -1,10 +1,23 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { parseCsvWithHeader } from "@/lib/csv";
 import { ICON_KEYS } from "@/components/PartIcon";
 import { canEditCatalog, getActiveSupplierContext } from "@/lib/supplier-access";
+import { rateLimit } from "@/lib/rate-limit";
+
+// PLH-2 Phase 4a (A4): hard cap on raw CSV size. 2 MB is roughly 20k rows
+// of typical supplier catalog data, well above any realistic single import.
+// Anything larger is either a misuse or a denial-of-service attempt; the
+// component asks the user to split.
+const MAX_CSV_BYTES = 2 * 1024 * 1024;
+// PLH-2 Phase 4a (A1): chunk row commits into batches so a transaction
+// doesn't have to hold thousands of writes open. Each batch is its own
+// transaction: previous batches stay committed, the failing batch rolls
+// back, the response tells the user exactly where it stopped.
+const COMMIT_BATCH_SIZE = 100;
 
 export const runtime = "nodejs";
 
@@ -111,6 +124,19 @@ export async function POST(req: Request) {
   }
   const supplier = ctx.supplier;
 
+  // PLH-2 Phase 4a (A3): per-supplier rate limit. Bulk import is heavy on
+  // the DB; one supplier looping a stuck client shouldn't starve others.
+  const rl = await rateLimit("generic", `supplier:${user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+      }
+    );
+  }
+
   const body = await req.json().catch(() => ({}));
   const csv = String(body.csv || "");
   const commit = Boolean(body.commit);
@@ -119,6 +145,16 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Paste CSV content with a header row." },
       { status: 400 }
+    );
+  }
+
+  // PLH-2 Phase 4a (A4): reject oversize payloads before we burn parse
+  // time and memory on them. Byte length, not character length, so the
+  // limit means the same thing for UTF-8 multi-byte rows.
+  if (Buffer.byteLength(csv, "utf8") > MAX_CSV_BYTES) {
+    return NextResponse.json(
+      { error: "CSV too large. Maximum 2 MB. Split into smaller files." },
+      { status: 413 }
     );
   }
 
@@ -185,59 +221,146 @@ export async function POST(req: Request) {
     });
   }
 
+  // PLH-2 Phase 4a (A1): bulk writes in batched transactions. Each batch
+  // of COMMIT_BATCH_SIZE rows runs inside `prisma.$transaction(async tx =>
+  // ...)`: either every write in the batch commits or none do. Previous
+  // batches stay committed. The response reports committedBatches and
+  // (on partial failure) failedAtBatch so the user sees exactly where it
+  // stopped and can re-upload the tail.
+  //
+  // PLH-2 Phase 4a (A2): TOCTOU on SKU ownership. The pre-flight `findMany`
+  // and the `update` below can race against a concurrent import from
+  // another supplier. Compound `where: { sku, supplierId }` makes the
+  // update a no-op (P2025) when ownership flipped mid-flight rather than
+  // silently overwriting another supplier's row. The create path catches
+  // P2002 (unique-violation on SKU) and reports it as a row-level error
+  // instead of bubbling a 500.
   let createdCount = 0;
   let updatedCount = 0;
-  for (const r of valid) {
-    const priceCents = dollarsToCents(r.price);
-    if (r.exists) {
-      await prisma.product.update({
-        where: { sku: r.sku },
-        data: {
-          name: r.name,
-          category: r.category,
-          manufacturer: r.manufacturer,
-          icon: r.icon,
-          imageUrl: r.imageUrl || null,
-          priceCents,
-          unit: r.unit,
-          etaDays: r.etaDays,
-          stock: r.stock,
-          quoteOnly: r.quoteOnly,
-          description: r.description || undefined,
-        },
+  let committedBatches = 0;
+  let failedAtBatch: number | null = null;
+  let batchError: string | null = null;
+  const partialResults: Array<{ rowNumber: number; error: string }> = [];
+
+  const totalBatches = Math.ceil(valid.length / COMMIT_BATCH_SIZE);
+
+  for (let b = 0; b < totalBatches; b++) {
+    const slice = valid.slice(
+      b * COMMIT_BATCH_SIZE,
+      (b + 1) * COMMIT_BATCH_SIZE
+    );
+    try {
+      const batchOutcome = await prisma.$transaction(async (tx) => {
+        let created = 0;
+        let updated = 0;
+        const rowErrors: Array<{ rowNumber: number; error: string }> = [];
+        for (const r of slice) {
+          const priceCents = dollarsToCents(r.price);
+          if (r.exists) {
+            try {
+              await tx.product.update({
+                where: { sku: r.sku, supplierId: supplier.id },
+                data: {
+                  name: r.name,
+                  category: r.category,
+                  manufacturer: r.manufacturer,
+                  icon: r.icon,
+                  imageUrl: r.imageUrl || null,
+                  priceCents,
+                  unit: r.unit,
+                  etaDays: r.etaDays,
+                  stock: r.stock,
+                  quoteOnly: r.quoteOnly,
+                  description: r.description || undefined,
+                },
+              });
+              updated++;
+            } catch (e) {
+              if (
+                e instanceof Prisma.PrismaClientKnownRequestError &&
+                e.code === "P2025"
+              ) {
+                // Ownership flipped between the preflight read and now.
+                // Surface as a row error and roll the batch back so the
+                // user can re-check ownership and retry the tail.
+                rowErrors.push({
+                  rowNumber: r.rowNumber,
+                  error: "SKU is no longer yours; another supplier owns it",
+                });
+                throw e;
+              }
+              throw e;
+            }
+          } else {
+            try {
+              const product = await tx.product.create({
+                data: {
+                  sku: r.sku,
+                  name: r.name,
+                  category: r.category,
+                  manufacturer: r.manufacturer,
+                  icon: r.icon,
+                  imageUrl: r.imageUrl || null,
+                  priceCents,
+                  unit: r.unit,
+                  etaDays: r.etaDays,
+                  stock: r.stock,
+                  quoteOnly: r.quoteOnly,
+                  description:
+                    r.description || `${r.name} supplied by ${supplier.name}.`,
+                  specs: {},
+                  supplierId: supplier.id,
+                  active: true,
+                },
+              });
+              if (r.imageUrl) {
+                await tx.productImage.create({
+                  data: { productId: product.id, url: r.imageUrl, position: 0 },
+                });
+              }
+              created++;
+            } catch (e) {
+              if (
+                e instanceof Prisma.PrismaClientKnownRequestError &&
+                e.code === "P2002"
+              ) {
+                rowErrors.push({
+                  rowNumber: r.rowNumber,
+                  error: "SKU was claimed by another supplier before this row could insert",
+                });
+                throw e;
+              }
+              throw e;
+            }
+          }
+        }
+        return { created, updated, rowErrors };
       });
-      updatedCount++;
-    } else {
-      const product = await prisma.product.create({
-        data: {
-          sku: r.sku,
-          name: r.name,
-          category: r.category,
-          manufacturer: r.manufacturer,
-          icon: r.icon,
-          imageUrl: r.imageUrl || null,
-          priceCents,
-          unit: r.unit,
-          etaDays: r.etaDays,
-          stock: r.stock,
-          quoteOnly: r.quoteOnly,
-          description: r.description || `${r.name} supplied by ${supplier.name}.`,
-          specs: {},
-          supplierId: supplier.id,
-          active: true,
-        },
-      });
-      if (r.imageUrl) {
-        await prisma.productImage.create({
-          data: { productId: product.id, url: r.imageUrl, position: 0 },
+      createdCount += batchOutcome.created;
+      updatedCount += batchOutcome.updated;
+      committedBatches++;
+    } catch (e) {
+      failedAtBatch = b + 1;
+      batchError =
+        e instanceof Prisma.PrismaClientKnownRequestError
+          ? `${e.code}: ${e.message.split("\n")[0]}`
+          : (e as { message?: string }).message || "Batch failed";
+      // Surface row-level details collected before the throw, if any. The
+      // throw rolled the batch back, so these rows did NOT commit.
+      const firstRow = slice[0]?.rowNumber ?? null;
+      const lastRow = slice[slice.length - 1]?.rowNumber ?? null;
+      if (firstRow !== null && lastRow !== null) {
+        partialResults.push({
+          rowNumber: firstRow,
+          error: `Batch ${b + 1} (rows ${firstRow} to ${lastRow}) rolled back: ${batchError}`,
         });
       }
-      createdCount++;
+      break;
     }
   }
 
   return NextResponse.json({
-    ok: true,
+    ok: failedAtBatch === null,
     preview: false,
     counts: {
       total: rows.length,
@@ -245,6 +368,11 @@ export async function POST(req: Request) {
       updated: updatedCount,
       invalid: invalid.length,
     },
+    committedBatches,
+    totalBatches,
+    failedAtBatch,
+    batchError,
+    partialResults,
     rows,
   });
 }

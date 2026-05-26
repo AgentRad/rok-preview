@@ -184,6 +184,17 @@ Each polish round was a self-contained punch list. Rad pasted one round at a tim
 
 The ship-ready playbook (with click-by-click pre-launch verification steps and the production cutover order) lives in the orchestrator chat and in `LAUNCH_PLAN.md`.
 
+## Post-launch backlog (deferred from PLH-2 Phase 4a CSV-import audit)
+
+These are MEDIUM/LOW catalog-import findings explicitly skipped at PLH-2 Phase 4a. The Phase 4a commit closed the six CRITICAL/HIGH items (A1 transactional bulk writes with batched rollback, A2 compound SKU ownership where + P2002 row error, A3 rate limits on /api/supplier/catalog-import and /api/supplier/catalog-cleanup with a tighter 10/hour catalog-cleanup bucket, A4 2 MB server-side size cap with 413, A5 BOM strip in parseCsv, A6 csvSafeCell formula-injection prefix across all CSV export routes). The list below is queued for a post-launch polish round, not for soft launch.
+
+- **Price precision.** `normalizeRow` uses `Number()` then `dollarsToCents()`; rows with five decimals or scientific notation can lose pennies. Prefer a string-based parse that rejects non-currency input and keeps two decimals exactly.
+- **Stock coercion.** `Number(raw.stock || "0") || 0` silently maps any garbage value to 0. A row reading "out of stock" should error, not pretend to be 0 stock.
+- **imageUrl validation.** No protocol or length check today. Any string is accepted and written into ProductImage.url and Product.imageUrl. Should validate it parses as an http(s) URL and is under say 2 KB.
+- **etaDays clamp.** Currently `Math.max(1, ...)` only; no upper bound. Caps to something sane (90?) so a typo of `999999` does not poison search filters.
+- **quoteOnly heuristic.** `price >= 3000` default is reasonable but invisible to the user. Surface in the preview table so they can confirm before commit.
+- **Description fallback.** `${r.name} supplied by ${supplier.name}.` writes the supplier name as authored text, not data. Move to a runtime template or store empty + render the fallback at read time so a supplier rename does not require a backfill.
+
 ## Project context
 
 PartsPort is a B2B industrial parts marketplace on `claude/industrial-marketplace-ROwAU`. Three user types beyond admin: buyers (free), suppliers/distributors (6% fee), OEMs/manufacturers (free, no direct sales). RFQ flow for big-ticket items. Stripe Checkout + Stripe Tax. Resend for email.

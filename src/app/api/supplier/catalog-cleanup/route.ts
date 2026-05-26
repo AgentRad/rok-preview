@@ -6,9 +6,14 @@ import {
   rowsToCsv,
 } from "@/lib/catalog-import-ai";
 import { canEditCatalog, getActiveSupplierContext } from "@/lib/supplier-access";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// PLH-2 Phase 4a (A4): same 2 MB cap as catalog-import. Each call here
+// also forwards to Anthropic, so oversized input is doubly bad.
+const MAX_CSV_BYTES = 2 * 1024 * 1024;
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
@@ -33,6 +38,32 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
+  // PLH-2 Phase 4a (A3): two-bucket rate limit. The generic bucket
+  // catches the broad case (any supplier-side mutating endpoint); the
+  // catalog-cleanup bucket caps Anthropic-cost calls at 10/hour/supplier.
+  const rlGeneric = await rateLimit("generic", `supplier:${user.id}`);
+  if (!rlGeneric.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rlGeneric.retryAfterMs / 1000)) },
+      }
+    );
+  }
+  const rlAI = await rateLimit("catalog-cleanup", `supplier:${user.id}`);
+  if (!rlAI.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "AI cleanup is capped at 10 per hour per supplier. Try again later.",
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rlAI.retryAfterMs / 1000)) },
+      }
+    );
+  }
   if (!isCatalogAIEnabled()) {
     return NextResponse.json(
       {
@@ -49,6 +80,12 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Paste the supplier's catalog text or table to clean up." },
       { status: 400 }
+    );
+  }
+  if (Buffer.byteLength(text, "utf8") > MAX_CSV_BYTES) {
+    return NextResponse.json(
+      { error: "CSV too large. Maximum 2 MB. Split into smaller files." },
+      { status: 413 }
     );
   }
 

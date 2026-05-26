@@ -65,6 +65,11 @@ const BUCKETS: Record<string, Bucket> = {
   // 30/hour. A normal supplier asking 5 to 10 things in a session never
   // touches this; a runaway client loop gets clean 429s.
   "ai-assistant": { capacity: 30, windowMs: 60 * 60_000 },
+  // PLH-2 Phase 4a (A3): catalog cleanup hits Anthropic with a sometimes
+  // very large prompt (whole pasted catalog). Hard cap at 10/hour/supplier
+  // so a stuck client cannot run up a meaningful bill before the supplier
+  // notices.
+  "catalog-cleanup": { capacity: 10, windowMs: 60 * 60_000 },
   generic: { capacity: 60, windowMs: 60_000 },
 };
 

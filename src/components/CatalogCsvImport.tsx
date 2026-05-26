@@ -61,7 +61,13 @@ export default function CatalogCsvImport() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setAiError(data.error || "AI cleanup failed.");
+        if (res.status === 413) {
+          setAiError(
+            "That paste is over 2 MB. Split it into smaller files (a few hundred rows at a time) and try again."
+          );
+        } else {
+          setAiError(data.error || "AI cleanup failed.");
+        }
         return;
       }
       setCsv(data.csv || "");
@@ -87,8 +93,19 @@ export default function CatalogCsvImport() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || "Could not process the CSV.");
+        if (res.status === 413) {
+          setError(
+            "CSV is over 2 MB. Split into smaller files (a few hundred rows at a time) and try again."
+          );
+        } else {
+          setError(data.error || "Could not process the CSV.");
+        }
         return;
+      }
+      if (commit && data.failedAtBatch) {
+        setError(
+          `Partial import: batches 1 to ${data.committedBatches} of ${data.totalBatches} committed. Batch ${data.failedAtBatch} rolled back (${data.batchError || "see server logs"}). Re-upload the remaining rows.`
+        );
       }
       if (commit) {
         setDone(data);

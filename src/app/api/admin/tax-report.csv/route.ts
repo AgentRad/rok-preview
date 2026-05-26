@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { csvSafeCell } from "@/lib/csv";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// PLH-2 Phase 4a (A6): csvSafeCell prefix defangs leading =, +, -, @,
+// TAB, CR so spreadsheets do not evaluate them as formulas.
 function csvEscape(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "";
-  const s = String(value);
-  if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
-    return `"${s.replace(/"/g, '""')}"`;
+  const safe = csvSafeCell(value);
+  if (safe.length === 0) return "";
+  if (safe.includes(",") || safe.includes("\"") || safe.includes("\n")) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return s;
+  return safe;
 }
 
 function parseRegionFromShipTo(shipTo: string): string {
