@@ -36,7 +36,8 @@ const sentryWebpackPluginOptions = {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   disableLogger: true,
   hideSourceMaps: true,
-  widenClientFileUpload: true,
+  widenClientFileUpload: false,
+  tunnelRoute: "/monitoring",
 };
 
 export default withSentryConfig(nextConfig, sentryWebpackPluginOptions);

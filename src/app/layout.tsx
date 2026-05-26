@@ -1,8 +1,24 @@
 import type { Metadata } from "next";
+import { Hanken_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import DemoGuide from "@/components/DemoGuide";
 import CookieConsent from "@/components/CookieConsent";
 import { siteUrl } from "@/lib/site-url";
+
+const hankenGrotesk = Hanken_Grotesk({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--font-hanken",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+  variable: "--font-plex-mono",
+});
 
 const DEFAULT_TITLE = "PartsPort | The Industrial Parts Marketplace";
 const DEFAULT_DESC =
@@ -38,15 +54,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${hankenGrotesk.variable} ${ibmPlexMono.variable}`}>
       <head>
         <meta name="theme-color" content="#f3f2ef" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin=""
-        />
         <link
           rel="preconnect"
           href="https://public.blob.vercel-storage.com"
@@ -55,10 +65,6 @@ export default function RootLayout({
         <link
           rel="dns-prefetch"
           href="https://public.blob.vercel-storage.com"
-        />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
         />
       </head>
       <body>
