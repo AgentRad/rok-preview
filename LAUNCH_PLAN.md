@@ -175,7 +175,7 @@ Build, test against local Postgres, `npx next build` must pass, then commit and 
 
 - **Pricing has four components everywhere:** subtotal, freight, platform fee, sales tax. Order model gets `freightCents` and `taxCents`. Every breakdown (checkout, invoice, RFQ quote) shows all four.
 - **Sales tax:** integrate Stripe Tax or equivalent. Pass-through, never revenue. Capture and store tax-exemption certificates; exempt buyers are not charged tax.
-- **Fee rate:** single configurable value. When the owner confirms moving from 4 percent to 5 to 6 percent, update all "4%" copy site-wide.
+- **Fee rate:** 6% (locked, shipped). `FEE_RATE_BPS = 600` in `src/lib/money.ts`. All marketing copy on `/suppliers` and CLAUDE.md say 6%. Tiered fees (6% base + premium tiers depending on category) are a separate future business decision, not a code change.
 - **Permissions, future-proof:** design role/permissions so OEM-tier content can be gated per-OEM (only Brand X's authorized distributors access Brand X) later. Do NOT build the wholesale tier now. Brand names on the retail catalog stay public.
 - **Fraud and verification:**
   - Progressive onboarding. Minimum to start, full profile (tax ID, banking, insurance, W-9) required before first transaction/payout.

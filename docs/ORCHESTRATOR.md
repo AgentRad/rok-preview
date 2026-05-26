@@ -98,31 +98,35 @@ If the autonomous loop hits stop criteria, it posts a PR comment saying so and e
 
 If the autonomous loop crashes or gets stuck, Rad can resume the chat-based loop seamlessly — the docs in the repo brief any chat instantly.
 
-## Pre-launch polish roadmap (Polish 6 → 11)
+## Pre-launch polish roadmap (Polish 6 → 11) — COMPLETE
 
-After Polish 5 verify hit stop criteria for the buy loop, Rad pointed out that "the buy loop works" is not the same as "production-ready." Real B2B launch needs infrastructure that the test team didn't catch because it didn't exist to test. Six more polish rounds before THRADD (the first real supplier) onboards:
+All polish rounds shipped and verified. Final PageSpeed Mobile: Performance 92 / Accessibility 100 / Best Practices 100 / SEO 100. First Load JS = 102 kB.
 
-**Polish 6 — Supplier onboarding.** Legal docs upload + admin review, bank info collection (or Stripe Connect — see Polish 8), 10-item onboarding checklist that gates publicVisible. Required before any real supplier can transact.
+**Polish 6 — Supplier onboarding. DONE.** Legal docs upload + admin review, bank info collection via Stripe Connect, 10-item onboarding checklist that gates publicVisible. Required before any real supplier can transact.
 
-**Polish 7 — Trust + legal.** Legal page bodies (ToS, Privacy, Acceptable Use, Returns, Supplier Agreement) so footer links stop 404ing. Email verification on signup. Sentry error tracking. Audit log for admin mutations. Account recovery flows. Production rate limiting via Upstash Redis (not in-memory).
+**Polish 7 — Trust + legal. DONE.** Legal page bodies (ToS, Privacy, Acceptable Use, Returns, Supplier Agreement). Email verification on signup. Sentry error tracking. Audit log for admin mutations at `/admin/audit`. Account recovery flows. Production rate limiting via Upstash Redis.
 
-After Polish 7 lands, the platform has a structured debugging surface that didn't exist before: `/admin/audit` shows every admin mutation (supplier approvals, document reviews, payout state changes, tax-exempt decisions, impersonation, bank-info changes) with actor, target, summary, and a JSON metadata bag. When a test chat reports "X is broken after Y did Z," the audit log is the first place to look. The data lives in the `AuditLog` table; the helper `writeAuditLog()` in `src/lib/audit.ts` is wired into every existing admin route. Polish 8 (refunds) and Polish 9 (freight) extend the same pattern as they add admin mutations.
+After Polish 7 landed, the platform gained a structured debugging surface: `/admin/audit` shows every admin mutation with actor, target, summary, and a JSON metadata bag. When a test chat reports "X is broken after Y did Z," the audit log is the first place to look. The data lives in the `AuditLog` table; the helper `writeAuditLog()` in `src/lib/audit.ts` is wired into every admin route.
 
-After Polish 8 lands, supplier payouts run through Stripe Connect Express and refunds go through Stripe's refunds API. The legacy "manually mark payouts paid" admin flow stays for grandfathered suppliers; new ones go through the Stripe-hosted Connect onboarding from `/supplier`. The daily reconciliation cron at `/api/admin/cron/reconcile` matches Stripe activity to PartsPort DB rows and writes `RECONCILIATION_MISMATCH` audit entries when something drifts. The reserve-release cron releases 5% chargeback holdback after 60 days when no refund or dispute fired. The payout-retry cron handles FAILED transfers with exponential backoff. The health-check cron pings Stripe Tax + future health probes daily. Suppliers see their reserve balance and Stripe Connect status on `/supplier`; admin sees the same data on `/admin/suppliers` plus the full audit trail on `/admin/audit`.
+**Polish 8 — Money operations. DONE.** Stripe Connect Express for automated supplier payouts. Real Stripe refund flow. 5% chargeback reserve. Daily reconciliation cron Stripe ↔ PartsPort DB. Reserve-release, payout-retry, health-check crons. Tax registration tracking. Profit dashboard at `/admin/profit`. Refund clawback netting via `owedToPlatformCents`.
 
-**Polish 8 — Money operations.** Stripe Connect Express for automated supplier payouts. Real Stripe refund flow wired to the existing ReturnRequest admin approval. Reserve / holdback for chargebacks. Daily reconciliation cron Stripe ↔ PartsPort DB. Tax registration tracking. 1099 handling (via Stripe Connect). Profit dashboard.
+**Polish 9 — Real freight. DONE.** Shippo integration for real-time LTL freight rates. Product weight/dimensions/freight class. SupplierWarehouse model for origin zips. Multi-shipment splits across suppliers. Freight surcharges (liftgate, residential, inside delivery). Label printing on dispatch via Shippo (UPS active, FedEx unavailable).
 
-**Polish 9 — Real freight.** Product weight + dimensions + freight class. SupplierWarehouse model for origin zips. Shippo or EasyPost integration for real-time LTL freight rates. Multi-shipment splits when a cart spans suppliers. Freight surcharges (liftgate, residential, inside delivery). Label printing on dispatch.
+**Polish 9.5 — Audit fixes. DONE.** CRON_SECRET fail-closed in production. Server-trusted freight pricing (rejects bogus rate IDs). Order idempotency via Idempotency-Key header. Refund clawback netting. Webhook idempotency by stripeRefundId. Manufacturers public-filter on product groupBy. Email-verify gates on quotes/returns/reviews. Audit-log gap fills.
 
-**Polish 10 — SEO + performance.** Per-page metadata + Open Graph. JSON-LD structured data on products and brands. Canonical URLs (fixes the sitemap host issue caught in Polish 5). Next.js Image component everywhere. Lighthouse ≥ 90 on all four categories.
+**Polish 9.6 — HIGH fix. DONE.** Idempotency lookup before rate-limit consume on POST /api/orders.
 
-**Polish 11 — Analytics + a11y + mobile.** Admin analytics dashboard with GMV, conversion, top suppliers. Search analytics (zero-result queries). Email preference center + bounce/complaint handling. WCAG 2.1 AA accessibility audit + fixes. Mobile UX walkthrough.
+**Polish 10 — SEO + performance. DONE.** Per-page metadata + Open Graph + Twitter cards. JSON-LD structured data on products, brands, home. Canonical URLs via `siteUrl()` helper. Next.js Image component everywhere. Sitemap + robots. Lighthouse SEO 100, BP 100, A11y 95.
 
-After Polish 11 verifies clean, the platform is production-grade. Then Rad works through the go-to-market checklist (owner-side accounts, legal entity, business insurance, sales outreach, etc.) and flips the live keys.
+**Polish 11 (and 11.5 → 11.10) — Analytics + a11y + mobile + LCP + UI integrity. DONE.** Vercel Analytics + Speed Insights mounted. WCAG AA contrast pass (Accessibility 100). Mobile filter toggle. 44px tap targets. next/font self-hosted for Hanken + Plex Mono. Sentry pruned from client bundle entirely (window listeners → /api/error-log → server SDK). Route-scoped CSS splitting (legal, manufacturer, admin extracted from globals.css). 32 of 37 UI flaws from the visual audit fixed across 5 critical, 12 high, 13 medium, 7 low items. Hanken italic dropped. Image transcode quality 65.
 
-Each polish round is a self-contained punch list. Rad pastes one round at a time to a fresh PartsPort build chat (swapping out the build chat every 60-80 commits to avoid context bloat). Orchestrator verifies after each round, writes the next punch list, swaps chats as needed.
+The two not-fixed UI items from P11.7 were a breakpoint consolidation (deferred — needs screenshot QA) and a 565-site inline-fontSize sweep (utility classes added, mechanical refactor deferred).
 
-The full punch list text for each polish round was written in a single orchestrator response — search the conversation history or re-derive from this brief if needed.
+After Polish 11 verified clean, Rad's task list moves to real-world verification (email delivery, Stripe Connect real onboarding, Shippo UPS labels, RFQ-to-order conversion, returns flow, the 4 daily crons running for real, refund clawback) and production cutover (wipe demo seed, THRADD onboards, first real test order, attorney review, real photos, custom domain, optional brand rename, Stripe live mode flip).
+
+Each polish round was a self-contained punch list. Rad pasted one round at a time to a fresh PartsPort build chat (swapping every 60-80 commits to avoid context bloat). Orchestrator verified after each round, wrote the next punch list, swapped chats as needed.
+
+The ship-ready playbook (with click-by-click pre-launch verification steps and the production cutover order) lives in the orchestrator chat and in `LAUNCH_PLAN.md`.
 
 ## Project context
 

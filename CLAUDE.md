@@ -21,52 +21,68 @@ delivery.
 - Energy & utilities is the **starting vertical**; the catalog is category-agnostic and
   meant to expand to other industries later.
 
-## Status (updated 2026-05-26)
-The app is **deployed and live**. Core buy-loop works: catalog, AI + heuristic search,
-product pages, cart, checkout, orders, buyer/supplier/admin/OEM dashboards, RFQ flow,
-fulfillment ops console. Pre-launch polish rounds **P6 through P9.5 are shipped and
-verified**: supplier onboarding (legal docs + bank + Stripe Connect + 10-item go-live
-gate), trust + legal (email verify, password reset, audit log, Sentry, Upstash rate
-limit, 5 legal pages, cookie consent), money operations (Stripe Connect Express
-payouts, 5% chargeback reserve, refund flow, daily reconcile/release/retry/health
-crons, profit dashboard, tax registrations), real freight (Shippo integration,
-SupplierWarehouse, dimensions, multi-supplier split, surcharges, label printing), and
-P9.5 audit fixes (CRON_SECRET fail-closed, server-trusted freight pricing, order
-idempotency, refund clawback netting via `owedToPlatformCents`, webhook idempotency,
-manufacturers public-filter, email-verify gates on quotes/returns/reviews, audit-log
-gap fills). **P9.6 is in flight**: 1 HIGH (move idempotency lookup before rate-limit
-on POST /api/orders) + 2 MEDIUM polish items from the verify-round followup.
+## Status (updated 2026-05-26, post P11.10)
+The app is **deployed, ship-ready, and feature-complete for soft launch**.
+All pre-launch polish rounds P6 through P11.10 are shipped and verified.
+Final PageSpeed Mobile: **Performance 92 / Accessibility 100 / Best Practices 100 / SEO 100**.
+First Load JS shared = 102 kB. Bundle is in the top 10% of B2B sites.
 
-**Next up after P9.6 closes**: Polish 10 (SEO + perf), Polish 11 (analytics + a11y +
-mobile). See `docs/ORCHESTRATOR.md` for the full Polish 6 → 11 roadmap.
+What shipped (in order):
+- **P6** Supplier onboarding (legal docs + bank + Stripe Connect + 10-item go-live gate)
+- **P7** Trust + legal (email verify, password reset, audit log, Sentry, Upstash rate
+  limit, 5 legal pages, cookie consent)
+- **P8** Money ops (Stripe Connect Express payouts, 5% chargeback reserve, refund
+  flow, 4 daily crons, profit dashboard, tax registrations)
+- **P9** Real freight (Shippo integration, SupplierWarehouse, dimensions,
+  multi-supplier split, surcharges, label printing)
+- **P9.5** Audit fixes (CRON_SECRET fail-closed, server-trusted freight pricing,
+  order idempotency, refund clawback netting via `owedToPlatformCents`, webhook
+  idempotency, manufacturers public-filter, email-verify gates, audit-log gap fills)
+- **P9.6** HIGH fix (idempotency lookup before rate-limit on POST /api/orders)
+- **P10** SEO (per-page metadata, Open Graph, Twitter cards, canonical URLs, JSON-LD,
+  sitemap, robots, structured data)
+- **P11** Analytics + a11y + mobile UX + LCP (next/font self-hosted, Vercel Analytics,
+  dynamic chrome, Sentry trim, route-scoped CSS splitting, mobile filter toggle,
+  type scale, 100s of UI fixes)
+- **P11.5 through P11.10** Iterative audit + verify rounds. P11.7 alone closed 32 of
+  37 catalog UI flaws across 5 CRITICALs, 12 HIGHs, 13 MEDIUMs, 7 LOWs. P11.10
+  removed `@sentry/nextjs` from client bundle (-77 KB), split globals.css per route,
+  trimmed Hanken to non-italic only, quality-65 transcodes.
 
-Live preview URL:
+**Next up: real-world verification + production cutover.** No more code-side polish
+rounds planned. See ship-ready playbook in the orchestrator chat or `LAUNCH_PLAN.md`.
+
+Live preview URL (this serves the public-facing site today):
 https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app
 
 Infrastructure set up and working:
 - Vercel project `rok-preview`. Framework Preset = Next.js. Deployment Protection OFF
   (publicly viewable). Production slot still points at `master`; PartsPort serves from
-  the branch below.
+  the branch below. `NEXT_PUBLIC_SITE_URL` set so canonicals/sitemap/og:url all use a
+  stable host.
 - Neon Postgres database connected (`partsport-db`, Free plan). Build auto-runs
   migrations + seed.
-- Next.js pinned to 15.2.6 (patched for the react2shell CVE).
+- Next.js 15.2.6 (patched for the react2shell CVE).
 - Email: Resend account; domain `partsport.agentgaming.gg` verified (DKIM/SPF/MX live
   on Cloudflare DNS). `RESEND_API_KEY` is set in Vercel.
 - AI search is live (`ANTHROPIC_API_KEY` set; small pay-as-you-go cost per search).
 - Stripe in test mode: Stripe Connect (Marketplace, Express) enabled, Stripe Tax
-  activated. Live keys deferred until after Polish 11.
-- Shippo test API key set as `SHIPPO_API_KEY` in Vercel. Carriers (UPS, FedEx) still
-  need to be activated in the Shippo dashboard for label printing to produce real
-  labels.
+  activated. Live keys to be flipped after first real test order passes cleanly.
+- Shippo test API key set as `SHIPPO_API_KEY`. UPS (US) enabled via Shippo's
+  managed carrier account. FedEx unavailable. Real label printing will be verified
+  on first real order.
 - Upstash Redis set up for production rate limiting (`UPSTASH_REDIS_REST_URL` +
   `UPSTASH_REDIS_REST_TOKEN` in Vercel).
-- Sentry set up (`SENTRY_DSN` in Vercel).
-- `CRON_SECRET` set in Vercel — required for the 4 daily admin crons (reconcile,
-  reserve-release, payout-retry, health-check); routes fail-closed without it.
+- Sentry SDK is now SERVER-ONLY (the client bundle uses lightweight window listeners
+  posting to `/api/error-log`). `SENTRY_DSN` is set in Vercel.
+- `CRON_SECRET` set in Vercel. 4 daily crons (reconcile, reserve-release,
+  payout-retry, health-check) fail-closed without it.
+- Vercel Analytics + Speed Insights both live (auto-injected by Vercel).
 
-Pending: real product photography (owner supplying; line-art fallback exists). A custom
-web domain is optional; the project currently uses the vercel.app preview URL. First
-real supplier (THRADD) lined up for onboarding after Polish 11 verifies clean.
+Pending owner tasks (not code): real product photography (suppliers will upload),
+attorney review of 5 legal pages (currently template drafts with disclosure footnote),
+custom domain, optional brand rename. First real supplier (THRADD) lined up for
+onboarding.
 
 ## Repo
 - GitHub `AgentRad/rok-preview`, branch `claude/industrial-marketplace-ROwAU`, PR #1 open.
