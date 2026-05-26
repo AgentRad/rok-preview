@@ -365,6 +365,15 @@ Two cases:
   filesystem and Rad isn't uploading anything. If the prompt is
   long, it's long.
 
+**Role-specific briefs in the repo** (for repo-access chats):
+- `docs/ORCHESTRATOR.md` · for the orchestrator chat
+- `docs/DESIGN_CHAT.md` · for the design / video / marketing-asset chat
+- `docs/TEAM_TESTING.md` · for verify / test chats
+- `HABITS.md` · personal preferences (read in any chat)
+
+When spawning a repo-access chat for a specific role, point it at the
+matching brief plus CLAUDE.md as the first thing to read.
+
 Minimum brief that MUST appear inside every kickoff prompt for a
 no-repo-access chat (pasted text, not file refs):
 1. Who Rad is + how he works (the relevant excerpts from HABITS.md)
