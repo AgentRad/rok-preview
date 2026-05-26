@@ -46,6 +46,7 @@ export default async function OrderInvoicePage({
         <SiteHeader />
         <main id="main" className="app-page">
           <div className="page-pad narrow">
+            <h1 className="sr-only">Invoice for order {order.reference}</h1>
             <div className="alert alert-info">
               <strong>No invoice issued yet.</strong>
               <br />
@@ -81,6 +82,7 @@ export default async function OrderInvoicePage({
       </div>
       <main id="main" className="app-page">
       <div className="page-pad narrow invoice-page">
+        <h1 className="sr-only">Invoice {invoice.number}</h1>
         <div className="invoice-toolbar no-print">
           <Link className="btn btn-ghost btn-sm" href={`/orders/${order.id}`}>
             Back to order

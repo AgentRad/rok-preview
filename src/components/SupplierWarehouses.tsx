@@ -147,7 +147,7 @@ export default function SupplierWarehouses({
                   </td>
                   <td>{r.city}</td>
                   <td>{r.state}</td>
-                  <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13 }}>
+                  <td style={{ fontFamily: "var(--mono)", fontSize: 13 }}>
                     {r.zip}
                   </td>
                   <td>

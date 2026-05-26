@@ -53,8 +53,9 @@ export default function CookieConsent() {
       <div className="cookie-consent-body">
         <strong>Cookies.</strong> PartsPort uses functional cookies to keep
         you signed in, remember your cart, and protect against forged
-        requests. We do not use third-party advertising or analytics
-        cookies. See the{" "}
+        requests. We do not use third-party advertising cookies. We use
+        cookieless first-party analytics to understand site performance.
+        See the{" "}
         <Link href="/legal/privacy#cookies">Privacy Policy</Link> for the
         full list.
       </div>

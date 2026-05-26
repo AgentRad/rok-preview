@@ -1281,11 +1281,11 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 /* Mobile tap targets: every interactive element should clear 44x44 on touch.
    Scoped to coarse pointers so desktop hover/density isn't affected. */
 @media (pointer: coarse) {
-  .btn, .nav-toggle, .nav-cart, .qa-btn, .ci-remove, .ci-qty-btn,
-  .nav-search button, .nav-user-btn, .nav-links a {
+  .btn, .nav-toggle, .nav-cart, .quick-add-btn, .ci-remove,
+  .qty-stepper button, .nav-user-btn, .nav-links a {
     min-height: 44px;
   }
-  .nav-toggle, .nav-search button { min-width: 44px; }
+  .nav-toggle, .qty-stepper button { min-width: 44px; }
 }
 
 .filter-toggle { display: none; }
@@ -1652,7 +1652,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   background: var(--bg);
 }
 .freight-widget-form label {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--steel);
   display: block; margin-bottom: 6px;
@@ -1690,7 +1690,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .freight-option-name { font-weight: 600; }
 .freight-option-meta {
   font-size: 11.5px; color: var(--steel);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   margin-top: 2px;
 }
 .freight-option-price { font-weight: 700; }
@@ -1742,14 +1742,14 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .profit-chart-bar:hover { opacity: 0.7; cursor: pointer; }
 .profit-chart-axis {
   display: flex; justify-content: space-between;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px; color: var(--steel);
   padding: 0 2px;
 }
 
 /* ---------- Audit log ---------- */
 .audit-action {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11.5px; font-weight: 600;
   background: var(--bg); border: 1px solid var(--line);
   padding: 2px 6px; border-radius: 3px;
@@ -1776,7 +1776,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 }
 .verify-banner-text { flex: 1; min-width: 240px; }
 .verify-email {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 12.5px; color: #4a200f;
   background: rgba(184, 67, 31, 0.08);
   padding: 1px 6px; border-radius: 3px;
@@ -1802,7 +1802,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   font-size: 13.5px;
 }
 .legal-nav h3 {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--steel);
   margin: 0 0 10px;
@@ -1834,13 +1834,13 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   margin: 6px 0 8px;
 }
 .legal-doc-head .eyebrow {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--steel);
 }
 .legal-lede { font-size: 15px; color: var(--steel); margin: 0 0 8px; }
 .legal-meta {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 12px; color: var(--steel);
 }
 .legal-toc {

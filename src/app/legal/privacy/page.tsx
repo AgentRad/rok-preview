@@ -68,7 +68,7 @@ const SECTIONS: LegalSection[] = [
     heading: "4. How we share information",
     body: [
       "With Suppliers, when you place an order: enough information to fulfill the order (your name, shipping address, items, and quantities).",
-      "With service providers: payment processing (Stripe), email delivery (Resend), database hosting (Neon), file storage (Vercel Blob), AI inference (Anthropic), error tracking (Sentry), and rate limiting (Upstash). These providers act on our instructions under written contracts.",
+      "With service providers: payment processing (Stripe), email delivery (Resend), database hosting (Neon), file storage (Vercel Blob), AI inference (Anthropic), error tracking (Sentry), rate limiting (Upstash), and cookieless first-party performance and traffic analytics (Vercel Analytics and Speed Insights). These providers act on our instructions under written contracts.",
       "When required by law, in response to a lawful request from a government authority, or to enforce these Terms or protect the rights, safety, or property of PartsPort or its users.",
       "PartsPort does not sell personal information. We do not share it for cross-context behavioral advertising.",
     ],
