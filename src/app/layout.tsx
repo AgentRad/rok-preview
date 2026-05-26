@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Hanken_Grotesk, IBM_Plex_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import DemoGuide from "@/components/DemoGuide";
 import CookieConsent from "@/components/CookieConsent";
@@ -71,6 +73,8 @@ export default function RootLayout({
         {children}
         <CookieConsent />
         {process.env.VERCEL_ENV !== "production" && <DemoGuide />}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
