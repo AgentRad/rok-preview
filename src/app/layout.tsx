@@ -48,6 +48,15 @@ export default function RootLayout({
           crossOrigin=""
         />
         <link
+          rel="preconnect"
+          href="https://public.blob.vercel-storage.com"
+          crossOrigin=""
+        />
+        <link
+          rel="dns-prefetch"
+          href="https://public.blob.vercel-storage.com"
+        />
+        <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
         />
