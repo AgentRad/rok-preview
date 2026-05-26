@@ -205,6 +205,34 @@ export async function sendOrderShipped(order: OrderLite): Promise<void> {
   });
 }
 
+/**
+ * P9.5 HIGH 14: dedicated refund notification. Pre-fix the refund route
+ * reused sendOrderConfirmation which told the buyer "Thanks for your
+ * order" after a refund. This version names the refund explicitly and
+ * surfaces the amount + reason so the buyer can match it against their
+ * card statement.
+ */
+export async function sendOrderRefunded(
+  order: OrderLite,
+  refundedCents: number,
+  reason: string
+): Promise<void> {
+  const url = siteUrl(`/orders/${order.id}`);
+  const isFull = refundedCents >= order.totalCents;
+  const body = `
+    <p>Hi ${order.buyerName},</p>
+    <p>${isFull ? "A full refund" : `A partial refund of <strong>${formatCents(refundedCents)}</strong>`} has been issued for order <strong>${order.reference}</strong>.</p>
+    ${reason ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Reason:</strong> ${reason}</p>` : ""}
+    <p>Funds will reach your card or bank in 5 to 10 business days, depending on your issuer. The refund will appear as a credit on the statement that includes the original PartsPort charge.</p>
+    ${buyerBranding(order)}
+    <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
+  await send({
+    to: order.buyerEmail,
+    subject: `Refund issued for order ${order.reference}`,
+    html: wrap(isFull ? "Refund issued" : "Partial refund issued", body),
+  });
+}
+
 export async function sendOrderDelivered(order: OrderLite): Promise<void> {
   const url = siteUrl(`/orders/${order.id}`);
   const body = `

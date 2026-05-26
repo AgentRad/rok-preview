@@ -26,6 +26,20 @@ export async function POST(req: Request) {
   const qty = Math.max(1, Math.floor(Number(b.qty) || 1));
   const user = await getCurrentUser();
 
+  // P9.5 HIGH 15: signed-in users must verify email before requesting a
+  // quote. Mirrors the orders POST gate. Anonymous buyers (no session)
+  // still pass through; the brief expects guest RFQs to work.
+  if (user && !user.emailVerified) {
+    return NextResponse.json(
+      {
+        error:
+          "Verify your email before requesting quotes. Check your inbox for the welcome email, or request a new verification link from /account.",
+        code: "EMAIL_NOT_VERIFIED",
+      },
+      { status: 403 }
+    );
+  }
+
   const quote = await prisma.quoteRequest.create({
     data: {
       reference: generateReference("RFQ"),

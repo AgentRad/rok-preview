@@ -47,7 +47,7 @@ type ShipmentQuote = {
  * Caller (CheckoutClient) renders one rate-picker per shipment.
  */
 export async function POST(req: Request) {
-  const limit = await rateLimit("freight-estimate", clientIp(req));
+  const limit = await rateLimit("freight-quote", clientIp(req));
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Please wait before requesting another quote." },

@@ -177,7 +177,14 @@ export async function createTransferToSupplier(args: {
   const s = client();
   if (!s) return null;
   if (!args.supplier.stripeAccountId) return null;
-  const transfer = await s.transfers.create({
+  // P9.5 HIGH 9: Stripe idempotency key. Two parallel
+  // ensurePayoutsForOrder calls would otherwise race on transfers.create
+  // before the Payout row commits, producing duplicate transfers. Stripe
+  // returns the original response for repeated requests with the same
+  // key, dedupe at their layer. Key shape: payout_<supplierId>_<orderId>
+  // (one transfer per supplier-per-order is the invariant).
+  const transfer = await s.transfers.create(
+    {
     amount: args.amountCents,
     currency: "usd",
     destination: args.supplier.stripeAccountId,
@@ -188,7 +195,11 @@ export async function createTransferToSupplier(args: {
       partsportPayoutRef: args.payoutReference,
       partsportSupplierId: args.supplier.id,
     },
-  });
+    },
+    {
+      idempotencyKey: `payout_${args.supplier.id}_${args.orderId}`,
+    }
+  );
   return transfer.id;
 }
 

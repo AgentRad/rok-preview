@@ -36,6 +36,14 @@ export async function refundOrder(args: {
   returnRequestId?: string;
   refundedByUserId: string;
   refundedByEmail: string;
+  /**
+   * P9.5 HIGH 12: when true, allow a DB-only refund for orders that
+   * weren't paid via Stripe (demo / PayPal). Without this flag, the
+   * route refuses to record a refund whose money path isn't traceable.
+   * The admin UI exposes this as a separate "Mark as refunded manually"
+   * action so the path is intentional, not silent.
+   */
+  manualOverride?: boolean;
 }): Promise<RefundResult> {
   const order = await prisma.order.findUnique({
     where: { id: args.orderId },
@@ -67,6 +75,21 @@ export async function refundOrder(args: {
   const s = client();
   let stripeRefundId: string | null = null;
 
+  // P9.5 HIGH 12: gate DB-only refunds. Stripe IS configured but this
+  // order has no stripePaymentIntentId (demo checkout, PayPal, or a
+  // pre-P8 order that didn't capture the PI). Without manualOverride
+  // the route refuses, so admin has to intentionally pick the manual
+  // path. Pre-fix the route silently recorded a "succeeded" refund in
+  // the DB even though no money moved, leaving the buyer charged.
+  if (s && !order.stripePaymentIntentId && !args.manualOverride) {
+    return {
+      ok: false,
+      error:
+        "This order has no Stripe payment_intent on file. Either find the original Stripe charge and refund it manually via the Stripe dashboard, or call the refund API again with manualOverride: true to record a DB-only refund.",
+      status: 400,
+    };
+  }
+
   if (s && order.stripePaymentIntentId) {
     try {
       const refund = await s.refunds.create({
@@ -89,6 +112,20 @@ export async function refundOrder(args: {
         subsystem: "stripe",
         op: "refund-create",
         orderId: order.id,
+      });
+      // P9.5 HIGH 13: write a failed-refund audit row so the admin trail
+      // shows the attempt and the error, not just successful refunds.
+      await writeAuditLog({
+        actor: { id: args.refundedByUserId, email: args.refundedByEmail },
+        action: "ORDER_REFUND_FAILED",
+        targetType: "Order",
+        targetId: order.id,
+        summary: `Stripe refund FAILED on order ${order.reference} (${amount} cents): ${err instanceof Error ? err.message : "unknown error"}`,
+        metadata: {
+          orderReference: order.reference,
+          amountCents: amount,
+          paymentIntent: order.stripePaymentIntentId,
+        },
       });
       return {
         ok: false,

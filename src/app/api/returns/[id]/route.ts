@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { writeAuditLog, type AuditAction } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -34,12 +35,32 @@ export async function PATCH(
     resolve: "RESOLVED",
   };
 
-  await prisma.returnRequest.update({
+  const updated = await prisma.returnRequest.update({
     where: { id },
     data: {
       status: statusMap[action],
       adminNote: note || r.adminNote,
       resolvedAt: action === "resolve" ? new Date() : r.resolvedAt,
+    },
+  });
+
+  // P9.5 HIGH 18: audit-log every return state transition. The verify
+  // chat caught this admin mutation as untracked.
+  const auditAction: AuditAction =
+    action === "approve"
+      ? "RETURN_APPROVED"
+      : action === "reject"
+        ? "RETURN_REJECTED"
+        : "RETURN_RESOLVED";
+  await writeAuditLog({
+    actor: user,
+    action: auditAction,
+    targetType: "ReturnRequest",
+    targetId: updated.id,
+    summary: `Return ${updated.reference} ${statusMap[action].toLowerCase()}${note ? `: ${note}` : ""}`,
+    metadata: {
+      orderId: updated.orderId,
+      reason: updated.reason,
     },
   });
 

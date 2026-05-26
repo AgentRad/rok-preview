@@ -46,6 +46,26 @@ export async function POST(req: Request) {
   const etaDays = Math.max(1, Math.floor(Number(b.etaDays) || 0));
   const stock = Math.max(0, Math.floor(Number(b.stock) || 0));
 
+  // P9.5 HIGH 21: parse freight dims on create. Pre-fix the freight
+  // fields were silently dropped (the P9 S0 commit only landed the
+  // PATCH-side parsing). New products would launch with null dims and
+  // need a follow-up PATCH from the supplier just to enable freight
+  // quoting. The verify chat caught this as critical for THRADD
+  // onboarding (a new supplier's freshly-added SKUs never quoted).
+  const parseDim = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const weightLbs = parseDim(b.weightLbs);
+  const lengthIn = parseDim(b.lengthIn);
+  const widthIn = parseDim(b.widthIn);
+  const heightIn = parseDim(b.heightIn);
+  const freightClass =
+    typeof b.freightClass === "string" && b.freightClass.trim()
+      ? b.freightClass.trim().slice(0, 16)
+      : null;
+
   if (!sku || !name || !category || !manufacturer || !(price > 0)) {
     return NextResponse.json(
       { error: "SKU, name, category, manufacturer and a price are required." },
@@ -78,6 +98,11 @@ export async function POST(req: Request) {
       stock,
       description: String(b.description || "").trim() || `${name} supplied by ${supplier.name}.`,
       specs: b.specs && typeof b.specs === "object" ? b.specs : {},
+      weightLbs,
+      lengthIn,
+      widthIn,
+      heightIn,
+      freightClass,
       supplierId: supplier.id,
       active: true,
     },

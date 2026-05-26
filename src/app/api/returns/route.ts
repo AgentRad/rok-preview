@@ -35,6 +35,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
 
+  // P9.5 HIGH 16: signed-in users must verify email before opening a
+  // return. Guest path (guestMatch) is unaffected because there's no
+  // account to verify.
+  if (user && !user.emailVerified) {
+    return NextResponse.json(
+      {
+        error:
+          "Verify your email before opening a return. Request a new verification link from /account.",
+        code: "EMAIL_NOT_VERIFIED",
+      },
+      { status: 403 }
+    );
+  }
+
   if (order.status !== "FULFILLED" && order.shipmentStage !== "Delivered") {
     return NextResponse.json(
       {

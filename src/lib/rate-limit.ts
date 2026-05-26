@@ -46,6 +46,13 @@ const BUCKETS: Record<string, Bucket> = {
   // Freight estimate hits Shippo per call; 1-per-10s is plenty for a
   // buyer typing a ZIP, blocks bot harvest of quotes.
   "freight-estimate": { capacity: 1, windowMs: 10_000 },
+  // P9.5 HIGH 19: dedicated bucket for the checkout /api/freight/quote
+  // path. The verify chat caught the previous shared bucket producing
+  // 429s when a buyer hit the catalog widget + then refreshed checkout
+  // rates within 10 seconds. Higher capacity here because checkout
+  // re-quotes are a normal user flow (changing ship-to + surcharges
+  // both trigger a refresh).
+  "freight-quote": { capacity: 5, windowMs: 60_000 },
   generic: { capacity: 60, windowMs: 60_000 },
 };
 

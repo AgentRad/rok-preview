@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { refundOrder } from "@/lib/refunds";
-import { sendOrderConfirmation } from "@/lib/email";
+import { sendOrderRefunded } from "@/lib/email";
 import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
@@ -56,26 +56,29 @@ export async function POST(
     returnRequestId,
     refundedByUserId: user.id,
     refundedByEmail: user.email,
+    manualOverride: body.manualOverride === true,
   });
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
 
-  // Notify the buyer that a refund landed. Reuse sendOrderConfirmation's
-  // template by loading the (now-refunded) order; a dedicated refund email
-  // template can be added later when there's a strong copy point.
+  // P9.5 HIGH 14: dedicated refund email instead of reusing the
+  // "Thanks for your order" confirmation template. The buyer was
+  // getting the wrong email pre-fix; the verify chat caught this.
   after(async () => {
     try {
       const order = await prisma.order.findUnique({
         where: { id },
         include: { items: true },
       });
-      if (order) await sendOrderConfirmation(order);
+      if (order) {
+        await sendOrderRefunded(order, amountCents, reason);
+      }
     } catch (err) {
       captureError(err, {
         subsystem: "email",
-        op: "refund-confirmation",
+        op: "refund-notification",
         orderId: id,
       });
     }

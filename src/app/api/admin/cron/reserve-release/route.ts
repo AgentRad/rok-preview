@@ -55,13 +55,39 @@ export async function GET(req: Request) {
       const drawCents = Math.min(payout.reservedCents, supplier.reserveBalanceCents);
       if (drawCents <= 0) continue;
       try {
-        // Move the reserve out of held balance...
-        await prisma.$transaction([
-          prisma.supplier.update({
+        // P9.5 HIGH 10: re-fetch inside the transaction and verify the
+        // order STILL has no refund. A refund landing between the
+        // candidate-selection query above and this point would let the
+        // reserve leak to the supplier even though it's now needed to
+        // cover the refund. The serializable-read inside the tx catches
+        // that race.
+        const released_ok = await prisma.$transaction(async (tx) => {
+          const fresh = await tx.order.findUnique({
+            where: { id: order.id },
+            select: { refundedCents: true, reservedCents: true },
+          });
+          if (!fresh) return false;
+          if (fresh.refundedCents > 0) {
+            // Refund snuck in. Skip the release; the cron retries
+            // tomorrow if/when the refund is finalized and there's
+            // remaining reserve.
+            return false;
+          }
+          // Re-check that the supplier still has at least drawCents in
+          // reserveBalanceCents (another refund on a DIFFERENT order
+          // could have drawn it down).
+          const freshSupplier = await tx.supplier.findUnique({
+            where: { id: supplier.id },
+            select: { reserveBalanceCents: true },
+          });
+          if (!freshSupplier || freshSupplier.reserveBalanceCents < drawCents) {
+            return false;
+          }
+          await tx.supplier.update({
             where: { id: supplier.id },
             data: { reserveBalanceCents: { decrement: drawCents } },
-          }),
-          prisma.supplierReserveTransaction.create({
+          });
+          await tx.supplierReserveTransaction.create({
             data: {
               supplierId: supplier.id,
               type: "RELEASE",
@@ -69,16 +95,18 @@ export async function GET(req: Request) {
               orderId: order.id,
               reason: `Auto-release after ${RELEASE_AFTER_DAYS} days, no refund or open dispute`,
             },
-          }),
-          prisma.payout.update({
+          });
+          await tx.payout.update({
             where: { id: payout.id },
             data: { reservedCents: { decrement: drawCents } },
-          }),
-          prisma.order.update({
+          });
+          await tx.order.update({
             where: { id: order.id },
             data: { reservedCents: { decrement: drawCents } },
-          }),
-        ]);
+          });
+          return true;
+        });
+        if (!released_ok) continue;
         // ...then send it to the supplier via an extra transfer when
         // they're Connect-active. Otherwise the released balance just
         // becomes part of the platform's owings on the next manual

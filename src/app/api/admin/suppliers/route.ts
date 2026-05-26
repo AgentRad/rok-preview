@@ -6,6 +6,7 @@ import { getCurrentUser, hashPassword } from "@/lib/auth";
 import { sendSupplierWelcome, sendSupplierInvite } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
 import { captureError } from "@/lib/observability";
+import { writeAuditLog } from "@/lib/audit";
 
 const VALID_ROLES: SupplierMemberRole[] = [
   "OWNER",
@@ -119,6 +120,24 @@ export async function POST(req: Request) {
 
   await prisma.supplierMember.create({
     data: { supplierId: supplier.id, userId: user.id, role: "OWNER" },
+  });
+
+  // P9.5 HIGH 17: audit-log new supplier creation. Pre-fix admin could
+  // approve + create suppliers (with memberships, invites, welcome
+  // emails) with no entry in /admin/audit.
+  await writeAuditLog({
+    actor: me,
+    action: "SUPPLIER_CREATED",
+    targetType: "Supplier",
+    targetId: supplier.id,
+    summary: `Created supplier ${supplier.name} (${contactEmail}) with ${teammates.length} teammate invite(s)`,
+    metadata: {
+      supplierName: supplier.name,
+      contactEmail,
+      ownerUserId: user.id,
+      newOwner: !existing,
+      teammateInviteCount: teammates.length,
+    },
   });
 
   if (sendEmail) {

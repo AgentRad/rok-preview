@@ -9,6 +9,18 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Please sign in to review." }, { status: 401 });
   }
+  // P9.5 HIGH 16: email-verification gate. Mirrors orders/quotes/returns.
+  // Reviews carry social weight; gated to verified buyers only.
+  if (!user.emailVerified) {
+    return NextResponse.json(
+      {
+        error:
+          "Verify your email before posting reviews. Request a new verification link from /account.",
+        code: "EMAIL_NOT_VERIFIED",
+      },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json().catch(() => ({}));
   const productId = String(body.productId || "").trim();

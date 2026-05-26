@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
 import {
@@ -329,18 +329,27 @@ async function handleInbound(req: Request) {
     }
     recipients.delete("");
     recipients.delete(user.email);
-    for (const to of recipients) {
-      sendThreadMessage({
-        to,
-        senderName: user.name,
-        subjectPrefix: `Order ${order.reference}`,
-        context: `order ${order.reference}`,
-        body: cleaned,
-        threadUrl: siteUrl(`/orders/${order.id}`),
-        threadKind: "order",
-        threadId: order.id,
-      }).catch(() => undefined);
-    }
+    // P9.5 HIGH 11: wrap in after() so the function stays alive past
+    // the response on Vercel serverless. Pre-fix the fire-and-forget
+    // .catch() pattern would drop the email on cold-start kill.
+    after(async () => {
+      for (const to of recipients) {
+        try {
+          await sendThreadMessage({
+            to,
+            senderName: user.name,
+            subjectPrefix: `Order ${order.reference}`,
+            context: `order ${order.reference}`,
+            body: cleaned,
+            threadUrl: siteUrl(`/orders/${order.id}`),
+            threadKind: "order",
+            threadId: order.id,
+          });
+        } catch {
+          // Per-recipient swallow; one bad address doesn't drop the rest.
+        }
+      }
+    });
     return NextResponse.json({ ok: true, posted: "order", id: order.id });
   }
 
@@ -380,17 +389,24 @@ async function handleInbound(req: Request) {
   if (!isQuoteSupplier) recipients.add(quote.product.supplier.contactEmail);
   recipients.delete("");
   recipients.delete(user.email);
-  for (const to of recipients) {
-    sendThreadMessage({
-      to,
-      senderName: user.name,
-      subjectPrefix: `RFQ ${quote.reference}`,
-      context: `RFQ ${quote.reference} for ${quote.product.name}`,
-      body: cleaned,
-      threadUrl: siteUrl(`/quotes/${quote.id}`),
-      threadKind: "quote",
-      threadId: quote.id,
-    }).catch(() => undefined);
-  }
+  // P9.5 HIGH 11: same after() wrap for the quote thread side.
+  after(async () => {
+    for (const to of recipients) {
+      try {
+        await sendThreadMessage({
+          to,
+          senderName: user.name,
+          subjectPrefix: `RFQ ${quote.reference}`,
+          context: `RFQ ${quote.reference} for ${quote.product.name}`,
+          body: cleaned,
+          threadUrl: siteUrl(`/quotes/${quote.id}`),
+          threadKind: "quote",
+          threadId: quote.id,
+        });
+      } catch {
+        // swallow per-recipient; the rest still send.
+      }
+    }
+  });
   return NextResponse.json({ ok: true, posted: "quote", id: quote.id });
 }
