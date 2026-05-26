@@ -273,6 +273,37 @@ The point: every fresh chat that opens this repo should be able to read
 CLAUDE.md + docs/ORCHESTRATOR.md and immediately know the real state
 without needing Rad to re-brief them.
 
+## Spawning new chats (STANDING RULE)
+Every new chat (build chat, verify chat, design chat, audit subagent,
+etc.) needs to be briefed with the relevant MD files in its kickoff
+prompt. Never spawn a clueless chat that has to ask Rad basic context
+he's already documented.
+
+Two cases:
+- **Claude Code chats with repo access** (build chat, verify chat,
+  audit subagents): include "Read these files first: CLAUDE.md,
+  HABITS.md, docs/ORCHESTRATOR.md" at the top of the prompt. Add
+  STRATEGY_CONTEXT.md or LAUNCH_PLAN.md when relevant. Add
+  docs/TEAM_TESTING.md for verify/test chats.
+- **Claude desktop chats WITHOUT repo access** (design chat, marketing
+  chat, anything outside the repo): tell Rad which MD files to UPLOAD
+  as attachments alongside the kickoff prompt. Don't try to paste full
+  MD contents into the prompt; the attachment route is cleaner and
+  the chat reads them on its own.
+
+Minimum brief for any new chat:
+1. Who Rad is + how he works (HABITS.md)
+2. What PartsPort is + business model (CLAUDE.md "What it is" +
+   "Business model" sections, or STRATEGY_CONTEXT.md for deeper)
+3. Current state (CLAUDE.md "Status" section)
+4. The specific task this chat is being spawned to do
+5. Brand voice rules (no em dashes, no emojis unless asked, editorial/
+   industrial design language)
+
+If a chat seems lost or asks Rad to re-brief, that's a signal the
+kickoff prompt missed something — fix the prompt template, don't make
+Rad answer the same question twice.
+
 ## Run locally
 Needs Node.js and Postgres. `npm install`, set `.env` (`DATABASE_URL` +
 `DATABASE_URL_UNPOOLED`), `npx prisma migrate deploy`, `node prisma/seed.mjs`,
