@@ -54,7 +54,7 @@ export default function DeleteAccountForm() {
         <button
           type="button"
           className="btn btn-ghost btn-sm"
-          style={{ marginTop: 10, color: "#b4431f", borderColor: "#e8c6b1" }}
+          style={{ marginTop: 10, color: "var(--red)", borderColor: "var(--red-soft)" }}
           onClick={() => setConfirming(true)}
         >
           Delete my account
@@ -103,7 +103,7 @@ export default function DeleteAccountForm() {
           type="submit"
           className="btn btn-primary btn-sm"
           disabled={busy}
-          style={{ background: "#b4431f", borderColor: "#b4431f" }}
+          style={{ background: "var(--red)", borderColor: "var(--red)" }}
         >
           {busy ? "Deleting…" : "Confirm deletion"}
         </button>

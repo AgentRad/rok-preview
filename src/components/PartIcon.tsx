@@ -114,13 +114,24 @@ const PATHS: Record<string, React.ReactNode> = {
 
 export const ICON_KEYS = Object.keys(PATHS);
 
-export default function PartIcon({ icon, className }: { icon: string; className?: string }) {
+export default function PartIcon({
+  icon,
+  className,
+  label,
+}: {
+  icon: string;
+  className?: string;
+  /** Optional accessible name when the icon stands alone. Omit when the icon
+   *  sits next to a visible text label (the wrapping element should then
+   *  carry aria-hidden on the icon instead). */
+  label?: string;
+}) {
   return (
     <svg
       viewBox="0 0 64 64"
       className={className}
       role="img"
-      aria-hidden="true"
+      aria-label={label || `${icon} icon`}
       fill="none"
       stroke="currentColor"
       strokeWidth="2.4"

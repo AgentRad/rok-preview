@@ -100,9 +100,9 @@ export default function SuppliersPage() {
             <div className="mt-32">
               <a className="btn btn-primary" href="#apply">Apply to sell</a>
               <a
-                className="btn btn-ghost"
+                className="btn btn-ghost btn-ghost-dark"
                 href="#criteria"
-                style={{ color: "#fff", borderColor: "#ffffff3a", marginLeft: 10 }}
+                style={{ marginLeft: 10 }}
               >
                 See criteria
               </a>

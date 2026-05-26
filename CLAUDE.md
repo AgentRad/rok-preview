@@ -14,7 +14,7 @@ delivery.
   sell it, **buyers** (utilities, co-ops, contractors, EPCs) need it.
 - **OEMs participate free** (storefront plus demand visibility, no channel conflict;
   every sale routes to their authorized distributors).
-- **Distributors pay the transaction fee** (4%) on orders that settle on-platform.
+- **Distributors pay the transaction fee** (6%) on orders that settle on-platform.
 - **Two purchasing lanes:** instant checkout for in-stock items; an **RFQ / "Request a
   quote"** flow for big-ticket configured equipment (>= $3,000). The accepted quote
   becomes an on-platform order so the transaction/fee always settles here.

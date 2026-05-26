@@ -191,7 +191,6 @@ export default async function ManufacturerStorefront({
                     height={200}
                     sizes="160px"
                     priority
-                    unoptimized
                   />
                 ) : (
                   <div className="mfr-hero-placeholder">

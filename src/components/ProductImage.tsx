@@ -27,7 +27,6 @@ export default function ProductImage({
         sizes={sizes}
         priority={priority}
         loading={priority ? undefined : "lazy"}
-        unoptimized
       />
     );
   }

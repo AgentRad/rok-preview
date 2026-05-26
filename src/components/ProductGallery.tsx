@@ -40,7 +40,6 @@ export default function ProductGallery({
           height={1200}
           sizes="(max-width: 768px) 100vw, 800px"
           priority
-          unoptimized
         />
       </div>
       {images.length > 1 && (
@@ -62,7 +61,6 @@ export default function ProductGallery({
                 height={160}
                 sizes="120px"
                 loading="lazy"
-                unoptimized
               />
             </button>
           ))}

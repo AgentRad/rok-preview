@@ -267,7 +267,7 @@ export default async function ProductPage({
                         ? "var(--ink)"
                         : inStock
                           ? "var(--green)"
-                          : "#b4431f",
+                          : "var(--red)",
                     }}
                   >
                     {product.quoteOnly

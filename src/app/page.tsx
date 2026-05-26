@@ -299,7 +299,7 @@ export default async function HomePage() {
               </div>
               <div className="cta-actions">
                 <Link className="btn btn-primary" href="/catalog">Browse catalog</Link>
-                <Link className="btn btn-ghost" href="/suppliers" style={{ color: "#fff", borderColor: "#ffffff3a" }}>
+                <Link className="btn btn-ghost btn-ghost-dark" href="/suppliers">
                   Become a supplier
                 </Link>
               </div>

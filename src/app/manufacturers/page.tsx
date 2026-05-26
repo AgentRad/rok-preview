@@ -145,9 +145,9 @@ export default async function ManufacturersPage() {
             <div className="mt-32">
               <a className="btn btn-primary" href="#apply">List your brand</a>
               <Link
-                className="btn btn-ghost"
+                className="btn btn-ghost btn-ghost-dark"
                 href="/how-it-works"
-                style={{ color: "#fff", borderColor: "#ffffff3a", marginLeft: 10 }}
+                style={{ marginLeft: 10 }}
               >
                 How it works
               </Link>
@@ -204,7 +204,6 @@ export default async function ManufacturersPage() {
                           height={120}
                           sizes="80px"
                           loading="lazy"
-                          unoptimized
                         />
                       ) : (
                         <div className="brand-card-placeholder">
