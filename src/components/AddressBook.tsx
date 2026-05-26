@@ -94,7 +94,7 @@ function TaxExemptRow({ address }: { address: Address }) {
       <div className="muted-text" style={{ fontSize: 12, lineHeight: 1.45 }}>
         {url ? (
           <>
-            <a href={url} target="_blank" rel="noreferrer" style={{ color: "var(--blue)" }}>
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>
               View certificate
             </a>
             {" · "}

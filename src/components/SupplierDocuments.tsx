@@ -200,7 +200,7 @@ export default function SupplierDocuments({
                         <a
                           href={d.url}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           className="doc-link"
                         >
                           {d.filename || "Document"}

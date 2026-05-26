@@ -105,7 +105,7 @@ export default function OemProfileEditor({
             <Link
               href={`/manufacturers/${slug}`}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
             >
               /manufacturers/{slug} &rarr;
@@ -221,7 +221,7 @@ export default function OemProfileEditor({
             <Link
               href={`/manufacturers/${slug}`}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="btn btn-ghost btn-sm"
             >
               View public page

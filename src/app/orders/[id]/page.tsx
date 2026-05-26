@@ -110,6 +110,7 @@ export default async function OrderPage({
       <SiteHeader />
       <main id="main" className="app-page">
         <div className="page-pad narrow">
+          <h1 className="sr-only">Order {order.reference}</h1>
           {paid && (
             <div className="alert alert-ok">
               ✓ Payment received. Thank you. Order {order.reference} is

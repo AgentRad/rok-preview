@@ -104,7 +104,7 @@ export default function TaxExemptReview({ rows }: { rows: ExemptRow[] }) {
                   <a
                     href={r.certificateUrl}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
                   >
                     View cert &rarr;

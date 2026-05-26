@@ -103,7 +103,7 @@ export default function SupplierDocsReview({
                 <a
                   href={r.url}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   style={{
                     fontSize: 12,
                     color: "var(--blue)",
