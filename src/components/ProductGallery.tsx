@@ -1,14 +1,15 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 
-type Image = { id: string; url: string };
+type GalleryImage = { id: string; url: string };
 
 export default function ProductGallery({
   images,
   name,
 }: {
-  images: Image[];
+  images: GalleryImage[];
   name: string;
 }) {
   const [active, setActive] = useState(0);
@@ -31,8 +32,16 @@ export default function ProductGallery({
         }}
         tabIndex={0}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={main.url} alt={name} className="pi-photo" />
+        <Image
+          src={main.url}
+          alt={name}
+          className="pi-photo"
+          width={1200}
+          height={1200}
+          sizes="(max-width: 768px) 100vw, 800px"
+          priority
+          unoptimized
+        />
       </div>
       {images.length > 1 && (
         <div className="gallery-thumbs" role="tablist" aria-label="Product images">
@@ -47,8 +56,15 @@ export default function ProductGallery({
               onClick={() => setActive(idx)}
               onMouseEnter={() => setActive(idx)}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.url} alt="" />
+              <Image
+                src={img.url}
+                alt=""
+                width={160}
+                height={160}
+                sizes="120px"
+                loading="lazy"
+                unoptimized
+              />
             </button>
           ))}
         </div>

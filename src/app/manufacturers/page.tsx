@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
 import { siteUrl } from "@/lib/site-url";
 import { prisma } from "@/lib/db";
@@ -196,8 +197,15 @@ export default async function ManufacturersPage() {
                   >
                     <div className="brand-card-logo">
                       {b.logoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={b.logoUrl} alt={`${b.name} logo`} />
+                        <Image
+                          src={b.logoUrl}
+                          alt={`${b.name} logo`}
+                          width={120}
+                          height={120}
+                          sizes="80px"
+                          loading="lazy"
+                          unoptimized
+                        />
                       ) : (
                         <div className="brand-card-placeholder">
                           {b.name.slice(0, 2).toUpperCase()}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { siteUrl } from "@/lib/site-url";
@@ -183,8 +184,15 @@ export default async function ManufacturerStorefront({
             <div className="mfr-hero-grid">
               <div className="mfr-hero-mark">
                 {brandData.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={brandData.logoUrl} alt={`${brand} logo`} />
+                  <Image
+                    src={brandData.logoUrl}
+                    alt={`${brand} logo`}
+                    width={200}
+                    height={200}
+                    sizes="160px"
+                    priority
+                    unoptimized
+                  />
                 ) : (
                   <div className="mfr-hero-placeholder">
                     {brand.slice(0, 2).toUpperCase()}

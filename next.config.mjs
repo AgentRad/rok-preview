@@ -3,6 +3,16 @@ import { withSentryConfig } from "@sentry/nextjs";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  images: {
+    // Allow-list for next/image optimizer. Anything outside this list is
+    // rendered via the `unoptimized` prop so we still get sizing + lazy
+    // loading without the optimizer needing to fetch arbitrary URLs.
+    remotePatterns: [
+      { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
+      { protocol: "https", hostname: "files.stripe.com" },
+      { protocol: "https", hostname: "resend.com" },
+    ],
+  },
   async rewrites() {
     return [
       // Browsers auto-request /favicon.ico and /apple-touch-icon.png from
