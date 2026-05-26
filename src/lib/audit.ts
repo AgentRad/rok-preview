@@ -38,6 +38,17 @@ export const AUDIT_ACTIONS = [
   // when the next payout nets it back down.
   "OWED_INCURRED",
   "OWED_RECOVERED",
+  // Polish 12 L4: dedicated action for a failed Connect transfer in
+  // ensurePayoutsForOrder / payout-retry. Replaces the misleading
+  // PAYOUT_MARKED_PAID + "Transfer FAILED" summary the pre-fix code
+  // wrote when the transfer never landed.
+  "PAYOUT_TRANSFER_FAILED",
+  // Polish 12 M3: quote lifecycle audit trail.
+  "QUOTE_SUBMITTED",
+  "QUOTE_PRICED",
+  "QUOTE_DECLINED",
+  "QUOTE_ACCEPTED",
+  "QUOTE_EXPIRED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

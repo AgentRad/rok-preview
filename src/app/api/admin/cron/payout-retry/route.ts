@@ -3,20 +3,20 @@ import { prisma } from "@/lib/db";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { createTransferToSupplier } from "@/lib/stripe-connect";
 import { captureError } from "@/lib/observability";
+import { settlePayoutSuccess, plannedRecoveryAtRetry } from "@/lib/payouts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
  * Retry FAILED payouts. Exponential backoff per attempt:
- *   attempt 1 -> 1h after last failure
- *   attempt 2 -> 6h
- *   attempt 3 -> 24h
- *   attempt 4 -> 3d
- *   attempt 5 -> 7d (final auto attempt; after this admin intervention)
+ *   attempt 1 -> 1h, 2 -> 6h, 3 -> 24h, 4 -> 3d, 5 -> 7d (final).
  *
- * Caps at MAX_ATTEMPTS so a permanently-broken Connect account doesn't
- * spam Stripe forever.
+ * Polish 12 C3: when the transfer now succeeds, settlePayoutSuccess()
+ * re-computes the owed recovery against the CURRENT supplier balance
+ * (not the stale Stage-1 plan) and decrements only inside the same
+ * transaction that flips Payout -> PAID. The pre-fix path decremented
+ * owed up-front and lost the money on transfer failure.
  */
 const MAX_ATTEMPTS = 5;
 const BACKOFF_HOURS = [1, 6, 24, 72, 168];
@@ -57,11 +57,25 @@ export async function GET(req: Request) {
         orderId: payout.orderId,
         payoutReference: payout.reference,
       });
+      // Stage 3a success path. Recompute planned recovery vs current
+      // owed balance, then flip to PAID + decrement atomically.
+      const planned = await plannedRecoveryAtRetry({
+        supplierId: payout.supplierId,
+        payoutAmountCents: payout.amountCents,
+        noteHint: payout.note,
+      });
+      await settlePayoutSuccess({
+        payoutId: payout.id,
+        supplierId: payout.supplierId,
+        orderId: payout.orderId,
+        payoutReference: payout.reference,
+        plannedOwedRecovery: planned,
+        stripeTransferId: transferId,
+        supplierName: payout.supplier.name,
+      });
       await prisma.payout.update({
         where: { id: payout.id },
         data: {
-          status: "PROCESSING",
-          stripeTransferId: transferId || undefined,
           retryAttempts: { increment: 1 },
           lastRetryAt: new Date(),
           failureReason: "",
