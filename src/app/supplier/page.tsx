@@ -517,7 +517,7 @@ export default async function SupplierDashboard({
                       <th>Your items</th>
                       <th>Status</th>
                       <th className="num">Your total</th>
-                      <th></th>
+                      <th><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>

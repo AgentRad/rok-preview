@@ -203,7 +203,7 @@ export default async function AdminConsole() {
                       <th>Status</th>
                       <th className="num">Total</th>
                       <th className="num">Fee</th>
-                      <th></th>
+                      <th><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -270,7 +270,7 @@ export default async function AdminConsole() {
                       <th>Issued</th>
                       <th>Status</th>
                       <th className="num">Total</th>
-                      <th></th>
+                      <th><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -321,7 +321,7 @@ export default async function AdminConsole() {
                       <th>Buyer</th>
                       <th>Reason</th>
                       <th>Status</th>
-                      <th></th>
+                      <th><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -435,7 +435,7 @@ export default async function AdminConsole() {
                       <th>Buyer</th>
                       <th>Date</th>
                       <th>Status</th>
-                      <th></th>
+                      <th><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -487,7 +487,7 @@ export default async function AdminConsole() {
                     <th>Status</th>
                     <th className="num">Rating</th>
                     <th className="num">Listings</th>
-                    <th></th>
+                    <th><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>

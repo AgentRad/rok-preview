@@ -162,7 +162,7 @@ export default function SupplierTeam() {
                 <th>Email</th>
                 <th>Role</th>
                 <th>Joined</th>
-                <th></th>
+                <th><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>

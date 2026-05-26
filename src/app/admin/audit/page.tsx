@@ -209,6 +209,10 @@ export default async function AdminAuditPage({
                     {rows.map((r) => (
                       <tr key={r.id}>
                         <td style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                          {/* Audit log uses UTC ISO format intentionally so
+                              forensic timestamps don't drift across the
+                              reviewer's local timezone. Every other page
+                              uses locale date for readability. */}
                           {r.createdAt.toISOString().replace("T", " ").slice(0, 19)}
                         </td>
                         <td style={{ fontSize: 12.5 }}>{r.actorEmail}</td>

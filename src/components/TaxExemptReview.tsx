@@ -74,7 +74,7 @@ export default function TaxExemptReview({ rows }: { rows: ExemptRow[] }) {
               <th>Cert</th>
               <th>Uploaded</th>
               <th>Status</th>
-              <th></th>
+              <th><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>

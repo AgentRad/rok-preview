@@ -109,7 +109,7 @@ export default function ApplicationReview({
             <th>Category</th>
             <th>Trading</th>
             <th>Certifications</th>
-            <th></th>
+            <th><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>

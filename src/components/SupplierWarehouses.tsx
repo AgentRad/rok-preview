@@ -136,7 +136,7 @@ export default function SupplierWarehouses({
                 <th>State</th>
                 <th>ZIP</th>
                 <th>Default</th>
-                <th></th>
+                <th><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>

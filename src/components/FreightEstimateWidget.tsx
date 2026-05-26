@@ -123,7 +123,9 @@ export default function FreightEstimateWidget({
                 </span>
                 <span className="freight-widget-rate-price">
                   ${(r.cents / 100).toFixed(2)}
-                  {r.etaDays != null ? ` · ${r.etaDays}d` : ""}
+                  {r.etaDays != null
+                    ? ` · ${r.etaDays} day${r.etaDays === 1 ? "" : "s"}`
+                    : ""}
                 </span>
               </li>
             ))}

@@ -521,7 +521,7 @@ export default function SupplierProductManager({
                 <th>Photos</th>
                 <th>Freight</th>
                 <th>Status</th>
-                <th></th>
+                <th><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>

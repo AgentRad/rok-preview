@@ -87,7 +87,7 @@ export default function SupplierDocsReview({
             <th>Uploaded</th>
             <th>Status</th>
             <th>Review note</th>
-            <th></th>
+            <th><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
