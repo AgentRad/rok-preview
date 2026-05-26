@@ -110,6 +110,10 @@ model User {
   // history is retained for tax/accounting. Hard-delete happens after
   // 30 days unless the user recovers.
   deletedAt                  DateTime?
+  // PLH-1 commit 2: set by the anonymize-deleted-accounts cron 30 days
+  // after deletedAt. After this point, email and name are scrubbed but
+  // Order rows remain intact for tax/accounting.
+  anonymizedAt               DateTime?
   supplier                   Supplier?
   orders                     Order[]
   resetTokens                PasswordResetToken[]

@@ -10,6 +10,7 @@ import {
   sendEmailChangeNotice,
 } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,13 @@ const EXPIRES_HOURS = 24;
  * silently rotate the recovery vector.
  */
 export async function POST(req: Request) {
+  const limit = await rateLimit("generic", clientIp(req));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429 }
+    );
+  }
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });

@@ -11,6 +11,7 @@ import {
 } from "@/lib/account-tokens";
 import { sendAccountDeletionScheduled } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,13 @@ const GRACE_DAYS = 30;
  * Requires the current password to confirm intent.
  */
 export async function POST(req: Request) {
+  const limit = await rateLimit("generic", clientIp(req));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429 }
+    );
+  }
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
@@ -60,6 +68,25 @@ export async function POST(req: Request) {
           "Admin accounts can't self-delete from the UI. Have another admin remove this account from the database.",
       },
       { status: 403 }
+    );
+  }
+  // PLH-1 commit 2: block self-delete when the buyer has open orders.
+  // Schema has no deliveredAt; FULFILLED orders count as in-flight until
+  // a future deliveredAt field separates them. PENDING + PAID + FULFILLED
+  // are all "open" from a refund/dispute standpoint.
+  const openOrders = await prisma.order.count({
+    where: {
+      buyerId: user.id,
+      status: { in: ["PENDING", "PAID", "FULFILLED"] },
+    },
+  });
+  if (openOrders > 0) {
+    return NextResponse.json(
+      {
+        error: `You have ${openOrders} open order(s). Cancel or complete them, or contact support before deleting your account.`,
+        openOrders,
+      },
+      { status: 400 }
     );
   }
   // PLH-1: bump sessionsValidFrom so any other browser this user is signed

@@ -6,6 +6,19 @@ import { formatCents } from "./money";
 import { replyAddress, type ThreadKind } from "./inbound-email";
 import { captureError } from "./observability";
 
+// PLH-1 commit 2: HTML-escape any user-supplied string we drop into an
+// email body. Subject lines (plain text) stay alone. The map covers the
+// five chars that change HTML structure or break out of attribute strings.
+function esc(s: string): string {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c]!));
+}
+
 type SendArgs = {
   to: string | string[];
   subject: string;
@@ -149,7 +162,7 @@ function buyerBranding(order: OrderLite): string {
     ? `<img src="${order.buyerCompanyLogoUrl}" alt="" width="56" height="56" style="border:1px solid #e2e0d9;border-radius:4px;padding:4px;background:#fff;object-fit:contain;vertical-align:middle;margin-right:10px;" />`
     : "";
   const name = order.buyerCompanyName
-    ? `<span style="font-weight:600;font-size:14px;color:#1a1916;">${order.buyerCompanyName}</span>`
+    ? `<span style="font-weight:600;font-size:14px;color:#1a1916;">${esc(order.buyerCompanyName)}</span>`
     : "";
   return `<div style="margin:14px 0 6px;display:flex;align-items:center;">${logo}${name}</div>`;
 }
@@ -162,7 +175,7 @@ function lineRows(order: OrderLite): string {
   return order.items
     .map(
       (it) =>
-        `<tr><td style="padding:6px 0;font-size:13px;">${it.nameSnapshot} <span style="color:#9b988d;">(${it.skuSnapshot})</span></td><td style="padding:6px 0;font-size:13px;text-align:right;">× ${it.qty}</td></tr>`
+        `<tr><td style="padding:6px 0;font-size:13px;">${esc(it.nameSnapshot)} <span style="color:#9b988d;">(${esc(it.skuSnapshot)})</span></td><td style="padding:6px 0;font-size:13px;text-align:right;">× ${it.qty}</td></tr>`
     )
     .join("");
 }
@@ -182,8 +195,8 @@ function totals(order: OrderLite): string {
 export async function sendOrderConfirmation(order: OrderLite): Promise<void> {
   const url = siteUrl(`/orders/${order.id}`);
   const body = `
-    <p>Hi ${order.buyerName},</p>
-    <p>We have received your order <strong>${order.reference}</strong>. Payment is the next step. Once received, the supplier will begin preparing your parts.</p>
+    <p>Hi ${esc(order.buyerName)},</p>
+    <p>We have received your order <strong>${esc(order.reference)}</strong>. Payment is the next step. Once received, the supplier will begin preparing your parts.</p>
     ${buyerBranding(order)}
     <table cellpadding="0" cellspacing="0" width="100%" style="margin:12px 0;">${lineRows(order)}</table>
     ${totals(order)}
@@ -199,8 +212,8 @@ export async function sendPaymentReceived(order: OrderLite): Promise<void> {
   const url = siteUrl(`/orders/${order.id}`);
   const invoiceUrl = siteUrl(`/orders/${order.id}/invoice`);
   const body = `
-    <p>Hi ${order.buyerName},</p>
-    <p>Thank you. Payment for order <strong>${order.reference}</strong> has been received and the supplier has been notified. We will keep you posted as it moves through fulfillment.</p>
+    <p>Hi ${esc(order.buyerName)},</p>
+    <p>Thank you. Payment for order <strong>${esc(order.reference)}</strong> has been received and the supplier has been notified. We will keep you posted as it moves through fulfillment.</p>
     ${buyerBranding(order)}
     ${totals(order)}
     <p style="margin-top:22px;">${btn(url, "Track order")} &nbsp; <a href="${invoiceUrl}" style="color:#1a1916;font-weight:600;text-decoration:underline;">View invoice</a></p>`;
@@ -217,14 +230,14 @@ export async function sendOrderShipped(order: OrderLite): Promise<void> {
   const trackBlock = order.carrier
     ? `<div style="margin:14px 0;padding:14px 16px;background:#f3f2ef;border-left:3px solid #1a1916;">
          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6f6d64;">Tracking</div>
-         <div style="font-weight:700;margin-top:4px;">${order.carrier}</div>
-         <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#6f6d64;">${order.trackingCode ?? ""}</div>
+         <div style="font-weight:700;margin-top:4px;">${esc(order.carrier)}</div>
+         <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#6f6d64;">${esc(order.trackingCode ?? "")}</div>
          ${link ? `<div style="margin-top:10px;"><a href="${link}" style="color:#1a1916;font-weight:600;text-decoration:underline;">Track with the carrier</a></div>` : ""}
        </div>`
     : "";
   const body = `
-    <p>Hi ${order.buyerName},</p>
-    <p>Your order <strong>${order.reference}</strong> has shipped.</p>
+    <p>Hi ${esc(order.buyerName)},</p>
+    <p>Your order <strong>${esc(order.reference)}</strong> has shipped.</p>
     ${buyerBranding(order)}
     ${trackBlock}
     <p>For LTL freight, please inspect the shipment on arrival and note any damage on the carrier delivery receipt before signing.</p>
@@ -251,9 +264,9 @@ export async function sendOrderRefunded(
   const url = siteUrl(`/orders/${order.id}`);
   const isFull = refundedCents >= order.totalCents;
   const body = `
-    <p>Hi ${order.buyerName},</p>
-    <p>${isFull ? "A full refund" : `A partial refund of <strong>${formatCents(refundedCents)}</strong>`} has been issued for order <strong>${order.reference}</strong>.</p>
-    ${reason ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Reason:</strong> ${reason}</p>` : ""}
+    <p>Hi ${esc(order.buyerName)},</p>
+    <p>${isFull ? "A full refund" : `A partial refund of <strong>${formatCents(refundedCents)}</strong>`} has been issued for order <strong>${esc(order.reference)}</strong>.</p>
+    ${reason ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Reason:</strong> ${esc(reason)}</p>` : ""}
     <p>Funds will reach your card or bank in 5 to 10 business days, depending on your issuer. The refund will appear as a credit on the statement that includes the original PartsPort charge.</p>
     ${buyerBranding(order)}
     <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
@@ -267,8 +280,8 @@ export async function sendOrderRefunded(
 export async function sendOrderDelivered(order: OrderLite): Promise<void> {
   const url = siteUrl(`/orders/${order.id}`);
   const body = `
-    <p>Hi ${order.buyerName},</p>
-    <p>Order <strong>${order.reference}</strong> has been marked delivered. If anything is missing or damaged, please report it within the claim window in the supplier agreement.</p>
+    <p>Hi ${esc(order.buyerName)},</p>
+    <p>Order <strong>${esc(order.reference)}</strong> has been marked delivered. If anything is missing or damaged, please report it within the claim window in the supplier agreement.</p>
     <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
   await send({
     to: order.buyerEmail,
@@ -296,8 +309,8 @@ export async function sendRfqReceived(quote: QuoteLite): Promise<void> {
   const url = siteUrl(`/quotes/${quote.id}`);
   const reply = replyAddress("quote", quote.id);
   const body = `
-    <p>Hi ${quote.buyerName},</p>
-    <p>We have received your request for a quote on <strong>${quote.productName}</strong> (SKU ${quote.productSku}, qty ${quote.qty}). A vetted supplier is preparing a price. You will see the quote at the link below, typically within one business day.</p>
+    <p>Hi ${esc(quote.buyerName)},</p>
+    <p>We have received your request for a quote on <strong>${esc(quote.productName)}</strong> (SKU ${esc(quote.productSku)}, qty ${quote.qty}). A vetted supplier is preparing a price. You will see the quote at the link below, typically within one business day.</p>
     <p style="margin-top:22px;">${btn(url, "View RFQ")}</p>`;
   await send({
     to: quote.buyerEmail,
@@ -309,8 +322,8 @@ export async function sendRfqReceived(quote: QuoteLite): Promise<void> {
   if (quote.supplierEmail) {
     const supplierUrl = siteUrl(`/supplier`);
     const supplierBody = `
-      <p>A new RFQ has landed for <strong>${quote.productName}</strong> (SKU ${quote.productSku}, qty ${quote.qty}) from ${quote.buyerName}.</p>
-      ${quote.message ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;">${quote.message}</p>` : ""}
+      <p>A new RFQ has landed for <strong>${esc(quote.productName)}</strong> (SKU ${esc(quote.productSku)}, qty ${quote.qty}) from ${esc(quote.buyerName)}.</p>
+      ${quote.message ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;">${esc(quote.message)}</p>` : ""}
       <p>Please respond with a price and lead time as soon as possible. Buyer experience depends on quote speed.</p>
       <p style="margin-top:22px;">${btn(supplierUrl, "Open supplier dashboard")}</p>`;
     await send({
@@ -329,11 +342,11 @@ export async function sendQuoteReady(quote: QuoteLite): Promise<void> {
       ? `<p>Unit price: <strong>${formatCents(quote.quotedUnitCents)}</strong> × ${quote.qty}</p>`
       : "";
   const noteBlock = quote.quoteNote
-    ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Supplier note:</strong> ${quote.quoteNote}</p>`
+    ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Supplier note:</strong> ${esc(quote.quoteNote)}</p>`
     : "";
   const body = `
-    <p>Hi ${quote.buyerName},</p>
-    <p>${quote.supplierName} has responded to your RFQ <strong>${quote.reference}</strong> for ${quote.productName}.</p>
+    <p>Hi ${esc(quote.buyerName)},</p>
+    <p>${esc(quote.supplierName)} has responded to your RFQ <strong>${esc(quote.reference)}</strong> for ${esc(quote.productName)}.</p>
     ${priceBlock}
     ${noteBlock}
     <p style="margin-top:22px;">${btn(url, "Review the quote")}</p>`;
@@ -356,12 +369,12 @@ export async function sendApplicationStatus(args: {
     const credsBlock = args.tempPassword
       ? `<p>A temporary sign-in has been created. Please change your password after the first sign-in.</p>
          <p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:13px;">
-           <strong>Email:</strong> ${args.to}<br><strong>Temporary password:</strong> ${args.tempPassword}
+           <strong>Email:</strong> ${esc(args.to)}<br><strong>Temporary password:</strong> ${esc(args.tempPassword)}
          </p>`
       : "<p>Use your existing PartsPort account to sign in.</p>";
     const body = `
-      <p>Hi ${args.contactName},</p>
-      <p>Your application for <strong>${args.companyName}</strong> has been approved. Welcome to PartsPort.</p>
+      <p>Hi ${esc(args.contactName)},</p>
+      <p>Your application for <strong>${esc(args.companyName)}</strong> has been approved. Welcome to PartsPort.</p>
       ${credsBlock}
       <p style="margin-top:22px;">${btn(url, "Sign in")}</p>`;
     await send({
@@ -371,8 +384,8 @@ export async function sendApplicationStatus(args: {
     });
   } else {
     const body = `
-      <p>Hi ${args.contactName},</p>
-      <p>Thank you for your interest. After review, we are not able to onboard <strong>${args.companyName}</strong> at this time. You can reach out at support@partsport.agentgaming.gg if you would like more detail.</p>`;
+      <p>Hi ${esc(args.contactName)},</p>
+      <p>Thank you for your interest. After review, we are not able to onboard <strong>${esc(args.companyName)}</strong> at this time. You can reach out at support@partsport.agentgaming.gg if you would like more detail.</p>`;
     await send({
       to: args.to,
       subject: `Update on your PartsPort application`,
@@ -393,7 +406,7 @@ export async function sendThreadMessage(args: {
 }): Promise<void> {
   const safeBody = args.body
     .split("\n")
-    .map((line) => `<p style="margin:0 0 8px;">${line || "&nbsp;"}</p>`)
+    .map((line) => `<p style="margin:0 0 8px;">${line ? esc(line) : "&nbsp;"}</p>`)
     .join("");
   const reply = replyAddress(args.threadKind, args.threadId);
   const replyHint = reply
@@ -401,7 +414,7 @@ export async function sendThreadMessage(args: {
     : `<p style="font-size:12px;color:#6f6d64;margin-top:14px;">Reply on PartsPort to keep the thread tidy.</p>`;
   const html = wrap(
     "New message",
-    `<p>${args.senderName} sent you a message about ${args.context}:</p>
+    `<p>${esc(args.senderName)} sent you a message about ${esc(args.context)}:</p>
      <div style="margin:14px 0;padding:14px 16px;background:#f3f2ef;border-left:3px solid #1a1916;">${safeBody}</div>
      <p style="margin-top:18px;">${btn(args.threadUrl, "Open thread")}</p>
      ${replyHint}`,
@@ -425,12 +438,12 @@ export async function sendSupplierWelcome(args: {
   const credsBlock = args.tempPassword
     ? `<p>A temporary sign-in has been created. Please change your password after the first sign-in (use the Forgot password link if needed).</p>
        <p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:13px;">
-         <strong>Email:</strong> ${args.to}<br><strong>Temporary password:</strong> ${args.tempPassword}
+         <strong>Email:</strong> ${esc(args.to)}<br><strong>Temporary password:</strong> ${esc(args.tempPassword)}
        </p>`
     : "<p>Use your existing PartsPort account to sign in. Your supplier dashboard is ready.</p>";
   const body = `
-    <p>Hi ${args.contactName},</p>
-    <p>${args.companyName} has been set up on PartsPort as a verified supplier. Welcome aboard.</p>
+    <p>Hi ${esc(args.contactName)},</p>
+    <p>${esc(args.companyName)} has been set up on PartsPort as a verified supplier. Welcome aboard.</p>
     ${credsBlock}
     <p>Once you sign in, you can list parts, manage stock and pricing, respond to RFQs, see incoming orders, and invite your team to specific roles.</p>
     <p style="margin-top:22px;">${btn(url, "Sign in to PartsPort")}</p>`;
@@ -449,8 +462,8 @@ export async function sendSupplierInvite(args: {
   expiresDays: number;
 }): Promise<void> {
   const body = `
-    <p>${args.inviterName} invited you to join ${args.companyName}'s PartsPort account.</p>
-    <p>PartsPort is the marketplace where you sell parts, respond to quote requests, manage orders, and get paid on dispatch. The link below adds you to ${args.companyName}'s team within the next ${args.expiresDays} days.</p>
+    <p>${esc(args.inviterName)} invited you to join ${esc(args.companyName)}'s PartsPort account.</p>
+    <p>PartsPort is the marketplace where you sell parts, respond to quote requests, manage orders, and get paid on dispatch. The link below adds you to ${esc(args.companyName)}'s team within the next ${args.expiresDays} days.</p>
     <p style="margin-top:22px;">${btn(args.acceptUrl, "Accept invitation")}</p>
     <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">If you don't have an account yet, you'll be asked to create one in the same step.</p>`;
   await send({
@@ -468,7 +481,7 @@ export async function sendEmailVerification(args: {
   expiresHours: number;
 }): Promise<void> {
   const body = `
-    <p>Hi ${args.name},</p>
+    <p>Hi ${esc(args.name)},</p>
     <p>Confirm this email to finish setting up your PartsPort account. The link below works for the next ${args.expiresHours} hours.</p>
     <p style="margin-top:22px;">${btn(args.verifyUrl, "Verify email")}</p>
     <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">If you didn't create a PartsPort account, you can ignore this email and the address won't be added to anything.</p>
@@ -488,8 +501,8 @@ export async function sendEmailChangeNotice(args: {
   newEmail: string;
 }): Promise<void> {
   const body = `
-    <p>Hi ${args.name},</p>
-    <p>The email on your PartsPort account was changed from <strong>${args.oldEmail}</strong> to <strong>${args.newEmail}</strong>. From now on, sign-ins and notifications use the new address.</p>
+    <p>Hi ${esc(args.name)},</p>
+    <p>The email on your PartsPort account was changed from <strong>${esc(args.oldEmail)}</strong> to <strong>${esc(args.newEmail)}</strong>. From now on, sign-ins and notifications use the new address.</p>
     <p>If you didn't make this change, email <a href="mailto:security@partsport.agentgaming.gg">security@partsport.agentgaming.gg</a> immediately. We'll lock the account and roll the change back.</p>`;
   await send({
     to: args.to,
@@ -506,7 +519,7 @@ export async function sendEmailChangeConfirm(args: {
   expiresHours: number;
 }): Promise<void> {
   const body = `
-    <p>Hi ${args.name},</p>
+    <p>Hi ${esc(args.name)},</p>
     <p>To switch your PartsPort sign-in to this email address, click the button below within the next ${args.expiresHours} hours. The change doesn't take effect until you confirm.</p>
     <p style="margin-top:22px;">${btn(args.confirmUrl, "Confirm new email")}</p>
     <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">If you didn't request this change, ignore this email.</p>`;
@@ -525,7 +538,7 @@ export async function sendAccountDeletionScheduled(args: {
   recoverUrl: string;
 }): Promise<void> {
   const body = `
-    <p>Hi ${args.name},</p>
+    <p>Hi ${esc(args.name)},</p>
     <p>Your PartsPort account is scheduled for deletion. We've anonymized your profile and you'll be signed out everywhere. After ${args.graceDays} days, the remaining personal data is hard-deleted.</p>
     <p>If you changed your mind, sign in within the grace period to recover the account:</p>
     <p style="margin-top:22px;">${btn(args.recoverUrl, "Recover account")}</p>
@@ -545,8 +558,8 @@ export async function sendAccountDeletionScheduled(args: {
 export async function sendQuoteDeclined(quote: QuoteLite): Promise<void> {
   const url = siteUrl(`/catalog`);
   const body = `
-    <p>Hi ${quote.buyerName},</p>
-    <p>${quote.supplierName} is unable to quote your RFQ <strong>${quote.reference}</strong> for ${quote.productName} (SKU ${quote.productSku}, qty ${quote.qty}) at this time.</p>
+    <p>Hi ${esc(quote.buyerName)},</p>
+    <p>${esc(quote.supplierName)} is unable to quote your RFQ <strong>${esc(quote.reference)}</strong> for ${esc(quote.productName)} (SKU ${esc(quote.productSku)}, qty ${quote.qty}) at this time.</p>
     <p>You can search for similar parts on PartsPort and submit a new RFQ to other suppliers whenever you're ready.</p>
     <p style="margin-top:22px;">${btn(url, "Browse the catalog")}</p>`;
   await send({
@@ -573,10 +586,10 @@ export async function sendReturnApproved(args: ReturnEmailArgs): Promise<void> {
       ? `<p>Approved refund: <strong>${formatCents(args.amountCents)}</strong>. Funds reach your card in 5 to 10 business days.</p>`
       : "";
   const body = `
-    <p>Hi ${args.buyerName},</p>
-    <p>Your return request <strong>${args.returnReference}</strong> on order <strong>${args.orderReference}</strong> has been approved.</p>
+    <p>Hi ${esc(args.buyerName)},</p>
+    <p>Your return request <strong>${esc(args.returnReference)}</strong> on order <strong>${esc(args.orderReference)}</strong> has been approved.</p>
     ${amountLine}
-    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Note:</strong> ${args.note}</p>` : ""}
+    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Note:</strong> ${esc(args.note)}</p>` : ""}
     <p style="margin-top:22px;">${btn(url, "View orders")}</p>`;
   await send({
     to: args.to,
@@ -588,9 +601,9 @@ export async function sendReturnApproved(args: ReturnEmailArgs): Promise<void> {
 export async function sendReturnRejected(args: ReturnEmailArgs): Promise<void> {
   const url = siteUrl(`/orders`);
   const body = `
-    <p>Hi ${args.buyerName},</p>
-    <p>Your return request <strong>${args.returnReference}</strong> on order <strong>${args.orderReference}</strong> has been declined.</p>
-    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Reason:</strong> ${args.note}</p>` : ""}
+    <p>Hi ${esc(args.buyerName)},</p>
+    <p>Your return request <strong>${esc(args.returnReference)}</strong> on order <strong>${esc(args.orderReference)}</strong> has been declined.</p>
+    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Reason:</strong> ${esc(args.note)}</p>` : ""}
     <p>Reach support@partsport.agentgaming.gg if you'd like to discuss.</p>
     <p style="margin-top:22px;">${btn(url, "View orders")}</p>`;
   await send({
@@ -603,9 +616,9 @@ export async function sendReturnRejected(args: ReturnEmailArgs): Promise<void> {
 export async function sendReturnResolved(args: ReturnEmailArgs): Promise<void> {
   const url = siteUrl(`/orders`);
   const body = `
-    <p>Hi ${args.buyerName},</p>
-    <p>Your return request <strong>${args.returnReference}</strong> on order <strong>${args.orderReference}</strong> is now marked resolved. Thanks for your patience.</p>
-    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;">${args.note}</p>` : ""}
+    <p>Hi ${esc(args.buyerName)},</p>
+    <p>Your return request <strong>${esc(args.returnReference)}</strong> on order <strong>${esc(args.orderReference)}</strong> is now marked resolved. Thanks for your patience.</p>
+    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;">${esc(args.note)}</p>` : ""}
     <p style="margin-top:22px;">${btn(url, "View orders")}</p>`;
   await send({
     to: args.to,
@@ -625,10 +638,10 @@ export async function sendReturnNotifySupplier(args: {
 }): Promise<void> {
   const url = siteUrl(`/supplier`);
   const body = `
-    <p>A return on order <strong>${args.orderReference}</strong> for ${args.supplierName} has been marked <strong>${args.status}</strong> by admin.</p>
-    <p>Reason: ${args.reason}</p>
-    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Note:</strong> ${args.note}</p>` : ""}
-    <p>Reference: ${args.returnReference}.</p>
+    <p>A return on order <strong>${esc(args.orderReference)}</strong> for ${esc(args.supplierName)} has been marked <strong>${esc(args.status)}</strong> by admin.</p>
+    <p>Reason: ${esc(args.reason)}</p>
+    ${args.note ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Note:</strong> ${esc(args.note)}</p>` : ""}
+    <p>Reference: ${esc(args.returnReference)}.</p>
     <p style="margin-top:22px;">${btn(url, "Open supplier dashboard")}</p>`;
   await send({
     to: args.to,
@@ -644,7 +657,7 @@ export async function sendPasswordReset(args: {
   expiresMinutes: number;
 }): Promise<void> {
   const body = `
-    <p>Hi ${args.name},</p>
+    <p>Hi ${esc(args.name)},</p>
     <p>Someone requested a password reset for your PartsPort account. If that was you, use the button below within the next ${args.expiresMinutes} minutes. If not, you can safely ignore this email.</p>
     <p style="margin-top:22px;">${btn(args.resetUrl, "Reset password")}</p>
     <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">Or paste this link into your browser: ${args.resetUrl}</p>`;
@@ -652,6 +665,84 @@ export async function sendPasswordReset(args: {
     to: args.to,
     subject: `Reset your PartsPort password`,
     html: wrap("Password reset", body),
+    from: FROM_AUTH,
+  });
+}
+
+/**
+ * PLH-1 commit 2: 2FA-disabled notification. Fires on a successful
+ * /api/auth/2fa/disable so the user notices an attacker stripping the
+ * second factor even if the attacker has the password and session.
+ */
+export async function sendTwoFactorDisabled(args: {
+  to: string;
+  name: string;
+  ip: string;
+  when: Date;
+}): Promise<void> {
+  const body = `
+    <p>Hi ${esc(args.name)},</p>
+    <p>Two-factor authentication on your PartsPort account was just disabled.</p>
+    <p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;font-size:13px;">
+      <strong>When:</strong> ${esc(args.when.toUTCString())}<br>
+      <strong>IP:</strong> ${esc(args.ip)}
+    </p>
+    <p>If this was not you, email <a href="mailto:security@partsport.agentgaming.gg">security@partsport.agentgaming.gg</a> right away and reset your password.</p>`;
+  await send({
+    to: args.to,
+    subject: "Two-factor authentication disabled on your PartsPort account",
+    html: wrap("Two-factor disabled", body),
+    from: FROM_AUTH,
+  });
+}
+
+/**
+ * PLH-1 commit 2: enumeration-safe "address already registered" notice.
+ * Sent to the existing account holder when someone attempts to register
+ * with their email, while the public response looks identical to a new
+ * registration. Gives the real owner a heads-up + a reset link in case
+ * they forgot the account exists.
+ */
+export async function sendAddressAlreadyRegistered(args: {
+  to: string;
+  name: string;
+  resetUrl: string;
+}): Promise<void> {
+  const body = `
+    <p>Hi ${esc(args.name)},</p>
+    <p>Someone just tried to register a new PartsPort account using your email address. Your existing account is unchanged.</p>
+    <p>If that was you, you already have an account: use the password-reset link below if you forgot your password.</p>
+    <p style="margin-top:22px;">${btn(args.resetUrl, "Reset password")}</p>
+    <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">If it was not you, no action is needed. You can ignore this email.</p>`;
+  await send({
+    to: args.to,
+    subject: "Your PartsPort email was used to register",
+    html: wrap("Address already registered", body),
+    from: FROM_AUTH,
+  });
+}
+
+/**
+ * PLH-1 commit 2: enumeration-safe "sign-in attempt on deleted account"
+ * notice. Sent to the deleted-but-recoverable account holder when a
+ * login attempt comes in with the correct password. Public response is
+ * the same generic 401 used for wrong password, so we don't leak
+ * deletion state.
+ */
+export async function sendDeletedAccountSignInAttempt(args: {
+  to: string;
+  name: string;
+  recoverUrl: string;
+}): Promise<void> {
+  const body = `
+    <p>Hi ${esc(args.name)},</p>
+    <p>We noticed a sign-in attempt on your deleted PartsPort account.</p>
+    <p>The account is scheduled for deletion. If you want it back, use the recovery link below within the grace window.</p>
+    <p style="margin-top:22px;">${btn(args.recoverUrl, "Recover account")}</p>`;
+  await send({
+    to: args.to,
+    subject: "Sign-in attempt on your deleted PartsPort account",
+    html: wrap("Sign-in attempt", body),
     from: FROM_AUTH,
   });
 }

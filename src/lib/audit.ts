@@ -49,6 +49,10 @@ export const AUDIT_ACTIONS = [
   "QUOTE_DECLINED",
   "QUOTE_ACCEPTED",
   "QUOTE_EXPIRED",
+  // PLH-1 commit 2: account lifecycle.
+  "USER_DELETED_UNVERIFIED",
+  "USER_ANONYMIZED",
+  "TWO_FACTOR_DISABLED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server";
+import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
-import { hashPassword, createSession } from "@/lib/auth";
+import { hashPassword } from "@/lib/auth";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { issueEmailVerification } from "@/lib/email-verification";
+import { normalizeName, normalizeEmail } from "@/lib/user-input";
+import { sendAddressAlreadyRegistered } from "@/lib/email";
+import { siteUrl } from "@/lib/site-url";
+
+export const runtime = "nodejs";
+
+const GENERIC_SUCCESS = {
+  ok: true,
+  verificationRequired: true,
+} as const;
 
 export async function POST(req: Request) {
   const ip = clientIp(req);
-  // Burst limit: at most 1 registration per minute from one IP. Catches
-  // rapid-fire bot signup; humans never hit this.
+  // Burst limit: 1 per minute per IP.
   const burst = await rateLimit("register:burst", ip);
   if (!burst.allowed) {
     return NextResponse.json(
@@ -18,7 +28,6 @@ export async function POST(req: Request) {
       }
     );
   }
-  // Hourly limit: 3 per hour per IP for the slower, more methodical bots.
   const limit = await rateLimit("register", ip);
   if (!limit.allowed) {
     return NextResponse.json(
@@ -30,35 +39,56 @@ export async function POST(req: Request) {
     );
   }
   const { name, email, password } = await req.json().catch(() => ({}));
+  const cleanName = normalizeName(name);
+  const cleanEmail = normalizeEmail(email);
   const pwLen = String(password || "").length;
-  if (!name || !email || !password || pwLen < 8 || pwLen > 128) {
+  if (!cleanName || !cleanEmail || !password || pwLen < 8 || pwLen > 128) {
     return NextResponse.json(
-      { error: "Name, email and a password between 8 and 128 characters are required." },
+      {
+        error:
+          "A valid name, email, and a password between 8 and 128 characters are required.",
+      },
       { status: 400 }
     );
   }
-  const normalized = String(email).toLowerCase().trim();
-  const existing = await prisma.user.findUnique({ where: { email: normalized } });
+  // PLH-1 commit 2: enumeration suppression. If the email is already in
+  // use, respond with the same generic success shape that a brand-new
+  // registration sees. Asynchronously mail the existing account holder
+  // a heads-up with a reset link so the real owner notices.
+  const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
   if (existing) {
-    return NextResponse.json(
-      { error: "An account with that email already exists." },
-      { status: 409 }
-    );
+    if (process.env.RESEND_API_KEY) {
+      // Issue a one-shot password-reset token and mail it. Mirrors the
+      // /api/auth/forgot-password flow.
+      try {
+        const raw = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(raw).digest("hex");
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+        await prisma.passwordResetToken.create({
+          data: { userId: existing.id, tokenHash, expiresAt },
+        });
+        await sendAddressAlreadyRegistered({
+          to: existing.email,
+          name: existing.name,
+          resetUrl: siteUrl(`/reset-password?token=${raw}`),
+        });
+      } catch {
+        // Non-fatal: a logging hiccup must not change the response shape.
+      }
+    }
+    return NextResponse.json(GENERIC_SUCCESS);
   }
   const user = await prisma.user.create({
     data: {
-      name: String(name).trim(),
-      email: normalized,
+      name: cleanName,
+      email: cleanEmail,
       passwordHash: await hashPassword(String(password)),
       role: "BUYER",
-      // emailVerified starts null; user clicks the link in the welcome
-      // email to flip it. State-changing endpoints (orders, listings)
-      // gate on isEmailVerified().
     },
   });
-  await createSession(user.id);
-  // Awaited so the email is guaranteed to fire before the response returns;
-  // see HABITS.md on Vercel killing the function after the response.
+  // PLH-1 commit 2: do NOT auto-sign-in. The user must click the link in
+  // the verification email before a session cookie is issued. /register
+  // routes the client to /verify-email-pending.
   await issueEmailVerification({
     userId: user.id,
     email: user.email,
@@ -66,7 +96,7 @@ export async function POST(req: Request) {
   });
   return NextResponse.json({
     ok: true,
-    role: user.role,
     verificationRequired: true,
+    email: user.email,
   });
 }

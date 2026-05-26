@@ -5,6 +5,7 @@ import {
   canonicalizeManufacturerName,
   manufacturerSlug,
 } from "@/lib/manufacturer-slug";
+import { normalizeName } from "@/lib/user-input";
 
 export const runtime = "nodejs";
 
@@ -20,10 +21,13 @@ export async function PATCH(req: Request) {
   // fields without re-sending the user's name.
   let name: string | undefined = undefined;
   if (body.name !== undefined) {
-    if (typeof body.name !== "string" || !body.name.trim()) {
+    // PLH-1 commit 2: apply the same normalization as /api/auth/register
+    // (trim, NFKC, strip zero-width, cap 80 chars).
+    const cleaned = normalizeName(body.name);
+    if (!cleaned) {
       return NextResponse.json({ error: "Name cannot be empty." }, { status: 400 });
     }
-    name = body.name.trim();
+    name = cleaned;
   }
 
   // Canonicalize the OEM brand name and suggest a canonical Product.manufacturer

@@ -2,10 +2,18 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const limit = await rateLimit("generic", clientIp(req));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429 }
+    );
+  }
   const body = await req.json().catch(() => ({}));
   const token = String(body.token || "").trim();
   const newPassword = String(body.password || "");

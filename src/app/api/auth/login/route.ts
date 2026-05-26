@@ -3,9 +3,19 @@ import { SignJWT } from "jose";
 import { prisma } from "@/lib/db";
 import { verifyPassword, createSession, getSessionSecret } from "@/lib/auth";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import {
+  issueAccountToken,
+  TOKEN_TYPES,
+} from "@/lib/account-tokens";
+import { sendDeletedAccountSignInAttempt } from "@/lib/email";
+import { siteUrl } from "@/lib/site-url";
 
 export const runtime = "nodejs";
 
+const INVALID_RESPONSE = {
+  body: { error: "Invalid email or password." },
+  status: 401 as const,
+};
 
 export async function POST(req: Request) {
   const ip = clientIp(req);
@@ -21,9 +31,6 @@ export async function POST(req: Request) {
   }
   const { email, password } = await req.json().catch(() => ({}));
   const normalized = String(email || "").toLowerCase().trim();
-  // Per-(IP, email) limit catches the case where one IP rotates between
-  // many guessed emails: the per-IP bucket above keeps replenishing as
-  // the bot moves to the next address.
   if (normalized) {
     const pairLimit = await rateLimit("login:email", `${ip}|${normalized}`);
     if (!pairLimit.allowed) {
@@ -40,28 +47,34 @@ export async function POST(req: Request) {
   }
   const user = await prisma.user.findUnique({ where: { email: normalized } });
   if (!user || !(await verifyPassword(String(password || ""), user.passwordHash))) {
-    return NextResponse.json(
-      { error: "Invalid email or password." },
-      { status: 401 }
-    );
+    return NextResponse.json(INVALID_RESPONSE.body, { status: INVALID_RESPONSE.status });
   }
-  // Soft-deleted accounts can't sign in until they hit the recovery link
-  // mailed when /api/account/delete fired. Hint the user at the email so
-  // they don't think the password's wrong.
+  // PLH-1 commit 2: no enumeration on deleted accounts. Public response
+  // is the same generic 401 the wrong-password case returns. We mail the
+  // owner a heads-up so the real user notices a deleted-account sign-in
+  // attempt (and gets the recovery link in their inbox even if the
+  // original deletion email was missed).
   if (user.deletedAt) {
-    return NextResponse.json(
-      {
-        error:
-          "This account is scheduled for deletion. Check your email for the recovery link we sent, or wait until the grace period ends.",
-        code: "ACCOUNT_DELETED",
-      },
-      { status: 403 }
-    );
+    if (process.env.RESEND_API_KEY) {
+      try {
+        const raw = await issueAccountToken({
+          userId: user.id,
+          type: TOKEN_TYPES.ACCOUNT_RECOVERY,
+          expiresInMs: 30 * 24 * 60 * 60 * 1000,
+        });
+        await sendDeletedAccountSignInAttempt({
+          to: user.email,
+          name: user.name,
+          recoverUrl: siteUrl(`/api/account/recover?token=${raw}`),
+        });
+      } catch {
+        // Non-fatal.
+      }
+    }
+    return NextResponse.json(INVALID_RESPONSE.body, { status: INVALID_RESPONSE.status });
   }
 
-  // 2FA gate. Password was right, but we don't drop the session cookie yet;
-  // instead we return a short-lived ticket the client passes to login-2fa
-  // along with the authenticator code.
+  // 2FA gate. Password was right, but we don't drop the session cookie yet.
   if (user.totpEnabledAt) {
     const ticket = await new SignJWT({ uid: user.id, kind: "2fa-pending" })
       .setProtectedHeader({ alg: "HS256" })

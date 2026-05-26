@@ -77,6 +77,10 @@ export async function createSession(userId: string): Promise<void> {
 export async function destroySession(): Promise<void> {
   const store = await cookies();
   store.delete(COOKIE);
+  // PLH-1 commit 2: drop the admin impersonation cookie too. Otherwise a
+  // signed-out admin can leave the "acting as" cookie behind which then
+  // attaches to whoever next signs in on that browser.
+  store.delete("pp_acting_as");
 }
 
 export async function getCurrentUser(): Promise<User | null> {

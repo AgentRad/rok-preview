@@ -53,7 +53,11 @@ export default function RegisterForm() {
       setBusy(false);
       return;
     }
-    router.push("/account");
+    // PLH-1 commit 2: registration no longer auto-signs-in. Send the
+    // user to the verify-email-pending page with the address pre-filled
+    // so they know to check their inbox.
+    const dest = `/verify-email-pending?email=${encodeURIComponent(email)}`;
+    router.push(dest);
     router.refresh();
   }
 

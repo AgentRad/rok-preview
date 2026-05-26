@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { issueEmailVerification } from "@/lib/email-verification";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,14 @@ export const runtime = "nodejs";
  * account. Rate-limited at the helper layer (60-second cooldown per user)
  * so this endpoint is safe to hammer.
  */
-export async function POST() {
+export async function POST(req: Request) {
+  const limit = await rateLimit("generic", clientIp(req));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429 }
+    );
+  }
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
