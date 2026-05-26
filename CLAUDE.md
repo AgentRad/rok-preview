@@ -158,6 +158,28 @@ endpoints, per-page SEO metadata.
 - `npx prisma migrate dev` for every schema change; commit the generated migration.
   `npx next build` must pass before every commit.
 
+## Doc maintenance (STANDING RULE for every chat)
+After any work is shipped AND verified by Rad in chat (he confirms it works,
+posts a passing PSI score, or otherwise OKs the result), update the relevant
+MD files in the SAME branch before moving on:
+
+- **CLAUDE.md** — update the Status section whenever a polish round, fix
+  round, or major feature ships. Include final state (scores, bundle size,
+  what shipped, what's pending). This is the single source of truth for
+  future chats about where the project is.
+- **docs/ORCHESTRATOR.md** — mark roadmap items DONE when they close.
+  Add new rounds when planned. Do not let it diverge from reality.
+- **LAUNCH_PLAN.md** — update when a business decision changes (fee rate,
+  vertical scope, processor choice, etc.).
+
+Do NOT update docs prematurely. Update only after Rad has confirmed the
+work passes in-chat. If a round is partially shipped (some items skipped),
+note skipped items and why in the doc so future chats can see the trail.
+
+The point: every fresh chat that opens this repo should be able to read
+CLAUDE.md + docs/ORCHESTRATOR.md and immediately know the real state
+without needing Rad to re-brief them.
+
 ## Run locally
 Needs Node.js and Postgres. `npm install`, set `.env` (`DATABASE_URL` +
 `DATABASE_URL_UNPOOLED`), `npx prisma migrate deploy`, `node prisma/seed.mjs`,
