@@ -21,7 +21,7 @@ delivery.
 - Energy & utilities is the **starting vertical**; the catalog is category-agnostic and
   meant to expand to other industries later.
 
-## Status (updated 2026-05-26, post P11.10)
+## Status (updated 2026-05-26, post PLH-2)
 The app is **deployed, ship-ready, and feature-complete for soft launch**.
 All pre-launch polish rounds P6 through P11.10 are shipped and verified.
 Final PageSpeed Mobile: **Performance 92 / Accessibility 100 / Best Practices 100 / SEO 100**.
@@ -125,7 +125,69 @@ Supplier Onboarding, and Multi-Supplier Orders.
   admin-initiated refunds do. Clawback extracted from refunds.ts into a
   shared primitive, called from both refundOrder() and the webhook.
 
-**Next up after PLH-1: real-world verification + production cutover.** No
+**PLH-2 (2026-05-26)**. Final pre-launch round. Two new features plus a
+five-area audit. Closes the loop on post-purchase comms and supplier
+self-service, and hardens five surfaces that had not been audited at the
+same depth as auth / payments / RFQ.
+
+New features shipped:
+- **Phase 1: inbound email threading activation.** `/api/email/inbound`
+  with provider switches (resend / postmark / sendgrid). Per-thread
+  Reply-To addresses signed with HMAC-SHA256 over `${kind}.${id}` in
+  `src/lib/inbound-email.ts`. Constant-time signature compare, sender
+  matched to a known user, thread membership re-checked (buyer / admin /
+  supplier-with-canSendMessages), quoted-history stripped, body capped
+  at 4 KB stored, fan-out via Next.js `after()` so the lambda stays alive
+  on Vercel. Fail-closed 404 when `INBOUND_EMAIL_PROVIDER` unset.
+- **Phase 2: supplier AI assistant** at `/api/supplier/ai-assistant`.
+  Streams Claude Sonnet 4.6 SSE-style responses grounded in the calling
+  supplier's own data (30-day orders, top SKUs, payouts, refunds 90d,
+  inventory, reserve and owed balances). Auth via `getActiveSupplierContext`,
+  rate-limited via the new `ai-assistant` bucket at 30/hour/supplier,
+  question capped at 2000 chars, system prompt cache-controlled,
+  question hash + token usage written to AuditLog. 503 when
+  `ANTHROPIC_API_KEY` unset.
+
+Phase 4 audit (5 sequential commits) closed 7 CRITICAL + 12 HIGH across
+five surfaces:
+- **4a CSV import** (A1..A6): batched `$transaction` writes with rollback,
+  compound `where { sku, supplierId }` for SKU ownership, BOM strip in
+  parseCsv, `csvSafeCell` formula-injection guard across all 5 CSV export
+  routes, 2 MB body cap, rate limit on import + cleanup.
+- **4b AI search** (B1..B2): query length cap 200, rate-limit
+  `ai-search` 20/hour/IP on the catalog RSC, in-memory LRU cache
+  (sha256-keyed, 30 min TTL, 500 entries), catalog passed to the prompt
+  capped at 500 rows with heuristic prefilter above that.
+- **4c OEM storefront** (C1..C4): `detectMagic` + `safeExt` on logo
+  upload, SVG dropped from logo allow-list (kills storefront XSS),
+  rate limits on `/api/oem/profile` + logo, strict URL parse +
+  http(s)-only protocol + 200-char cap on `manufacturerWebsite`.
+- **4d address book + notif prefs** (D1..D4): per-user
+  `notifyOrderEmails` / `notifyMarketingEmails` / `notifyProductUpdates`
+  flags with `shouldSendToUser` gate + Settings card + RFC 8058
+  List-Unsubscribe header + signed-token public unsubscribe route,
+  rate limits across all `/api/addresses/*` mutators, per-field length
+  caps with structured `{ field, error }` 400s, ISO alpha-2 country
+  regex + per-country postal regex, tax-exempt blob flipped to
+  `access:"private"` with audited download route + magic-byte MIME
+  sniff (PDF/JPEG/PNG only).
+- **4e crons** (E1..E5): auto-deliver routed through
+  `isAuthorizedCronRequest`, no-longer-swallowed email failures with
+  new `AUTO_DELIVER_EMAIL_FAILED` audit + `Order.deliveryEmailSentAt`,
+  reserve-release 3-stage flow with PENDING/COMPLETED/FAILED status
+  on `SupplierReserveTransaction` plus stage-3 re-read + Math.min,
+  `MAX_PER_RUN=200` cap on auto-deliver and reserve-release with
+  ASC ordering and `hasMore`, `ReconciliationState` singleton cursor
+  walking forward in 7-day windows.
+
+Migrations: `20260603000000_plh2_phase4d_notif_prefs`,
+`20260604000000_plh2_phase4e_cron_audit`.
+
+Auth flows + RFQ + returns + multi-supplier + refund clawback are now
+all hardened across P12 + PLH-1 + PLH-2. Remaining items are MEDIUM/LOW
+polish queued post-launch in `docs/ORCHESTRATOR.md`.
+
+**Next up after PLH-2: real-world verification + production cutover.** No
 more code-side polish rounds planned. See ship-ready playbook in
 `LAUNCH_PLAN.md`.
 

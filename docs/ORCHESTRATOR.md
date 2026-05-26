@@ -98,7 +98,7 @@ If the autonomous loop hits stop criteria, it posts a PR comment saying so and e
 
 If the autonomous loop crashes or gets stuck, Rad can resume the chat-based loop seamlessly — the docs in the repo brief any chat instantly.
 
-## Pre-launch hardening (P12 + PLH-1) — DONE
+## Pre-launch hardening (P12 + PLH-1 + PLH-2): DONE
 
 **P12 (2026-05-26).** RFQ accept auth, real freight/tax via checkout
 bridge, refund clawback ordering money-leak fix, quote expiry + idempotent
@@ -137,6 +137,45 @@ remaining CRITICAL plus relevant HIGH bugs across three surfaces:
 Migrations:
 - `prisma/migrations/20260602000000_plh1_session_security`
 - `prisma/migrations/20260602010000_plh1_commit2_anonymized_at`
+
+**PLH-2 (2026-05-26).** Final pre-launch round. Two new features plus a
+five-area audit, all CRITICAL + HIGH closed:
+1. **Phase 1: inbound email threading.** `/api/email/inbound` handles
+   resend / postmark / sendgrid payloads with per-thread Reply-To
+   addresses signed via HMAC-SHA256 (`src/lib/inbound-email.ts`). Constant
+   time signature compare, sender matched to a known user, thread
+   membership re-verified, quoted history stripped, body capped, fan-out
+   via Next.js `after()`. Fail-closed 404 when `INBOUND_EMAIL_PROVIDER`
+   unset.
+2. **Phase 2: supplier AI assistant.** `/api/supplier/ai-assistant` streams
+   Claude Sonnet 4.6 grounded in the supplier's own 30-day data window.
+   Auth via active supplier context, rate-limited 30/hour/supplier,
+   question capped 2000 chars, system prompt cache-controlled, question
+   hash + token usage audit-logged. 503 when `ANTHROPIC_API_KEY` unset.
+3. **Phase 4 audit** (5 sequential commits):
+   - 4a CSV import: transactional batches, compound SKU ownership where,
+     BOM strip, `csvSafeCell` across all 5 CSV export routes, 2 MB cap,
+     rate limit.
+   - 4b AI search: query cap, IP rate-limit on the catalog RSC, in-memory
+     LRU cache, catalog cap at 500 rows.
+   - 4c OEM storefront: `detectMagic` + `safeExt`, SVG dropped, rate
+     limits, URL validation.
+   - 4d addresses + notification prefs: per-user notification flags +
+     `shouldSendToUser` + List-Unsubscribe + public unsubscribe route,
+     rate limits + length caps + ISO country + postal regex, tax-exempt
+     blob private with audited download.
+   - 4e crons: `isAuthorizedCronRequest` on auto-deliver, no-swallow
+     email failures, reserve-release 3-stage with PENDING/COMPLETED/FAILED
+     status, `MAX_PER_RUN=200`, reconcile cursor + 7-day windows.
+
+Migrations:
+- `prisma/migrations/20260603000000_plh2_phase4d_notif_prefs`
+- `prisma/migrations/20260604000000_plh2_phase4e_cron_audit`
+
+All five PLH-2 audit areas (catalog CSV import, AI search, OEM
+storefront, address book + notification preferences, daily crons) are
+DONE. Auth flows + RFQ + returns + multi-supplier + refund clawback all
+hardened across P12 + PLH-1 + PLH-2.
 
 ## Launch-time decisions
 
