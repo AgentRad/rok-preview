@@ -34,8 +34,7 @@ const sentryWebpackPluginOptions = {
   org: process.env.SENTRY_ORG || "partsport",
   project: process.env.SENTRY_PROJECT || "partsport-web",
   authToken: process.env.SENTRY_AUTH_TOKEN,
-  disableLogger: true,
-  hideSourceMaps: true,
+  webpack: { treeshake: { removeDebugLogging: true } },
   widenClientFileUpload: false,
   tunnelRoute: "/monitoring",
 };

@@ -21,6 +21,10 @@ export default function HeaderNav({ user }: { user: NavUser }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userBtnRef = useRef<HTMLButtonElement>(null);
+  const navLinksRef = useRef<HTMLDivElement>(null);
+  const navToggleRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setCount(cartCount());
@@ -35,6 +39,40 @@ export default function HeaderNav({ user }: { user: NavUser }) {
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
+
+  // Escape + focus management for the user-menu dropdown.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        userBtnRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    const first = userMenuRef.current?.querySelector<HTMLElement>(
+      "a, button, [tabindex]:not([tabindex='-1'])"
+    );
+    first?.focus();
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+
+  // Escape + focus management for the mobile nav drawer.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setMobileOpen(false);
+        navToggleRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    const first = navLinksRef.current?.querySelector<HTMLElement>(
+      "a, button, [tabindex]:not([tabindex='-1'])"
+    );
+    first?.focus();
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -66,6 +104,7 @@ export default function HeaderNav({ user }: { user: NavUser }) {
 
         <div
           id="primary-nav-links"
+          ref={navLinksRef}
           className={"nav-links" + (mobileOpen ? " open" : "")}
         >
           <Link href="/catalog" onClick={() => setMobileOpen(false)}>Catalog</Link>
@@ -101,11 +140,12 @@ export default function HeaderNav({ user }: { user: NavUser }) {
           {user ? (
             <div className="nav-user" ref={menuRef}>
               <button
+                ref={userBtnRef}
                 type="button"
                 className="nav-user-btn"
-                aria-haspopup="menu"
+                aria-haspopup="true"
                 aria-expanded={menuOpen}
-                aria-label={`Account menu for ${user.name}`}
+                aria-controls="nav-user-menu"
                 onClick={() => setMenuOpen((o) => !o)}
               >
                 <span className="nav-avatar">
@@ -114,7 +154,7 @@ export default function HeaderNav({ user }: { user: NavUser }) {
                 {user.name.split(" ")[0]}
               </button>
               {menuOpen && (
-                <div className="nav-menu">
+                <div id="nav-user-menu" ref={userMenuRef} className="nav-menu">
                   <div className="nm-head">
                     <div className="nm-name">{user.name}</div>
                     <div className="nm-role">{user.role.toLowerCase()}</div>
@@ -131,6 +171,7 @@ export default function HeaderNav({ user }: { user: NavUser }) {
         </div>
 
         <button
+          ref={navToggleRef}
           type="button"
           className="nav-toggle"
           aria-label={mobileOpen ? "Close menu" : "Open menu"}

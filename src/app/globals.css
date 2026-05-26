@@ -25,7 +25,7 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-html, body { overflow-x: hidden; }
+body { overflow-x: clip; }
 
 body {
   font-family: var(--sans);
@@ -134,7 +134,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   color: var(--ink); background: transparent;
 }
 .nav-search input::placeholder { color: var(--steel-light); }
-.nav-search input:focus { outline: none; }
+.nav-search input:focus:not(:focus-visible) { outline: none; }
 .nav-search button {
   border: 0; background: transparent; color: var(--steel);
   padding: 0 14px; cursor: pointer; display: flex; align-items: center;
@@ -213,7 +213,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   flex: 1; border: 0; padding: 18px 20px; font: inherit; font-size: 16px; color: var(--ink);
 }
 .hero-search input::placeholder { color: var(--steel-light); }
-.hero-search input:focus { outline: none; }
+.hero-search input:focus:not(:focus-visible) { outline: none; }
 .hero-search button {
   border: 0; background: var(--ink); color: #f3f2ef; font: inherit;
   font-weight: 500; font-size: 15px; padding: 0 28px; cursor: pointer;
@@ -901,7 +901,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   background: var(--surface); color: var(--ink);
   width: 130px;
 }
-.fulfill-form input[type="text"]:focus { outline: none; border-color: var(--ink); }
+.fulfill-form input[type="text"]:focus:not(:focus-visible) { outline: none; border-color: var(--ink); }
 
 .logo-uploader { display: flex; gap: 18px; align-items: flex-start; }
 .logo-specs {
@@ -1108,7 +1108,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
   background: var(--surface); color: var(--ink);
 }
-.form-row input:focus, .form-row select:focus, .form-row textarea:focus {
+.form-row input:focus:not(:focus-visible), .form-row select:focus:not(:focus-visible), .form-row textarea:focus:not(:focus-visible) {
   outline: none; border-color: var(--ink);
 }
 .form-row textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
@@ -1209,7 +1209,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 
 .inline-form { display: flex; gap: 8px; align-items: center; }
 .input-sm { font-family: var(--mono); font-size: 13px; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: 4px; width: 92px; background: var(--surface); color: var(--ink); }
-.input-sm:focus { outline: none; border-color: var(--ink); }
+.input-sm:focus:not(:focus-visible) { outline: none; border-color: var(--ink); }
 
 /* ---------- Alerts ---------- */
 .alert { border-radius: var(--radius-sm); padding: 13px 16px; font-size: 14px; margin-bottom: 18px; border: 1px solid; }
