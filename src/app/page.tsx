@@ -104,8 +104,38 @@ export default async function HomePage() {
   const viewerCanBuy =
     !viewer || viewer.role === "BUYER" || viewer.role === "ADMIN";
 
+  const homeJsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "PartsPort",
+      url: siteUrl("/"),
+      logo: siteUrl("/favicon.svg"),
+      description:
+        "B2B marketplace for industrial parts and equipment: transformers, switchgear, relays, conductors, metering, generators, solar, storage, grounding, and SCADA.",
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "PartsPort",
+      url: siteUrl("/"),
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: siteUrl("/catalog?q={search_term_string}"),
+        },
+        "query-input": "required name=search_term_string",
+      },
+    },
+  ];
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd) }}
+      />
       <SiteHeader />
       <main id="main">
         <section className="hero">

@@ -160,8 +160,22 @@ export default async function ManufacturerStorefront({
     (a, b) => b.productCount - a.productCount
   );
 
+  const orgJsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: brand,
+    url: siteUrl(`/manufacturers/${slug}`),
+    ...(brandData.logoUrl ? { logo: siteUrl(brandData.logoUrl) } : {}),
+    ...(brandData.website ? { sameAs: [brandData.website] } : {}),
+    ...(brandData.bio ? { description: brandData.bio } : {}),
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+      />
       <SiteHeader />
       <main id="main">
         <section className="mfr-hero">

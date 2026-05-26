@@ -149,8 +149,41 @@ export default async function ProductPage({
   );
   const canReview = reviewableOrders.length > 0;
 
+  const productJsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    sku: product.sku,
+    description: product.description || `${product.name} by ${product.manufacturer}`,
+    brand: { "@type": "Brand", name: product.manufacturer },
+    ...(product.imageUrl ? { image: [siteUrl(product.imageUrl)] } : {}),
+    offers: {
+      "@type": "Offer",
+      url: siteUrl(`/product/${product.sku}`),
+      priceCurrency: "USD",
+      price: (product.priceCents / 100).toFixed(2),
+      availability: product.quoteOnly
+        ? "https://schema.org/InStoreOnly"
+        : "https://schema.org/InStock",
+      seller: { "@type": "Organization", name: product.supplier.name },
+    },
+    ...(reviewCount > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: reviewAverage.toFixed(2),
+            reviewCount,
+          },
+        }
+      : {}),
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+      />
       <SiteHeader />
       <main id="main">
         <div className="detail">
