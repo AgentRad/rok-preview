@@ -3,11 +3,13 @@
 // are dropped at the SDK layer, no network calls). That lets us ship the
 // instrumentation without forcing every preview deploy to have a DSN.
 //
-// Trimmed surface area: error capture only. Replay and BrowserProfiling
-// integrations are NOT registered (Replay alone is ~50 KB gzipped). Tracing
-// runs at sample rate 0 so the browserTracingIntegration code stays out of
-// the hot path. If we ever need distributed traces, raise tracesSampleRate
-// per environment via env var.
+// P11.9: integrations explicitly emptied. tracesSampleRate:0 keeps trace
+// data from being SENT, but BrowserTracing and the other defaults still
+// install and run on every page (long-task observers, navigation hooks,
+// PerformanceObserver init). That work showed up as TBT after P11.8. With
+// integrations:[] only window.onerror / unhandledrejection capture remains.
+// If we ever need distributed traces, register browserTracingIntegration
+// here explicitly and raise tracesSampleRate per env.
 
 import * as Sentry from "@sentry/nextjs";
 
@@ -18,5 +20,6 @@ if (DSN) {
     dsn: DSN,
     environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "development",
     tracesSampleRate: 0,
+    integrations: [],
   });
 }
