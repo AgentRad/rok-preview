@@ -19,6 +19,13 @@ const nextConfig = {
     // rendered via the `unoptimized` prop so we still get sizing + lazy
     // loading without the optimizer needing to fetch arbitrary URLs.
     formats: ["image/avif", "image/webp"],
+    // Tighter ladder than Next's default ([640, 750, 828, ...]). At a 375px
+    // mobile viewport the smallest default device size (640) was 70% larger
+    // than the actual card width, which is what PSI flagged in P11.8 as the
+    // 114 KiB "Improve image delivery" regression. 384 + 480 give the
+    // optimizer a real target for one- and two-column card grids.
+    deviceSizes: [384, 480, 640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 200, 256, 384],
     remotePatterns: [
       { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
       { protocol: "https", hostname: "files.stripe.com" },
