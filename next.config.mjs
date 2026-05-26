@@ -11,6 +11,7 @@ const nextConfig = {
       { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
       { protocol: "https", hostname: "files.stripe.com" },
       { protocol: "https", hostname: "resend.com" },
+      { protocol: "https", hostname: "ui-avatars.com" },
     ],
   },
   async rewrites() {

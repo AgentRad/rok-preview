@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { siteUrl } from "@/lib/site-url";
@@ -280,11 +281,13 @@ export default async function ProductPage({
                   <span>Sold &amp; fulfilled by</span>
                   <span className="v" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     {product.supplier.logoUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <Image
                         className="supplier-logo-inline"
                         src={product.supplier.logoUrl}
                         alt=""
+                        width={20}
+                        height={20}
+                        unoptimized
                       />
                     )}
                     {product.supplier.name}{" "}

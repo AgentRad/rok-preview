@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import ProductImage from "./ProductImage";
 import QuickAddButton from "./QuickAddButton";
 import { formatCents } from "@/lib/money";
@@ -67,11 +68,13 @@ export default function ProductCard({
           </div>
           <div className="product-sub product-supplier">
             {product.supplier.logoUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 className="supplier-logo-inline"
                 src={product.supplier.logoUrl}
                 alt=""
+                width={20}
+                height={20}
+                unoptimized
               />
             )}
             <span>Sold by {product.supplier.name}</span>
