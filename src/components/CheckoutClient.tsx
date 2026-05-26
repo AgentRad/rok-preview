@@ -9,6 +9,7 @@ import { getCart, clearCart, type CartLine } from "@/lib/cart";
 import { formatCents, FEE_RATE_LABEL } from "@/lib/money";
 import { computeOrderTotals } from "@/lib/order-totals";
 import { formatAddressBlock } from "@/lib/address";
+import { SURCHARGE_CENTS } from "@/lib/freight";
 
 type SavedAddress = {
   id: string;
@@ -93,15 +94,13 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
     residential: false,
     insideDelivery: false,
   });
-  const SURCHARGE_CENTS_LOCAL = {
-    liftgate: 15_000,
-    residential: 7_500,
-    insideDelivery: 20_000,
-  };
+  // P9.5 MED 27: import SURCHARGE_CENTS from lib/freight instead of
+  // hardcoding. Pre-fix three call sites carried their own copy of the
+  // constants; a price change would have required three updates.
   const surchargeTotalCents =
-    (surcharges.liftgate ? SURCHARGE_CENTS_LOCAL.liftgate : 0) +
-    (surcharges.residential ? SURCHARGE_CENTS_LOCAL.residential : 0) +
-    (surcharges.insideDelivery ? SURCHARGE_CENTS_LOCAL.insideDelivery : 0);
+    (surcharges.liftgate ? SURCHARGE_CENTS.liftgate : 0) +
+    (surcharges.residential ? SURCHARGE_CENTS.residential : 0) +
+    (surcharges.insideDelivery ? SURCHARGE_CENTS.insideDelivery : 0);
   const freightFromShipments =
     shipments.length > 0
       ? shipments.reduce((sum, s) => {

@@ -24,6 +24,12 @@ export type ProfitBucket = {
   payoutCents: number;
   refundCents: number;
   paidOrderCount: number;
+  // P9.5 MED 25: net-of-refunds variants. The verify chat flagged that
+  // gmvCents and feeRevenueCents were gross numbers that double-counted
+  // refunded volume. Both views are useful (gross for top-of-funnel
+  // health, net for actual taxable revenue), so we surface both.
+  netGmvCents: number;
+  netFeeRevenueCents: number;
 };
 
 export type SupplierBreakdown = {
@@ -69,6 +75,19 @@ async function bucketForRange(start: Date, end: Date): Promise<ProfitBucket> {
   const refundCents = orders.reduce((s, o) => s + o.refundedCents, 0);
   const paidOrderCount = orders.length;
   const stripeCostEstimateCents = estimateStripeCost(gmvCents, paidOrderCount);
+  // P9.5 MED 25: subtract refunded amounts so the net tiles show actual
+  // realized GMV + fee revenue. Pro-rata fee adjustment: if an order's
+  // refund was full, the fee is fully reversed; if partial, we scale.
+  let feeRefundedCents = 0;
+  for (const o of orders) {
+    if (o.refundedCents > 0 && o.totalCents > 0) {
+      feeRefundedCents += Math.round(
+        (o.feeCents * o.refundedCents) / o.totalCents
+      );
+    }
+  }
+  const netGmvCents = gmvCents - refundCents;
+  const netFeeRevenueCents = feeRevenueCents - feeRefundedCents;
 
   const payouts = await prisma.payout.findMany({
     where: {
@@ -83,10 +102,12 @@ async function bucketForRange(start: Date, end: Date): Promise<ProfitBucket> {
     gmvCents,
     feeRevenueCents,
     stripeCostEstimateCents,
-    netCents: feeRevenueCents - stripeCostEstimateCents,
+    netCents: netFeeRevenueCents - stripeCostEstimateCents,
     payoutCents,
     refundCents,
     paidOrderCount,
+    netGmvCents,
+    netFeeRevenueCents,
   };
 }
 

@@ -111,14 +111,14 @@ export default async function TaxRegistrationsPage() {
                         <td style={{ fontSize: 12.5 }}>
                           {r.registeredAt
                             ? r.registeredAt.toLocaleDateString()
-                            : "—"}
+                            : "not set"}
                         </td>
                         <td style={{ fontSize: 12.5 }}>
                           {r.nextFilingDue
                             ? r.nextFilingDue.toLocaleDateString()
-                            : "—"}
+                            : "not set"}
                         </td>
-                        <td style={{ fontSize: 12.5 }}>{r.notes || "—"}</td>
+                        <td style={{ fontSize: 12.5 }}>{r.notes || "."}</td>
                       </tr>
                     ))}
                   </tbody>

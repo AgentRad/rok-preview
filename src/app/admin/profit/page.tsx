@@ -80,7 +80,7 @@ export default async function ProfitDashboard() {
           <h2 style={{ marginTop: 24 }}>Month to date</h2>
           <div className="kpi-grid">
             <div className="kpi">
-              <div className="k-label">GMV</div>
+              <div className="k-label">GMV (gross)</div>
               <div className="k-value">{formatCents(data.mtd.gmvCents)}</div>
               <div className="k-foot">
                 {data.mtd.paidOrderCount} paid order
@@ -88,9 +88,19 @@ export default async function ProfitDashboard() {
               </div>
             </div>
             <div className="kpi">
-              <div className="k-label">Fee revenue</div>
+              <div className="k-label">GMV (net of refunds)</div>
+              <div className="k-value">{formatCents(data.mtd.netGmvCents)}</div>
+              <div className="k-foot">after {formatCents(data.mtd.refundCents)} refunded</div>
+            </div>
+            <div className="kpi">
+              <div className="k-label">Fee revenue (gross)</div>
               <div className="k-value">{formatCents(data.mtd.feeRevenueCents)}</div>
-              <div className="k-foot">marketplace fees collected</div>
+              <div className="k-foot">marketplace fees billed</div>
+            </div>
+            <div className="kpi">
+              <div className="k-label">Fee revenue (net)</div>
+              <div className="k-value">{formatCents(data.mtd.netFeeRevenueCents)}</div>
+              <div className="k-foot">after pro-rata refund offsets</div>
             </div>
             <div className="kpi">
               <div className="k-label">Stripe cost (est.)</div>

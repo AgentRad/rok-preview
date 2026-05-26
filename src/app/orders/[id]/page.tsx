@@ -11,6 +11,7 @@ import ConfirmReceiptButton from "@/components/ConfirmReceiptButton";
 import ReturnRequestForm from "@/components/ReturnRequestForm";
 import MessageThread from "@/components/MessageThread";
 import { formatCents } from "@/lib/money";
+import { SURCHARGE_CENTS } from "@/lib/freight";
 import { trackingLink } from "@/lib/tracking";
 import { isPaymentsConfigured, reconcileOrderFromStripe } from "@/lib/payments";
 import WriteReview from "@/components/WriteReview";
@@ -356,11 +357,15 @@ export default async function OrderPage({
                     insideDelivery?: boolean;
                   };
                   const parts: { label: string; cents: number }[] = [];
-                  if (s.liftgate) parts.push({ label: "Liftgate", cents: 15000 });
+                  // P9.5 MED 27: pull from lib/freight constants instead
+                  // of hardcoding. Three call sites previously kept their
+                  // own copy of these numbers.
+                  if (s.liftgate)
+                    parts.push({ label: "Liftgate", cents: SURCHARGE_CENTS.liftgate });
                   if (s.residential)
-                    parts.push({ label: "Residential delivery", cents: 7500 });
+                    parts.push({ label: "Residential delivery", cents: SURCHARGE_CENTS.residential });
                   if (s.insideDelivery)
-                    parts.push({ label: "Inside delivery", cents: 20000 });
+                    parts.push({ label: "Inside delivery", cents: SURCHARGE_CENTS.insideDelivery });
                   if (parts.length === 0) return null;
                   return (
                     <div

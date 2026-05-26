@@ -73,6 +73,17 @@ export async function POST(req: Request) {
         });
         if (supplier) {
           await syncSupplierConnectStatus(supplier.id);
+        } else {
+          // P9.5 MED 29: log + capture instead of silently dropping.
+          // A Connect account that we don't have on file is a real
+          // signal (orphaned Stripe account, deleted Supplier row, or
+          // a webhook misroute). Pre-fix this case vanished.
+          captureError(
+            new Error(
+              `account.updated for unknown Connect account ${event.accountId}`
+            ),
+            { subsystem: "payments", op: "account-updated-unknown" }
+          );
         }
         break;
       }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { ensureInvoiceForOrder } from "@/lib/order-utils";
 import { getCurrentUser } from "@/lib/auth";
 import { formatCents } from "@/lib/money";
+import { SURCHARGE_CENTS } from "@/lib/freight";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PrintButton from "@/components/PrintButton";
@@ -239,9 +240,54 @@ export default async function OrderInvoicePage({
               <span>{formatCents(invoice.subtotalCents)}</span>
             </div>
             <div className="summary-line">
-              <span>Freight &amp; handling</span>
+              <span>
+                Freight &amp; handling
+                {order.freightCarrier && (
+                  <span
+                    className="muted-text"
+                    style={{ fontSize: 11, marginLeft: 6 }}
+                  >
+                    {order.freightCarrier}
+                    {order.freightService ? ` ${order.freightService}` : ""}
+                  </span>
+                )}
+              </span>
               <span>{formatCents(invoice.freightCents)}</span>
             </div>
+            {/* P9.5 MED 23: invoice surcharge breakdown. Pre-fix the
+                invoice showed only the freight TOTAL without saying
+                which carrier or which surcharges; AP teams couldn't
+                reconcile $858 vs the $508 carrier quote. */}
+            {order.freightSurcharges &&
+              typeof order.freightSurcharges === "object" &&
+              (() => {
+                const s = order.freightSurcharges as {
+                  liftgate?: boolean;
+                  residential?: boolean;
+                  insideDelivery?: boolean;
+                };
+                const parts: string[] = [];
+                if (s.liftgate)
+                  parts.push(`Liftgate (+${formatCents(SURCHARGE_CENTS.liftgate)})`);
+                if (s.residential)
+                  parts.push(`Residential delivery (+${formatCents(SURCHARGE_CENTS.residential)})`);
+                if (s.insideDelivery)
+                  parts.push(`Inside delivery (+${formatCents(SURCHARGE_CENTS.insideDelivery)})`);
+                if (parts.length === 0) return null;
+                return (
+                  <div
+                    className="muted-text"
+                    style={{
+                      fontSize: 11.5,
+                      marginLeft: 12,
+                      marginTop: 2,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Includes: {parts.join(", ")}
+                  </div>
+                );
+              })()}
             <div className="summary-line">
               <span>
                 Platform fee ({(order.feeRateBps / 100).toFixed(order.feeRateBps % 100 === 0 ? 0 : 1)}%)

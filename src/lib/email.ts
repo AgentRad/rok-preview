@@ -105,8 +105,38 @@ type OrderLite = {
   shipTo: string;
   carrier?: string | null;
   trackingCode?: string | null;
+  // P9.5 MED 23: surface freight detail in the order confirmation +
+  // shipped + delivered + refund emails so AP teams can reconcile.
+  freightCarrier?: string | null;
+  freightService?: string | null;
+  freightSurcharges?: unknown;
   items: { nameSnapshot: string; skuSnapshot: string; qty: number; supplierName: string }[];
 };
+
+// P9.5 MED 23: freight detail in the totals block. Pulls carrier/service
+// label and surcharge breakdown when present.
+function freightDetail(order: OrderLite): string {
+  const parts: string[] = [];
+  if (order.freightCarrier) {
+    parts.push(
+      `${order.freightCarrier}${order.freightService ? " " + order.freightService : ""}`
+    );
+  }
+  if (order.freightSurcharges && typeof order.freightSurcharges === "object") {
+    const s = order.freightSurcharges as {
+      liftgate?: boolean;
+      residential?: boolean;
+      insideDelivery?: boolean;
+    };
+    const sub: string[] = [];
+    if (s.liftgate) sub.push("liftgate +$150");
+    if (s.residential) sub.push("residential +$75");
+    if (s.insideDelivery) sub.push("inside delivery +$200");
+    if (sub.length > 0) parts.push(`includes ${sub.join(", ")}`);
+  }
+  if (parts.length === 0) return "";
+  return `<div style="font-size:11px;color:#6f6d64;margin-top:2px;">${parts.join(" · ")}</div>`;
+}
 
 /**
  * Render the buyer's company logo + name above the order summary block in
@@ -138,10 +168,11 @@ function lineRows(order: OrderLite): string {
 }
 
 function totals(order: OrderLite): string {
+  const fd = freightDetail(order);
   return `
     <table cellpadding="0" cellspacing="0" width="100%" style="margin-top:12px;border-top:1px solid #e2e0d9;">
       <tr><td style="padding:6px 0;font-size:13px;">Subtotal</td><td style="padding:6px 0;font-size:13px;text-align:right;">${formatCents(order.subtotalCents)}</td></tr>
-      <tr><td style="padding:6px 0;font-size:13px;">Freight</td><td style="padding:6px 0;font-size:13px;text-align:right;">${formatCents(order.freightCents)}</td></tr>
+      <tr><td style="padding:6px 0;font-size:13px;">Freight${fd}</td><td style="padding:6px 0;font-size:13px;text-align:right;vertical-align:top;">${formatCents(order.freightCents)}</td></tr>
       <tr><td style="padding:6px 0;font-size:13px;">Platform fee (${feeLabel(order.feeRateBps)})</td><td style="padding:6px 0;font-size:13px;text-align:right;">${formatCents(order.feeCents)}</td></tr>
       <tr><td style="padding:6px 0;font-size:13px;">Sales tax</td><td style="padding:6px 0;font-size:13px;text-align:right;">${formatCents(order.taxCents)}</td></tr>
       <tr><td style="padding:8px 0 0;font-size:14px;font-weight:700;border-top:1px solid #1a1916;">Total</td><td style="padding:8px 0 0;font-size:14px;font-weight:700;text-align:right;border-top:1px solid #1a1916;">${formatCents(order.totalCents)}</td></tr>
