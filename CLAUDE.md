@@ -21,10 +21,24 @@ delivery.
 - Energy & utilities is the **starting vertical**; the catalog is category-agnostic and
   meant to expand to other industries later.
 
-## Status (updated 2026-05-21)
+## Status (updated 2026-05-26)
 The app is **deployed and live**. Core buy-loop works: catalog, AI + heuristic search,
 product pages, cart, checkout, orders, buyer/supplier/admin/OEM dashboards, RFQ flow,
-fulfillment ops console.
+fulfillment ops console. Pre-launch polish rounds **P6 through P9.5 are shipped and
+verified**: supplier onboarding (legal docs + bank + Stripe Connect + 10-item go-live
+gate), trust + legal (email verify, password reset, audit log, Sentry, Upstash rate
+limit, 5 legal pages, cookie consent), money operations (Stripe Connect Express
+payouts, 5% chargeback reserve, refund flow, daily reconcile/release/retry/health
+crons, profit dashboard, tax registrations), real freight (Shippo integration,
+SupplierWarehouse, dimensions, multi-supplier split, surcharges, label printing), and
+P9.5 audit fixes (CRON_SECRET fail-closed, server-trusted freight pricing, order
+idempotency, refund clawback netting via `owedToPlatformCents`, webhook idempotency,
+manufacturers public-filter, email-verify gates on quotes/returns/reviews, audit-log
+gap fills). **P9.6 is in flight**: 1 HIGH (move idempotency lookup before rate-limit
+on POST /api/orders) + 2 MEDIUM polish items from the verify-round followup.
+
+**Next up after P9.6 closes**: Polish 10 (SEO + perf), Polish 11 (analytics + a11y +
+mobile). See `docs/ORCHESTRATOR.md` for the full Polish 6 → 11 roadmap.
 
 Live preview URL:
 https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app
@@ -37,12 +51,22 @@ Infrastructure set up and working:
   migrations + seed.
 - Next.js pinned to 15.2.6 (patched for the react2shell CVE).
 - Email: Resend account; domain `partsport.agentgaming.gg` verified (DKIM/SPF/MX live
-  on Cloudflare DNS). `RESEND_API_KEY` is set in Vercel. Sending CODE is not built yet
-  (Phase E below).
+  on Cloudflare DNS). `RESEND_API_KEY` is set in Vercel.
 - AI search is live (`ANTHROPIC_API_KEY` set; small pay-as-you-go cost per search).
+- Stripe in test mode: Stripe Connect (Marketplace, Express) enabled, Stripe Tax
+  activated. Live keys deferred until after Polish 11.
+- Shippo test API key set as `SHIPPO_API_KEY` in Vercel. Carriers (UPS, FedEx) still
+  need to be activated in the Shippo dashboard for label printing to produce real
+  labels.
+- Upstash Redis set up for production rate limiting (`UPSTASH_REDIS_REST_URL` +
+  `UPSTASH_REDIS_REST_TOKEN` in Vercel).
+- Sentry set up (`SENTRY_DSN` in Vercel).
+- `CRON_SECRET` set in Vercel — required for the 4 daily admin crons (reconcile,
+  reserve-release, payout-retry, health-check); routes fail-closed without it.
 
 Pending: real product photography (owner supplying; line-art fallback exists). A custom
-web domain is optional; the project currently uses the vercel.app preview URL.
+web domain is optional; the project currently uses the vercel.app preview URL. First
+real supplier (THRADD) lined up for onboarding after Polish 11 verifies clean.
 
 ## Repo
 - GitHub `AgentRad/rok-preview`, branch `claude/industrial-marketplace-ROwAU`, PR #1 open.
