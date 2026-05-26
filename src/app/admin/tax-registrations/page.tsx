@@ -1,7 +1,5 @@
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import SiteHeader from "@/components/SiteHeader";
-import SiteFooter from "@/components/SiteFooter";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +38,6 @@ export default async function TaxRegistrationsPage() {
   });
   return (
     <>
-      <SiteHeader />
       <main id="main" className="app-page">
         <div className="page-pad">
           <h1 className="page-title">Tax registrations</h1>
@@ -128,7 +125,6 @@ export default async function TaxRegistrationsPage() {
           </div>
         </div>
       </main>
-      <SiteFooter />
     </>
   );
 }

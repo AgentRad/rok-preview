@@ -2,8 +2,6 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { getProfitDashboard } from "@/lib/profit";
 import { formatCents } from "@/lib/money";
-import SiteHeader from "@/components/SiteHeader";
-import SiteFooter from "@/components/SiteFooter";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +50,6 @@ export default async function ProfitDashboard() {
   const month = new Date().toISOString().slice(0, 7);
   return (
     <>
-      <SiteHeader />
       <main id="main" className="app-page">
         <div className="page-pad">
           <h1 className="page-title">Profit dashboard</h1>
@@ -254,7 +251,6 @@ export default async function ProfitDashboard() {
           </div>
         </div>
       </main>
-      <SiteFooter />
     </>
   );
 }

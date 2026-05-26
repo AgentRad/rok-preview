@@ -69,7 +69,7 @@ export default function PaginationBar({
         </span>
       )}
 
-      <span style={{ fontSize: 13, color: "var(--muted)" }}>
+      <span style={{ fontSize: 13, color: "var(--steel)" }}>
         {start} to {end} of {totalCount}
       </span>
 
@@ -77,7 +77,7 @@ export default function PaginationBar({
         {pages.map((p, idx) => {
           if (p === "...") {
             return (
-              <span key={`ellipsis-${idx}`} style={{ color: "var(--muted)", fontSize: 12 }}>
+              <span key={`ellipsis-${idx}`} style={{ color: "var(--steel)", fontSize: 12 }}>
                 …
               </span>
             );
@@ -98,7 +98,7 @@ export default function PaginationBar({
                 height: 32,
                 borderRadius: "var(--radius-sm)",
                 backgroundColor: isCurrentPage ? "var(--ink)" : "transparent",
-                color: isCurrentPage ? "var(--paper)" : "var(--ink)",
+                color: isCurrentPage ? "var(--bg)" : "var(--ink)",
                 textDecoration: "none",
                 fontSize: 13,
                 fontWeight: isCurrentPage ? 600 : 400,

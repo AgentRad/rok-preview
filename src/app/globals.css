@@ -16,6 +16,10 @@
   --amber-deep: #9a6f12;
   --green: #3f7d4f;
   --red: #b04a2c;
+  --blue: #2c5cdc;
+  --amber-dark: var(--amber-deep);
+  --paper: var(--bg);
+  --muted: var(--steel);
   --radius: 5px;
   --radius-sm: 4px;
   --maxw: 1200px;
@@ -424,10 +428,14 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 @media (min-width: 1280px) { .product-grid { grid-template-columns: repeat(4, 1fr); } }
 .product-card {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  overflow: hidden; cursor: pointer; display: flex; flex-direction: column;
-  transition: border-color .15s; text-decoration: none; color: inherit;
+  overflow: hidden; display: flex; flex-direction: column;
+  transition: border-color .15s; color: inherit;
 }
 .product-card:hover { border-color: var(--ink); }
+.product-card-link {
+  display: flex; flex-direction: column; flex: 1;
+  cursor: pointer; text-decoration: none; color: inherit;
+}
 .product-thumb {
   background: var(--surface-2); aspect-ratio: 3 / 2.5; display: flex;
   align-items: center; justify-content: center; position: relative;
@@ -472,7 +480,7 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .rating { color: var(--amber-deep); font-weight: 600; }
 .eta { color: var(--green); font-weight: 500; }
 .stock-out { color: var(--red); font-weight: 500; }
-.product-action { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.product-action { margin: 0 18px 18px; padding-top: 12px; border-top: 1px solid var(--line); }
 .quick-add-btn {
   width: 100%; padding: 9px 0; font: inherit; font-size: 13px; font-weight: 600;
   background: var(--ink); color: #f3f2ef; border: 0; border-radius: var(--radius-sm);
@@ -1888,6 +1896,22 @@ h1, h2, h3, h4 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
 .cookie-consent-body { flex: 1; min-width: 240px; }
 .cookie-consent-body a { color: var(--amber); text-decoration: underline; }
 .cookie-consent-actions { display: flex; gap: 8px; }
+/* Banner background is --ink. The default .btn-primary (dark) and .btn-ghost
+   (ink text on transparent) both vanish against it. Invert the button colors
+   so the OK action reads as a solid light pill and Dismiss reads as a hairline
+   outline — both legible, visually distinct. */
+.cookie-consent-actions .btn-primary {
+  background: var(--bg); color: var(--ink); border-color: var(--bg);
+}
+.cookie-consent-actions .btn-primary:hover {
+  background: #ffffff; border-color: #ffffff;
+}
+.cookie-consent-actions .btn-ghost {
+  color: var(--bg); border-color: rgba(243, 242, 239, 0.3); background: transparent;
+}
+.cookie-consent-actions .btn-ghost:hover {
+  color: var(--bg); border-color: rgba(243, 242, 239, 0.6); background: rgba(243, 242, 239, 0.08);
+}
 
 /* ---------- Footer legal links ---------- */
 .footer-legal-links {

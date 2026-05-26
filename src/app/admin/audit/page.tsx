@@ -3,8 +3,6 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { AUDIT_ACTIONS } from "@/lib/audit";
-import SiteHeader from "@/components/SiteHeader";
-import SiteFooter from "@/components/SiteFooter";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +99,6 @@ export default async function AdminAuditPage({
 
   return (
     <>
-      <SiteHeader />
       <main id="main" className="app-page">
         <div className="page-pad">
           <h1 className="page-title">Audit log</h1>
@@ -270,7 +267,6 @@ export default async function AdminAuditPage({
           </div>
         </div>
       </main>
-      <SiteFooter />
     </>
   );
 }

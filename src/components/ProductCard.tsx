@@ -34,58 +34,60 @@ export default function ProductCard({
 }) {
   const imageCount = product.imageCount ?? product._count?.images ?? 0;
   return (
-    <Link className="product-card" href={`/product/${product.sku}`}>
-      <div className="product-thumb">
-        <span className="thumb-badge">{product.category}</span>
-        {imageCount > 1 ? (
-          <span className="thumb-count">+{imageCount - 1}</span>
-        ) : null}
-        <ProductImage
-          imageUrl={product.imageUrl}
-          icon={product.icon}
-          name={product.name}
-        />
-      </div>
-      <div className="product-body">
-        <div className="product-mfr">{product.manufacturer}</div>
-        <div className="product-name">{product.name}</div>
-        <div className="product-meta">
-          <div className="product-price">
-            {formatCents(product.priceCents)}{" "}
-            <span className="unit">/ {product.unit}</span>
-          </div>
-          <div className="product-sub">
-            <span className="dot rating">★ {product.supplier.rating.toFixed(1)}</span>
-            {product.quoteOnly ? (
-              <span className="dot quote-tag">By quote</span>
-            ) : product.stock > 0 ? (
-              <span className="dot eta">
-                Delivery in {product.etaDays} day{product.etaDays > 1 ? "s" : ""}
-              </span>
-            ) : (
-              <span className="dot stock-out">Backorder</span>
-            )}
-          </div>
-          <div className="product-sub product-supplier">
-            {product.supplier.logoUrl && (
-              <Image
-                className="supplier-logo-inline"
-                src={product.supplier.logoUrl}
-                alt=""
-                width={18}
-                height={18}
-                unoptimized
-              />
-            )}
-            <span>Sold by {product.supplier.name}</span>
+    <div className="product-card">
+      <Link className="product-card-link" href={`/product/${product.sku}`}>
+        <div className="product-thumb">
+          <span className="thumb-badge">{product.category}</span>
+          {imageCount > 1 ? (
+            <span className="thumb-count">+{imageCount - 1}</span>
+          ) : null}
+          <ProductImage
+            imageUrl={product.imageUrl}
+            icon={product.icon}
+            name={product.name}
+          />
+        </div>
+        <div className="product-body">
+          <div className="product-mfr">{product.manufacturer}</div>
+          <div className="product-name">{product.name}</div>
+          <div className="product-meta">
+            <div className="product-price">
+              {formatCents(product.priceCents)}{" "}
+              <span className="unit">/ {product.unit}</span>
+            </div>
+            <div className="product-sub">
+              <span className="dot rating">★ {product.supplier.rating.toFixed(1)}</span>
+              {product.quoteOnly ? (
+                <span className="dot quote-tag">By quote</span>
+              ) : product.stock > 0 ? (
+                <span className="dot eta">
+                  Delivery in {product.etaDays} day{product.etaDays > 1 ? "s" : ""}
+                </span>
+              ) : (
+                <span className="dot stock-out">Backorder</span>
+              )}
+            </div>
+            <div className="product-sub product-supplier">
+              {product.supplier.logoUrl && (
+                <Image
+                  className="supplier-logo-inline"
+                  src={product.supplier.logoUrl}
+                  alt=""
+                  width={18}
+                  height={18}
+                  unoptimized
+                />
+              )}
+              <span>Sold by {product.supplier.name}</span>
+            </div>
           </div>
         </div>
-        {viewerCanBuy && (
-          <div className="product-action">
-            <QuickAddButton sku={product.sku} quoteOnly={product.quoteOnly} />
-          </div>
-        )}
-      </div>
-    </Link>
+      </Link>
+      {viewerCanBuy && (
+        <div className="product-action">
+          <QuickAddButton sku={product.sku} quoteOnly={product.quoteOnly} />
+        </div>
+      )}
+    </div>
   );
 }
