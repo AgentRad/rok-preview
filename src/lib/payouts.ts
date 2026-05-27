@@ -36,24 +36,36 @@ import { writeAuditLog } from "./audit";
 export async function ensurePayoutsForOrder(orderId: string): Promise<void> {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: { include: { product: true } } },
+    include: { supplierSlots: true },
   });
   if (!order) return;
   if (order.status !== "PAID" && order.status !== "FULFILLED") return;
 
-  // Sum per-supplier subtotal share (no freight, no fee, no tax).
-  const totalsBySupplier = new Map<string, number>();
-  for (const item of order.items) {
-    const id = item.product.supplierId;
-    const amount = (totalsBySupplier.get(id) ?? 0) + item.unitPriceCents * item.qty;
-    totalsBySupplier.set(id, amount);
-  }
+  // PLH-3g Phase 4: iterate per-supplier slots instead of summing line
+  // items. Each slot carries its supplier's pre-computed subtotal share
+  // (subtotal only; freight + fee are platform-side and stay out of the
+  // payout amount, same as the pre-P4 single-supplier formula). One
+  // slot's failure must not abort other slots' transfers; the try/catch
+  // per slot is inside the for-loop body below.
+  for (const slot of order.supplierSlots) {
+    const supplierId = slot.supplierId;
+    const supplierSubtotalCents = slot.subtotalCents;
 
-  for (const [supplierId, supplierSubtotalCents] of totalsBySupplier) {
     const existing = await prisma.payout.findUnique({
       where: { supplierId_orderId: { supplierId, orderId } },
     });
-    if (existing) continue;
+    if (existing) {
+      // Ensure the slot points at the existing payout (backfill safety).
+      if (slot.payoutId !== existing.id) {
+        await prisma.orderSupplierSlot
+          .update({
+            where: { id: slot.id },
+            data: { payoutId: existing.id },
+          })
+          .catch(() => {});
+      }
+      continue;
+    }
 
     const supplier = await prisma.supplier.findUnique({
       where: { id: supplierId },
@@ -96,6 +108,13 @@ export async function ensurePayoutsForOrder(orderId: string): Promise<void> {
             status: hasActiveStripeConnect(supplier) ? "PROCESSING" : "DUE",
             note: noteForStashing,
           },
+        });
+        // PLH-3g Phase 4: link the slot to its payout for per-slot
+        // retry visibility. On Stage 3b FAILURE the slot keeps pointing
+        // at the FAILED payout so admin + retry cron can see it.
+        await tx.orderSupplierSlot.update({
+          where: { id: slot.id },
+          data: { payoutId: created.id },
         });
         if (reservedCents > 0) {
           await tx.supplierReserveTransaction.create({
