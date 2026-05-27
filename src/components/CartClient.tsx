@@ -190,19 +190,15 @@ export default function CartClient() {
             </span>
             <span>{freightCents > 0 ? formatCents(freightCents) : freight.basis === "FREIGHT_QUOTED" ? "TBD" : formatCents(0)}</span>
           </div>
-          <div className="summary-line">
-            <span>Sales tax</span>
-            <span>{formatCents(0)}</span>
-          </div>
+          <p className="muted-text" style={{ fontSize: 11.5, marginTop: 4, marginBottom: 8 }}>
+            Tax calculated at checkout.
+            {freight.basis === "FREIGHT_QUOTED" &&
+              " Large equipment freight is quoted by the supplier after the order is placed."}
+          </p>
           <div className="summary-line total">
             <span>Order total</span>
             <span>{formatCents(totalCents)}</span>
           </div>
-          <p className="muted-text" style={{ fontSize: 11.5, marginTop: 6 }}>
-            Sales tax is calculated at checkout based on ship-to address.
-            {freight.basis === "FREIGHT_QUOTED" &&
-              " This order includes large equipment; the supplier will quote LTL freight directly after the order is placed."}
-          </p>
           <Link
             className="btn btn-primary btn-block"
             href="/checkout"
