@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { addToCart, clearCart, DifferentSupplierError } from "@/lib/cart";
+import { addToCart } from "@/lib/cart";
 
 export default function AddToCart({
   sku,
@@ -19,34 +19,9 @@ export default function AddToCart({
   const router = useRouter();
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
-  const [conflict, setConflict] = useState<{
-    existingSupplierName: string;
-    pendingAction: "add" | "buy";
-  } | null>(null);
 
   function tryAdd(action: "add" | "buy") {
-    try {
-      addToCart(sku, qty, { id: supplierId, name: supplierName });
-      if (action === "buy") router.push("/checkout");
-      else setAdded(true);
-    } catch (err) {
-      if (err instanceof DifferentSupplierError) {
-        setConflict({
-          existingSupplierName: err.existingSupplierName,
-          pendingAction: action,
-        });
-        return;
-      }
-      throw err;
-    }
-  }
-
-  function confirmReplaceCart() {
-    if (!conflict) return;
-    const action = conflict.pendingAction;
-    clearCart();
     addToCart(sku, qty, { id: supplierId, name: supplierName });
-    setConflict(null);
     if (action === "buy") router.push("/checkout");
     else setAdded(true);
   }
@@ -102,66 +77,6 @@ export default function AddToCart({
           <Link href="/cart" style={{ fontWeight: 700, color: "inherit" }}>
             View cart →
           </Link>
-        </div>
-      )}
-      {conflict && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="diff-supplier-title"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 16,
-          }}
-          onClick={() => setConflict(null)}
-        >
-          <div
-            className="card"
-            style={{ maxWidth: 460, width: "100%" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="card-body">
-              <h2
-                id="diff-supplier-title"
-                style={{ fontSize: 17, fontWeight: 700, marginBottom: 10 }}
-              >
-                Start a new cart?
-              </h2>
-              <p style={{ fontSize: 14, lineHeight: 1.5 }}>
-                Your cart contains items from {conflict.existingSupplierName}.
-                PartsPort routes shipments and payments per supplier, so each
-                order can only contain items from one supplier. Start a new
-                cart?
-              </p>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  marginTop: 16,
-                  justifyContent: "flex-end",
-                }}
-              >
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => setConflict(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={confirmReplaceCart}
-                >
-                  Start a new cart
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>

@@ -87,58 +87,97 @@ export default function CartClient() {
     );
   }
 
-  const supplierName = valid.length > 0 ? products[valid[0].sku].supplierName : "";
+  // PLH-3g Phase 2: group cart by supplier. Preserve first-seen ordering so
+  // the UI stays stable as users add items.
+  const groups: { supplierName: string; lines: CartLine[]; subtotalCents: number }[] = [];
+  const groupIndex = new Map<string, number>();
+  for (const l of valid) {
+    const p = products[l.sku];
+    const name = p.supplierName || "Unknown supplier";
+    let idx = groupIndex.get(name);
+    if (idx === undefined) {
+      idx = groups.length;
+      groupIndex.set(name, idx);
+      groups.push({ supplierName: name, lines: [], subtotalCents: 0 });
+    }
+    groups[idx].lines.push(l);
+    groups[idx].subtotalCents += p.priceCents * l.qty;
+  }
+  const multiSupplier = groups.length > 1;
 
   return (
     <div className="checkout-grid">
       <div>
-        {supplierName && (
+        {multiSupplier && (
           <div
             className="alert alert-info"
             style={{ marginBottom: 14, fontSize: 13 }}
           >
-            All items in this cart ship from {supplierName}.
+            Your cart contains items from {groups.length} suppliers. Each
+            supplier ships separately. Multi-supplier checkout will go live
+            shortly; until then, please place one supplier per order.
           </div>
         )}
-        {valid.map((l) => {
-          const p = products[l.sku];
-          return (
-            <div className="cart-line" key={l.sku}>
-              <div className="cl-thumb">
-                <ProductImage imageUrl={p.imageUrl} icon={p.icon} name={p.name} />
-              </div>
-              <div className="cl-main">
-                <div className="cl-mfr">{p.manufacturer}</div>
-                <div className="cl-name">
-                  <Link href={`/product/${p.sku}`}>{p.name}</Link>
-                </div>
-                <div className="muted-text" style={{ fontSize: 12.5 }}>
-                  {formatCents(p.priceCents)} / {p.unit} · {p.supplierName} ·{" "}
-                  {p.stock > 0
-                    ? `delivery in ${p.etaDays} day${p.etaDays > 1 ? "s" : ""}`
-                    : "backorder"}
-                </div>
-                <div className="ci-controls" style={{ marginTop: 8 }}>
-                  <div className="qty-stepper">
-                    <button onClick={() => setQty(l.sku, l.qty - 1)} aria-label="Decrease">
-                      −
-                    </button>
-                    <span>{l.qty}</span>
-                    <button onClick={() => setQty(l.sku, l.qty + 1)} aria-label="Increase">
-                      +
-                    </button>
-                  </div>
-                  <button className="ci-remove" onClick={() => setQty(l.sku, 0)}>
-                    Remove
-                  </button>
-                </div>
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>
-                {formatCents(p.priceCents * l.qty)}
-              </div>
+        {groups.map((g) => (
+          <div key={g.supplierName} style={{ marginBottom: 18 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                padding: "8px 0",
+                borderBottom: "1px solid var(--border)",
+                marginBottom: 8,
+              }}
+            >
+              <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                {g.supplierName}
+              </h3>
+              <span className="muted-text" style={{ fontSize: 12.5 }}>
+                Subtotal {formatCents(g.subtotalCents)}
+              </span>
             </div>
-          );
-        })}
+            {g.lines.map((l) => {
+              const p = products[l.sku];
+              return (
+                <div className="cart-line" key={l.sku}>
+                  <div className="cl-thumb">
+                    <ProductImage imageUrl={p.imageUrl} icon={p.icon} name={p.name} />
+                  </div>
+                  <div className="cl-main">
+                    <div className="cl-mfr">{p.manufacturer}</div>
+                    <div className="cl-name">
+                      <Link href={`/product/${p.sku}`}>{p.name}</Link>
+                    </div>
+                    <div className="muted-text" style={{ fontSize: 12.5 }}>
+                      {formatCents(p.priceCents)} / {p.unit} ·{" "}
+                      {p.stock > 0
+                        ? `delivery in ${p.etaDays} day${p.etaDays > 1 ? "s" : ""}`
+                        : "backorder"}
+                    </div>
+                    <div className="ci-controls" style={{ marginTop: 8 }}>
+                      <div className="qty-stepper">
+                        <button onClick={() => setQty(l.sku, l.qty - 1)} aria-label="Decrease">
+                          −
+                        </button>
+                        <span>{l.qty}</span>
+                        <button onClick={() => setQty(l.sku, l.qty + 1)} aria-label="Increase">
+                          +
+                        </button>
+                      </div>
+                      <button className="ci-remove" onClick={() => setQty(l.sku, 0)}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>
+                    {formatCents(p.priceCents * l.qty)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
       <div className="card">

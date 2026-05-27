@@ -162,19 +162,24 @@ export async function POST(req: Request) {
     );
   }
 
-  // PLH-1 commit 5: single-supplier cart constraint (server side).
-  // PartsPort routes shipments and payments per supplier, so each Order
-  // can only contain items from one supplier at launch. The client
-  // enforces this in addToCart, this is defense in depth for callers
-  // that bypass the UI (curl, scripts, replayed requests).
+  // PLH-3g Phase 2: multi-supplier carts are allowed in the UI, but the
+  // Order model is still single-supplier in this phase. Phase 3 will
+  // partition placement into per-supplier OrderSupplierSlot rows; until
+  // then, freight/fee math assumes a single supplier and would misprice
+  // a multi-supplier cart. To keep the platform safe between phases, the
+  // server-side placement gate stays: a multi-supplier cart returns 503
+  // and cannot be placed in production until Phase 3 lands. Phase 4 will
+  // wire per-supplier freight + payment-intent splits via Stripe Connect
+  // destination charges.
   const supplierIds = new Set(products.map((p) => p.supplierId));
   if (supplierIds.size > 1) {
     return NextResponse.json(
       {
         error:
-          "An order can only contain items from one supplier. Please split your cart.",
+          "Multi-supplier checkout coming soon. For now, please place one order per supplier.",
+        code: "MULTI_SUPPLIER_CHECKOUT_PENDING",
       },
-      { status: 400 }
+      { status: 503 }
     );
   }
 
