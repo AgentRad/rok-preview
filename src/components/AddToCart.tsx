@@ -20,10 +20,15 @@ export default function AddToCart({
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
 
-  function tryAdd(action: "add" | "buy") {
+  function handleAdd() {
     addToCart(sku, qty, { id: supplierId, name: supplierName });
-    if (action === "buy") router.push("/checkout");
-    else setAdded(true);
+    setAdded(true);
+  }
+
+  function handleBuyNow(e: React.MouseEvent) {
+    e.preventDefault();
+    addToCart(sku, qty, { id: supplierId, name: supplierName });
+    router.push("/checkout");
   }
 
   return (
@@ -58,19 +63,23 @@ export default function AddToCart({
       </div>
       <button
         className="btn btn-primary btn-block"
-        onClick={() => tryAdd("add")}
+        onClick={handleAdd}
         disabled={!inStock}
       >
         {inStock ? "Add to cart" : "Out of stock"}
       </button>
-      <button
-        className="btn btn-ghost btn-block"
-        style={{ marginTop: 9 }}
-        onClick={() => tryAdd("buy")}
-        disabled={!inStock}
-      >
-        {inStock ? "Buy now" : "Backorder unavailable"}
-      </button>
+      {inStock && (
+        <div style={{ marginTop: 8, fontSize: 12.5 }}>
+          <a
+            href="/checkout"
+            onClick={handleBuyNow}
+            className="muted-text"
+            style={{ textDecoration: "none" }}
+          >
+            Or skip cart and check out now →
+          </a>
+        </div>
+      )}
       {added && (
         <div className="alert alert-ok" style={{ marginTop: 12, marginBottom: 0 }}>
           ✓ Added to cart.{" "}
