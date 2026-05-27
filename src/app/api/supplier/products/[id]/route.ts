@@ -14,7 +14,40 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
   const { id } = await params;
-  const product = await prisma.product.findUnique({ where: { id } });
+
+  // PLH-3j P14: belt-and-suspenders. Build the list of suppliers this
+  // user can act on (memberships + legacy direct ownership) and pin the
+  // product lookup to that set via findFirst, so the DB constraint
+  // enforces ownership at the row level. The downstream
+  // effectiveAccessToSupplier check stays for the role split (CATALOG
+  // can edit, VIEWER cannot, etc).
+  let ownedSupplierIds: string[] | null = null;
+  if (user.role !== "ADMIN") {
+    const [memberships, legacy] = await Promise.all([
+      prisma.supplierMember.findMany({
+        where: { userId: user.id },
+        select: { supplierId: true },
+      }),
+      prisma.supplier.findMany({
+        where: { userId: user.id },
+        select: { id: true },
+      }),
+    ]);
+    ownedSupplierIds = Array.from(
+      new Set([
+        ...memberships.map((m) => m.supplierId),
+        ...legacy.map((s) => s.id),
+      ])
+    );
+    if (ownedSupplierIds.length === 0) {
+      return NextResponse.json({ error: "Not your product." }, { status: 403 });
+    }
+  }
+  const product = ownedSupplierIds
+    ? await prisma.product.findFirst({
+        where: { id, supplierId: { in: ownedSupplierIds } },
+      })
+    : await prisma.product.findUnique({ where: { id } });
   if (!product) {
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
