@@ -249,36 +249,50 @@ export default async function CatalogPage({
 
             {manufacturers.length > 1 && (
               <div className="filter-group">
-                <h2>Manufacturer</h2>
-                <Link
-                  href={hrefWith({ mfr: "", page: "1" })}
-                  className="filter-opt"
-                  style={{
-                    fontWeight: mfr ? 400 : 700,
-                    textDecoration: "none",
-                    color: "inherit",
-                  }}
-                >
-                  All manufacturers
-                  <span className="count">
-                    {manufacturers.reduce((n, m) => n + m._count, 0)}
-                  </span>
-                </Link>
-                {manufacturers.map((m) => (
-                  <Link
-                    key={m.manufacturer}
-                    href={hrefWith({ mfr: m.manufacturer, page: "1" })}
-                    className="filter-opt"
+                <details open={Boolean(mfr)}>
+                  <summary
                     style={{
-                      fontWeight: mfr === m.manufacturer ? 700 : 400,
-                      textDecoration: "none",
-                      color: mfr === m.manufacturer ? "var(--amber-deep)" : "inherit",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      padding: "4px 0",
+                      listStyle: "none",
                     }}
                   >
-                    {m.manufacturer}
-                    <span className="count">{m._count}</span>
-                  </Link>
-                ))}
+                    + Filter by manufacturer ({manufacturers.length} brand{manufacturers.length === 1 ? "" : "s"})
+                  </summary>
+                  <div style={{ marginTop: 8 }}>
+                    <Link
+                      href={hrefWith({ mfr: "", page: "1" })}
+                      className="filter-opt"
+                      style={{
+                        fontWeight: mfr ? 400 : 700,
+                        textDecoration: "none",
+                        color: "inherit",
+                      }}
+                    >
+                      All manufacturers
+                      <span className="count">
+                        {manufacturers.reduce((n, m) => n + m._count, 0)}
+                      </span>
+                    </Link>
+                    {manufacturers.map((m) => (
+                      <Link
+                        key={m.manufacturer}
+                        href={hrefWith({ mfr: m.manufacturer, page: "1" })}
+                        className="filter-opt"
+                        style={{
+                          fontWeight: mfr === m.manufacturer ? 700 : 400,
+                          textDecoration: "none",
+                          color: mfr === m.manufacturer ? "var(--amber-deep)" : "inherit",
+                        }}
+                      >
+                        {m.manufacturer}
+                        <span className="count">{m._count}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </details>
               </div>
             )}
 
