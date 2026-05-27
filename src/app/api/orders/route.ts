@@ -4,14 +4,12 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
-import { computeOrderTotals } from "@/lib/order-totals";
+import { computeOrderTotals, computePerSupplierSlots } from "@/lib/order-totals";
 import { sendOrderConfirmation } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { captureError } from "@/lib/observability";
 import { writeAuditLog } from "@/lib/audit";
-import { feeFor } from "@/lib/money";
 import {
-  calculateFreight,
   surchargeCents,
   type FreightShipment,
   type FreightSurcharges,
@@ -408,69 +406,28 @@ export async function POST(req: Request) {
   // server-verified Shippo cents when a matched shipment exists, else
   // the deterministic flat-rate calculator on JUST that supplier's
   // lines. Slot fee is 6% of the slot's own subtotal.
-  type SlotInput = {
-    supplierId: string;
-    subtotalCents: number;
-    freightCents: number;
-    feeCents: number;
-  };
-  const itemsBySupplier = new Map<string, typeof orderItems>();
-  for (const it of orderItems) {
-    const p = bySku.get(it.skuSnapshot);
-    if (!p) continue;
-    const list = itemsBySupplier.get(p.supplierId) || [];
-    list.push(it);
-    itemsBySupplier.set(p.supplierId, list);
+  // PLH-3g P9: slot math extracted into computePerSupplierSlots so
+  // /api/orders and Vitest can share the same code path.
+  const slotLinesInput = orderItems
+    .map((it) => {
+      const p = bySku.get(it.skuSnapshot);
+      if (!p) return null;
+      return {
+        supplierId: p.supplierId,
+        unitPriceCents: it.unitPriceCents,
+        qty: it.qty,
+        quoteOnly: p.quoteOnly,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+  const verifiedCentsBySupplier = new Map<string, number>();
+  for (const [sid, v] of verifiedFreightBySupplier) {
+    verifiedCentsBySupplier.set(sid, v.cents);
   }
-  const slots: SlotInput[] = [];
-  for (const [supplierId, supplierItems] of itemsBySupplier) {
-    const slotSubtotal = supplierItems.reduce(
-      (sum, it) => sum + it.unitPriceCents * it.qty,
-      0
-    );
-    let slotFreight: number;
-    const verified = verifiedFreightBySupplier.get(supplierId);
-    if (verified) {
-      slotFreight = verified.cents;
-    } else {
-      const slotLines = supplierItems.map((it) => {
-        const p = bySku.get(it.skuSnapshot)!;
-        return { qty: it.qty, unitPriceCents: it.unitPriceCents, quoteOnly: p.quoteOnly };
-      });
-      slotFreight = calculateFreight({
-        items: slotLines,
-        subtotalCents: slotSubtotal,
-      }).freightCents;
-    }
-    slots.push({
-      supplierId,
-      subtotalCents: slotSubtotal,
-      freightCents: slotFreight,
-      feeCents: feeFor(slotSubtotal),
-    });
-  }
-
-  // Distribute surcharges across slots proportionally to slot freight so
-  // slot freight cents continue to sum to the Order's overall freight
-  // total. When the buyer's selected freight rates are verified per
-  // supplier, the per-slot sum already equals freightOverrideCents (sans
-  // surcharges); the order-level freightOverrideCents includes
-  // surcharges, so we attribute that delta back to the slots here.
-  const slotFreightSum = slots.reduce((s, x) => s + x.freightCents, 0);
-  const freightSurchargeDelta = Math.max(0, totals.freightCents - slotFreightSum);
-  if (freightSurchargeDelta > 0 && slots.length > 0) {
-    let remaining = freightSurchargeDelta;
-    for (let i = 0; i < slots.length; i++) {
-      const isLast = i === slots.length - 1;
-      const share = isLast
-        ? remaining
-        : slotFreightSum > 0
-        ? Math.round((freightSurchargeDelta * slots[i].freightCents) / slotFreightSum)
-        : Math.floor(freightSurchargeDelta / slots.length);
-      slots[i].freightCents += share;
-      remaining -= share;
-    }
-  }
+  const slots = computePerSupplierSlots(slotLinesInput, {
+    verifiedFreightBySupplier: verifiedCentsBySupplier,
+    orderFreightCents: totals.freightCents,
+  });
 
   // Server-trust check. If the client posted claimed totals, verify them
   // against the server compute. Mismatch returns 400 so a tampered cart

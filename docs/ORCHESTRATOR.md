@@ -274,6 +274,49 @@ changes; backlog), B6 (surcharge trust needs address API; deferred).
 No new migrations. **Cumulative across all rounds: 28 CRITICAL + 62
 HIGH closed.** Every `npx next build` since P12 has compiled clean.
 
+**PLH-3g (2026-05-26).** Multi-supplier refactor across 9 phases on
+the same branch. The launch-time single-supplier-cart constraint is
+RESOLVED. Buyers can now place a cart spanning N suppliers; the Order
+splits into N `OrderSupplierSlot` rows, each with its own subtotal /
+freight / fee / refunded counters, per-supplier payment-intent
+transfer via Stripe Connect, per-supplier shipment dispatch
+(carrier / tracking / shipmentStage / shippedAt / deliveredAt at the
+slot level), and per-supplier refund clawback. Phases:
+- P1: `OrderSupplierSlot` schema + hand-authored migration
+  `20260608000000_add_order_supplier_slot`.
+- P2: cart / checkout client guard removed; per-supplier grouping in
+  the UI.
+- P3: `POST /api/orders` creates one slot per supplier in the same
+  `$transaction`; slot math reconciles to the Order row totals.
+- P4: `markOrderPaid` + payouts iterate per slot; 3-stage payout
+  per supplier.
+- P5: per-supplier shipment dispatch; slot-level tracking columns +
+  migration `20260608010000_add_order_supplier_slot_shipment_fields`.
+  Admin per-slot ship UI flagged deferred (see backlog below).
+- P6: per-supplier refund routing; slot/item-scoped refunds clawback
+  only that supplier.
+- P7: buyer `/orders/[id]` + invoice + email render per-supplier
+  sections.
+- P8: supplier dashboard scoped to its own slot. Admin per-slot ship
+  UI re-flagged deferred.
+- P9: multi-supplier e2e seed scenario at stable reference
+  `PP-MULTI1` (Relay & Protection Partners + Gridline Power Supply,
+  one PAID order, 2 OrderSupplierSlot rows, Invoice row). Per-supplier
+  slot math extracted into `computePerSupplierSlots()` in
+  `src/lib/order-totals.ts` so the route and future tests share the
+  same code path. No Vitest infra installed at this round, so no
+  test files landed (extraction is the test-readiness artifact).
+
+Migrations new in PLH-3g:
+- `20260608000000_add_order_supplier_slot`
+- `20260608010000_add_order_supplier_slot_shipment_fields`
+
+Every `npx next build` across PLH-3g P1..P9 has compiled clean.
+Zero em dashes throughout.
+
+**Cumulative across all rounds, including PLH-3g: 28 CRITICAL + 62
+HIGH closed, plus the single-supplier-cart constraint lifted.**
+
 ## Inbound email feature: LIVE + smoke-proven on prod (2026-05-26)
 
 The Resend webhook is configured and pointing at
@@ -316,19 +359,25 @@ either a smoke endpoint or a deploy log line.
 
 ## Launch-time decisions
 
-**Single-supplier carts.** A buyer's cart can only contain items from one
-supplier at soft launch. PartsPort routes shipments and payments per
-supplier; the multi-shipment freight split exists in code but the Order
-model is still one-supplier-per-order. The full multi-supplier Shipment
-refactor (one Order, N Shipments, per-supplier payment intent splits via
-Stripe Connect destination charges, per-supplier refund flows) is queued
-post-launch. Trade-off: a buyer shopping across two suppliers places two
-orders, gets two confirmation emails, two tracking timelines, two
-invoices. Acceptable at the volume the marketplace will see in the first
-quarter, and the constraint keeps payout math and refund clawback simple
-(one Stripe payment intent maps to one supplier transfer). Enforced
-client-side in `src/lib/cart.ts` and server-side in
-`/api/orders/route.ts` POST as defense in depth.
+**Single-supplier carts. RESOLVED by PLH-3g (2026-05-26).** The
+constraint that limited a cart to one supplier at soft launch is gone.
+PLH-3g landed the full multi-supplier refactor across 9 phases: one
+Order, N `OrderSupplierSlot` rows, per-supplier payment-intent splits
+via Stripe Connect destination charges, per-supplier shipment dispatch
+(slot-level carrier / tracking / shipmentStage / shippedAt /
+deliveredAt), per-supplier refund clawback, buyer + supplier + admin
+UI scoped per slot, per-supplier order emails. See the PLH-3g block in
+the audit-rounds section above for phase-by-phase detail.
+
+## Post-launch backlog (deferred from PLH-3g multi-supplier refactor)
+
+- **Admin per-slot ship UI.** Flagged in PLH-3g P5 and re-flagged in
+  P8. Admins can already see per-slot ship state via the supplier
+  dashboard view of each slot, but `/admin/orders/[id]` does not yet
+  expose a per-slot Ship button for the admin-on-behalf-of-supplier
+  case (admin marking a slot Shipped when a supplier is unreachable).
+  Backend code path (`markSlotShipped`) is in place; this is a UI
+  surface only.
 
 ## Pre-launch polish roadmap (Polish 6 → 11) — COMPLETE
 

@@ -345,7 +345,80 @@ No new migrations. Every `npx next build` since PLH-3d still
 compiles clean. Zero em dashes.
 
 **Cumulative across P12 + PLH-1 + PLH-2 + PLH-3a + PLH-3b + PLH-3c +
-PLH-3d + PLH-3e: 28 CRITICAL + 62 HIGH closed.**
+PLH-3d + PLH-3e: 28 CRITICAL + 62 HIGH closed.** (See PLH-3g block
+below for the post-refactor scorecard.)
+
+**PLH-3g (2026-05-26).** Full multi-supplier order refactor across 9
+phases on the same branch. Closes the launch-time single-supplier-cart
+constraint. Shipped sequentially as P1..P9, every phase building cleanly
+on the previous and `npx next build` green between each.
+- **P1 (schema).** New `OrderSupplierSlot` model: one row per Order per
+  distinct supplier, carrying `subtotalCents`, `freightCents`,
+  `feeCents`, `refundedCents`, optional `payoutId`. Unique on
+  `(orderId, supplierId)`. Hand-authored migration
+  `20260608000000_add_order_supplier_slot`.
+- **P2 (cart + checkout client).** `DifferentSupplierError` and the
+  modal/banner guards removed from `AddToCart`, `QuickAddButton`,
+  `CartClient`. `/cart` and `/checkout` group by supplier in the UI so
+  the buyer sees one freight quote per supplier slot.
+- **P3 (POST /api/orders).** Server-side single-supplier rejection
+  removed. Per-supplier slot math computed and 1 `OrderSupplierSlot`
+  row created per supplier in the same `$transaction` as the Order.
+  Slot freight uses the server-verified Shippo cents when matched;
+  surcharges distributed pro-rata across slots so slot freight cents
+  always sum exactly to the order freight total. Sanity belt asserts
+  slotSubtotalSum and slotFreightSum match the Order row.
+- **P4 (payment + payouts).** `markOrderPaid` and the payouts module
+  iterate per slot. Each slot gets its own Payout row via the 3-stage
+  flow from P12 commit 2 (stage 1 stake-out, stage 2 transfer, stage
+  3a settle + Math.min, stage 3b leave-alone-on-failure). Per-supplier
+  transfers fire to each supplier's Connect destination account.
+- **P5 (per-supplier shipment dispatch).** Slot-level
+  `shipmentStage` / `carrier` / `trackingCode` / `trackingUrl` /
+  `shippedAt` / `deliveredAt` columns. `markSlotShipped()` shared
+  helper. Order-level `shipmentStage` recomputed as the aggregate
+  (Pending if any slot is Pending; Shipped if all slots Shipped;
+  Delivered once all slots Delivered). Admin per-slot ship UI was
+  flagged as deferred and queued as a post-launch backlog item.
+  Migration `20260608010000_add_order_supplier_slot_shipment_fields`.
+- **P6 (per-supplier refund routing + clawback).** Refund route accepts
+  an optional slot scope (`slotId` or itemId). Slot/item-scoped refunds
+  decrement only that slot's `refundedCents` and clawback only that
+  supplier's reserveBalance + owedToPlatformCents. Order-level full
+  refunds iterate all slots. `RefundResult.slotSupplierName` returned
+  for downstream email/audit context.
+- **P7 (buyer UI + invoice + email).** `/orders/[id]` renders per-slot
+  cards with supplier header, items filtered to that slot, per-slot
+  shipmentStage badge, tracking, totals. `/orders/[id]/invoice` shows
+  per-supplier sub-sections when slots > 1. `sendOrderConfirmation` and
+  `sendOrderDelivered` render per-supplier sections automatically.
+  `sendOrderShipped({ slotSupplierId })` opt fires per-slot ship emails;
+  the aggregate roll-up email fires once when the last slot ships.
+  `sendOrderRefunded({ scopeSupplierName })` opt for scoped refunds.
+- **P8 (supplier dashboard).** `/supplier` orders surface scoped to the
+  caller's own slot. The supplier sees their slot's items, totals,
+  shipmentStage, ship/track actions, and refund history. Suppliers
+  never see another supplier's slot data on a shared multi-supplier
+  order. Admin per-slot ship UI re-flagged as deferred (post-launch).
+- **P9 (this phase).** Multi-supplier seed scenario added: one PAID
+  order from buyer Jordan Buyer across Relay & Protection Partners +
+  Gridline Power Supply, with 2 OrderSupplierSlot rows and the
+  matching Invoice row. Stable reference `PP-MULTI1` so reseed is
+  idempotent. Per-supplier slot math extracted into
+  `computePerSupplierSlots()` in `src/lib/order-totals.ts` so the
+  route and any future Vitest tests share the same code path. No
+  Vitest installed at this round, so no new test files landed (the
+  helper extraction is the test-readiness artifact). `npx next build`
+  clean. Zero em dashes throughout PLH-3g.
+
+Migrations new in PLH-3g:
+- `prisma/migrations/20260608000000_add_order_supplier_slot`
+- `prisma/migrations/20260608010000_add_order_supplier_slot_shipment_fields`
+
+**Cumulative across P12 + PLH-1 + PLH-2 + PLH-3a + PLH-3b + PLH-3c +
+PLH-3d + PLH-3e + PLH-3g: 28 CRITICAL + 62 HIGH closed, plus the
+launch-time single-supplier-cart constraint resolved by the PLH-3g
+multi-supplier refactor.**
 
 **PLH-3g P7 (2026-05-26).** Buyer UI for per-supplier shipments and
 invoice section breakdown.
@@ -433,15 +506,11 @@ These are intentional limitations the platform ships with at soft launch.
 Each has a follow-up queued in `docs/ORCHESTRATOR.md` for the post-launch
 roadmap.
 
-- **Single-supplier carts.** A buyer's cart can only contain items from one
-  supplier. PartsPort routes shipments and payments per supplier; the
-  multi-shipment freight split exists in code but the Order model is still
-  one-supplier-per-order. Enforced in `src/lib/cart.ts` (client) and
-  `src/app/api/orders/route.ts` POST (server). UI prompt: "Your cart
-  contains items from <supplier>. Start a new cart?" The full
-  multi-supplier Shipment refactor (one Order, N Shipments, per-supplier
-  payment intent splits via Stripe Connect destination charges) is queued
-  for post-launch.
+(None at present. The previous single-supplier-cart constraint was
+lifted by PLH-3g, which landed the full multi-supplier refactor:
+OrderSupplierSlot rows per Order, per-supplier payment intent splits,
+per-supplier shipment dispatch, per-supplier refund clawback, and the
+admin per-slot ship UI deferred as a post-launch backlog item.)
 
 Live preview URL (this serves the public-facing site today):
 https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app

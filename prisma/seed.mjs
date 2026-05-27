@@ -454,6 +454,7 @@ async function main() {
     // Shipped order with tracking and a Delivered order ready for review.
     await seedDemoOrders(buyer);
     await seedDemoQuotes(buyer);
+    await seedMultiSupplierOrder(buyer);
   }
 
   console.log(
@@ -736,6 +737,111 @@ async function seedDemoQuotes(buyer) {
       },
     });
   }
+}
+
+async function seedMultiSupplierOrder(buyer) {
+  // PLH-3g P9: multi-supplier scenario. One PAID order containing items
+  // from two distinct suppliers, with 2 OrderSupplierSlot rows so the
+  // per-supplier ship + payout + refund code paths can be exercised end
+  // to end. Reference is stable (PP-MULTI1) so reseed is a no-op.
+  const MULTI_REF = "PP-MULTI1";
+  const existing = await prisma.order.findUnique({
+    where: { reference: MULTI_REF },
+  });
+  if (existing) return;
+  const prodA = await getProductBySku("RLY-SEL751");
+  const prodB = await getProductBySku("GND-ROD58");
+  if (!prodA || !prodB) return;
+  if (prodA.supplierId === prodB.supplierId) return;
+  const qtyA = 1;
+  const qtyB = 4;
+  const subtotalA = prodA.priceCents * qtyA;
+  const subtotalB = prodB.priceCents * qtyB;
+  const freightA = 4200;
+  const freightB = 1800;
+  const feeA = Math.round((subtotalA * FEE_BPS) / 10000);
+  const feeB = Math.round((subtotalB * FEE_BPS) / 10000);
+  const subtotal = subtotalA + subtotalB;
+  const freight = freightA + freightB;
+  const fee = feeA + feeB;
+  const total = subtotal + freight + fee;
+  const placed = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  const paid = new Date(placed.getTime() + 25 * 60 * 1000);
+  const order = await prisma.order.create({
+    data: {
+      reference: MULTI_REF,
+      status: "PAID",
+      buyerId: buyer.id,
+      buyerName: buyer.name,
+      buyerEmail: buyer.email,
+      shipTo: "1500 Industrial Way, Bend, OR 97701",
+      subtotalCents: subtotal,
+      freightCents: freight,
+      feeCents: fee,
+      taxCents: 0,
+      totalCents: total,
+      feeRateBps: FEE_BPS,
+      paymentMethod: "stripe (demo)",
+      createdAt: placed,
+      paidAt: paid,
+      shipmentStage: "Pending",
+      items: {
+        create: [
+          {
+            productId: prodA.id,
+            nameSnapshot: prodA.name,
+            skuSnapshot: prodA.sku,
+            supplierName: prodA.supplier.name,
+            unitPriceCents: prodA.priceCents,
+            qty: qtyA,
+          },
+          {
+            productId: prodB.id,
+            nameSnapshot: prodB.name,
+            skuSnapshot: prodB.sku,
+            supplierName: prodB.supplier.name,
+            unitPriceCents: prodB.priceCents,
+            qty: qtyB,
+          },
+        ],
+      },
+    },
+  });
+  await prisma.orderSupplierSlot.create({
+    data: {
+      orderId: order.id,
+      supplierId: prodA.supplierId,
+      subtotalCents: subtotalA,
+      freightCents: freightA,
+      feeCents: feeA,
+    },
+  });
+  await prisma.orderSupplierSlot.create({
+    data: {
+      orderId: order.id,
+      supplierId: prodB.supplierId,
+      subtotalCents: subtotalB,
+      freightCents: freightB,
+      feeCents: feeB,
+    },
+  });
+  await prisma.invoice.upsert({
+    where: { orderId: order.id },
+    update: {},
+    create: {
+      number: `INV-${MULTI_REF}`,
+      orderId: order.id,
+      status: "PAID",
+      subtotalCents: subtotal,
+      freightCents: freight,
+      feeCents: fee,
+      taxCents: 0,
+      totalCents: total,
+      buyerName: buyer.name,
+      buyerEmail: buyer.email,
+      shipTo: "1500 Industrial Way, Bend, OR 97701",
+    },
+  });
 }
 
 main()

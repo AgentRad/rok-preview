@@ -79,6 +79,89 @@ export function computeOrderTotals(
 }
 
 /**
+ * PLH-3g P9: pure helper extracted from /api/orders POST so the
+ * per-supplier slot math has a single, testable home. Given the order
+ * lines grouped by supplier (each line carrying the supplierId + the
+ * dims needed for the flat-rate fallback), plus any server-verified
+ * per-supplier freight quotes, return one SlotMath per supplier with
+ * its own subtotal, freight, and fee. Surcharge attribution is
+ * distributed proportionally to slot freight so the slot freight cents
+ * sum exactly equals the order-level freight total.
+ */
+export type SlotMathLine = {
+  supplierId: string;
+  unitPriceCents: number;
+  qty: number;
+  quoteOnly?: boolean;
+};
+export type SlotMath = {
+  supplierId: string;
+  subtotalCents: number;
+  freightCents: number;
+  feeCents: number;
+};
+
+export function computePerSupplierSlots(
+  lines: SlotMathLine[],
+  opts: {
+    /** Map supplierId -> verified freight cents from a live Shippo re-quote. */
+    verifiedFreightBySupplier?: Map<string, number>;
+    /** Order-level freight total (with surcharges already added). Slot freight
+     *  sum is reconciled against this; the delta is distributed pro-rata. */
+    orderFreightCents: number;
+    feeRateBps?: number;
+  }
+): SlotMath[] {
+  const bps = opts.feeRateBps ?? FEE_RATE_BPS;
+  const verified = opts.verifiedFreightBySupplier ?? new Map();
+  const itemsBySupplier = new Map<string, SlotMathLine[]>();
+  for (const line of lines) {
+    const list = itemsBySupplier.get(line.supplierId) || [];
+    list.push(line);
+    itemsBySupplier.set(line.supplierId, list);
+  }
+  const slots: SlotMath[] = [];
+  for (const [supplierId, supplierItems] of itemsBySupplier) {
+    const subtotal = supplierItems.reduce(
+      (s, i) => s + i.unitPriceCents * i.qty,
+      0
+    );
+    let freight: number;
+    const v = verified.get(supplierId);
+    if (v != null) {
+      freight = v;
+    } else {
+      freight = calculateFreight({
+        items: supplierItems,
+        subtotalCents: subtotal,
+      }).freightCents;
+    }
+    slots.push({
+      supplierId,
+      subtotalCents: subtotal,
+      freightCents: freight,
+      feeCents: feeFor(subtotal, bps),
+    });
+  }
+  const slotFreightSum = slots.reduce((s, x) => s + x.freightCents, 0);
+  const delta = Math.max(0, opts.orderFreightCents - slotFreightSum);
+  if (delta > 0 && slots.length > 0) {
+    let remaining = delta;
+    for (let i = 0; i < slots.length; i++) {
+      const isLast = i === slots.length - 1;
+      const share = isLast
+        ? remaining
+        : slotFreightSum > 0
+        ? Math.round((delta * slots[i].freightCents) / slotFreightSum)
+        : Math.floor(delta / slots.length);
+      slots[i].freightCents += share;
+      remaining -= share;
+    }
+  }
+  return slots;
+}
+
+/**
  * Format the totals as a plain object suitable for direct writes onto an
  * Order row (creation time). Tax stays 0 here; Stripe Tax fills it in.
  */
