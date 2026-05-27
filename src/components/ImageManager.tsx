@@ -3,117 +3,116 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Image = { id: string; url: string; ordinal: number };
+type Image = { id: string; url: string; ordinal: number; alt: string };
 
-function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    // Use window.Image so the local type alias `Image` above doesn't shadow
-    // the HTMLImageElement constructor.
-    const img = new window.Image();
-    img.onload = () => {
-      const dim = { width: img.naturalWidth, height: img.naturalHeight };
-      URL.revokeObjectURL(url);
-      resolve(dim);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Could not read image"));
-    };
-    img.src = url;
-  });
-}
+const MAX_IMAGES = 12;
 
 export default function ImageManager({ productId }: { productId: string }) {
   const router = useRouter();
   const [images, setImages] = useState<Image[]>([]);
-  const [url, setUrl] = useState("");
-  const [urlBusy, setUrlBusy] = useState(false);
-  const [urlError, setUrlError] = useState("");
-  const [showUrl, setShowUrl] = useState(false);
   const [loaded, setLoaded] = useState(false);
+
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>("");
   const [uploadError, setUploadError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  const [showUrl, setShowUrl] = useState(false);
+  const [url, setUrl] = useState("");
+  const [urlBusy, setUrlBusy] = useState(false);
+  const [urlError, setUrlError] = useState("");
+
+  // Local edits to alt text. Keyed by image id so each input is
+  // controlled independently; persisted on blur.
+  const [altDrafts, setAltDrafts] = useState<Record<string, string>>({});
+
   useEffect(() => {
     fetch(`/api/supplier/products/${productId}/images`)
       .then((r) => r.json())
-      .then((data) => setImages(data.images || []))
+      .then((data) => {
+        const imgs: Image[] = (data.images || []).map((i: Image) => ({
+          ...i,
+          alt: i.alt ?? "",
+        }));
+        setImages(imgs);
+        const drafts: Record<string, string> = {};
+        for (const i of imgs) drafts[i.id] = i.alt;
+        setAltDrafts(drafts);
+      })
       .finally(() => setLoaded(true));
   }, [productId]);
+
+  const atCap = images.length >= MAX_IMAGES;
+  const remainingSlots = Math.max(0, MAX_IMAGES - images.length);
 
   async function uploadFiles(files: FileList | File[]) {
     const list = Array.from(files);
     if (list.length === 0) return;
-    setUploading(true);
-    setUploadError("");
-
-    // Client-side validation: every product image must be at least 400 x 400
-    // so it renders cleanly on catalog cards (220px tall) and the gallery
-    // (1:1 detail page). Reject tiny files before they hit Vercel Blob.
-    const MIN_DIM = 400;
-    const validated: File[] = [];
-    const rejected: string[] = [];
-    for (const f of list) {
-      if (f.type === "image/svg+xml") {
-        validated.push(f); // SVG = vector, skip dim check
-        continue;
-      }
-      if (f.size < 200) {
-        rejected.push(`${f.name}: under 200 bytes, likely empty.`);
-        continue;
-      }
-      try {
-        const dim = await readImageDimensions(f);
-        if (dim.width < MIN_DIM || dim.height < MIN_DIM) {
-          rejected.push(
-            `${f.name}: ${dim.width}x${dim.height}, minimum ${MIN_DIM}x${MIN_DIM}.`
-          );
-          continue;
-        }
-        validated.push(f);
-      } catch {
-        rejected.push(`${f.name}: could not read image.`);
-      }
-    }
-    if (rejected.length) {
-      setUploadError(rejected.join(" "));
-    }
-    if (validated.length === 0) {
-      setUploading(false);
+    if (atCap) {
+      setUploadError(`Max ${MAX_IMAGES} images per product. Delete one first.`);
       return;
     }
-    const form = new FormData();
-    for (const f of validated) form.append("files", f);
-    try {
-      const res = await fetch(
-        `/api/supplier/products/${productId}/images/upload`,
-        { method: "POST", body: form }
-      );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setUploadError(data.error || "Upload failed.");
-        return;
+    setUploading(true);
+    setUploadError("");
+    const errors: string[] = [];
+
+    // Sequential upload with per-file progress. One request per file so
+    // a bad file (oversize, bad MIME) does not block the rest of the batch.
+    let added = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (images.length + added >= MAX_IMAGES) {
+        errors.push(`${list[i].name}: skipped (12-image cap reached).`);
+        continue;
       }
-      if (data.images?.length) {
-        setImages((list) => [...list, ...data.images]);
+      setUploadStatus(`Uploading ${i + 1} of ${list.length}: ${list[i].name}`);
+      const form = new FormData();
+      form.append("files", list[i]);
+      try {
+        const res = await fetch(
+          `/api/supplier/products/${productId}/images/upload`,
+          { method: "POST", body: form }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          errors.push(`${list[i].name}: ${data.error || "Upload failed."}`);
+          continue;
+        }
+        if (data.errors?.length) {
+          errors.push(...data.errors);
+        }
+        if (data.images?.length) {
+          const fresh = (data.images as Image[]).map((img) => ({
+            ...img,
+            alt: img.alt ?? "",
+          }));
+          setImages((prev) => [...prev, ...fresh]);
+          setAltDrafts((prev) => {
+            const next = { ...prev };
+            for (const img of fresh) next[img.id] = img.alt;
+            return next;
+          });
+          added += fresh.length;
+        }
+      } catch (e) {
+        errors.push(
+          `${list[i].name}: ${e instanceof Error ? e.message : "Upload failed."}`
+        );
       }
-      if (data.errors?.length) {
-        setUploadError(data.errors.join(" "));
-      }
-      router.refresh();
-    } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "Upload failed.");
-    } finally {
-      setUploading(false);
     }
+    setUploadStatus("");
+    setUploading(false);
+    if (errors.length) setUploadError(errors.join(" "));
+    router.refresh();
   }
 
   async function addByUrl() {
     if (!url.trim()) return;
+    if (atCap) {
+      setUrlError(`Max ${MAX_IMAGES} images per product.`);
+      return;
+    }
     setUrlBusy(true);
     setUrlError("");
     try {
@@ -127,7 +126,9 @@ export default function ImageManager({ productId }: { productId: string }) {
         setUrlError(data.error || "Could not add the image.");
         return;
       }
-      setImages((list) => [...list, data.image]);
+      const img: Image = { ...data.image, alt: data.image.alt ?? "" };
+      setImages((list) => [...list, img]);
+      setAltDrafts((prev) => ({ ...prev, [img.id]: img.alt }));
       setUrl("");
       router.refresh();
     } finally {
@@ -136,33 +137,73 @@ export default function ImageManager({ productId }: { productId: string }) {
   }
 
   async function remove(imageId: string) {
-    const res = await fetch(`/api/supplier/products/${productId}/images`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageId }),
-    });
+    if (typeof window !== "undefined") {
+      const ok = window.confirm("Delete this image?");
+      if (!ok) return;
+    }
+    const res = await fetch(
+      `/api/supplier/products/${productId}/images/${imageId}`,
+      { method: "DELETE" }
+    );
     if (res.ok) {
       setImages((list) => list.filter((i) => i.id !== imageId));
+      setAltDrafts((prev) => {
+        const next = { ...prev };
+        delete next[imageId];
+        return next;
+      });
       router.refresh();
     }
   }
 
-  async function persistOrder(next: Image[]) {
+  async function persistReorder(next: Image[]) {
     setImages(next);
     await fetch(`/api/supplier/products/${productId}/images/reorder`, {
-      method: "PATCH",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ order: next.map((i) => i.id) }),
     });
     router.refresh();
   }
 
-  function setPrimary(idx: number) {
-    if (idx === 0) return;
-    const next = [...images];
-    const [picked] = next.splice(idx, 1);
-    next.unshift(picked);
-    persistOrder(next);
+  async function setPrimary(imageId: string) {
+    const res = await fetch(
+      `/api/supplier/products/${productId}/images/${imageId}/primary`,
+      { method: "POST" }
+    );
+    if (res.ok) {
+      // Mirror the server-side reorder locally: target to ordinal 0,
+      // shift the rest up.
+      setImages((prev) => {
+        const target = prev.find((i) => i.id === imageId);
+        if (!target) return prev;
+        const rest = prev.filter((i) => i.id !== imageId);
+        return [target, ...rest].map((img, idx) => ({ ...img, ordinal: idx }));
+      });
+      router.refresh();
+    }
+  }
+
+  async function saveAlt(imageId: string) {
+    const value = altDrafts[imageId] ?? "";
+    const current = images.find((i) => i.id === imageId);
+    if (!current) return;
+    if (value.trim() === current.alt) return;
+    const res = await fetch(
+      `/api/supplier/products/${productId}/images/${imageId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alt: value }),
+      }
+    );
+    if (res.ok) {
+      setImages((prev) =>
+        prev.map((i) =>
+          i.id === imageId ? { ...i, alt: value.trim().slice(0, 200) } : i
+        )
+      );
+    }
   }
 
   function onDragStart(idx: number) {
@@ -181,21 +222,36 @@ export default function ImageManager({ productId }: { productId: string }) {
   }
   function onDragEnd() {
     if (dragIdx !== null) {
-      persistOrder(images);
+      persistReorder(images);
     }
     setDragIdx(null);
   }
 
   return (
     <div className="image-manager">
+      {atCap && (
+        <div
+          className="alert"
+          style={{ marginBottom: 8, fontSize: 12.5 }}
+        >
+          You have {MAX_IMAGES} images on this product, the maximum. Delete
+          one to add another.
+        </div>
+      )}
+
       <div
-        className={"image-drop" + (dragOver ? " on" : "")}
-        onClick={() => fileInput.current?.click()}
+        className={"image-drop" + (dragOver ? " on" : "") + (atCap ? " disabled" : "")}
+        onClick={() => {
+          if (atCap) return;
+          fileInput.current?.click();
+        }}
         onDragEnter={(e) => {
+          if (atCap) return;
           e.preventDefault();
           setDragOver(true);
         }}
         onDragOver={(e) => {
+          if (atCap) return;
           e.preventDefault();
           setDragOver(true);
         }}
@@ -203,10 +259,12 @@ export default function ImageManager({ productId }: { productId: string }) {
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
+          if (atCap) return;
           if (e.dataTransfer.files) uploadFiles(e.dataTransfer.files);
         }}
         role="button"
-        tabIndex={0}
+        tabIndex={atCap ? -1 : 0}
+        aria-disabled={atCap}
         aria-label="Upload product images"
       >
         <input
@@ -221,10 +279,18 @@ export default function ImageManager({ productId }: { productId: string }) {
           }}
         />
         <div className="image-drop-title">
-          {uploading ? "Uploading…" : "Drop images here or click to upload"}
+          {uploading
+            ? uploadStatus || "Uploading..."
+            : atCap
+            ? "Image limit reached"
+            : "Drop images here or click to upload"}
         </div>
         <div className="image-drop-sub">
-          JPG, PNG, or WEBP. Max 8 MB each. First image is your primary listing photo.
+          PNG, JPEG, or WEBP. Max 5 MB each. Up to {MAX_IMAGES} per product.
+          First image is the primary listing photo.
+          {!atCap && remainingSlots < MAX_IMAGES && (
+            <> {remainingSlots} slot{remainingSlots === 1 ? "" : "s"} left.</>
+          )}
         </div>
       </div>
 
@@ -236,7 +302,7 @@ export default function ImageManager({ productId }: { productId: string }) {
 
       {loaded && images.length === 0 && !uploading && (
         <p className="muted-text" style={{ fontSize: 12.5, marginTop: 12 }}>
-          Add the first image so buyers see what they are buying.
+          Add at least one product photo. Buyers see these on every product page.
         </p>
       )}
 
@@ -253,7 +319,7 @@ export default function ImageManager({ productId }: { productId: string }) {
             >
               <div className="image-tile-thumb">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img.url} alt="" />
+                <img src={img.url} alt={img.alt || ""} />
                 {idx === 0 && <span className="image-tile-primary">Primary</span>}
               </div>
               <div className="image-tile-actions">
@@ -261,7 +327,8 @@ export default function ImageManager({ productId }: { productId: string }) {
                   <button
                     type="button"
                     className="link-btn"
-                    onClick={() => setPrimary(idx)}
+                    onClick={() => setPrimary(img.id)}
+                    title="Set as primary"
                   >
                     Set as primary
                   </button>
@@ -270,10 +337,30 @@ export default function ImageManager({ productId }: { productId: string }) {
                   type="button"
                   className="link-btn link-btn-danger"
                   onClick={() => remove(img.id)}
+                  title="Delete image"
                 >
-                  Remove
+                  Delete
                 </button>
               </div>
+              {idx === 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <input
+                    type="text"
+                    className="input-sm"
+                    style={{ width: "100%", fontSize: 12 }}
+                    placeholder="Alt text for accessibility (optional)"
+                    maxLength={200}
+                    value={altDrafts[img.id] ?? ""}
+                    onChange={(e) =>
+                      setAltDrafts((prev) => ({
+                        ...prev,
+                        [img.id]: e.target.value,
+                      }))
+                    }
+                    onBlur={() => saveAlt(img.id)}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -295,17 +382,18 @@ export default function ImageManager({ productId }: { productId: string }) {
               type="url"
               className="input-sm"
               style={{ flex: 1 }}
-              placeholder="https://… hosted image URL"
+              placeholder="https://... hosted image URL"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
+              disabled={atCap}
             />
             <button
               type="button"
               className="btn btn-ghost btn-sm"
               onClick={addByUrl}
-              disabled={urlBusy || !url.trim()}
+              disabled={urlBusy || !url.trim() || atCap}
             >
-              {urlBusy ? "…" : "Add URL"}
+              {urlBusy ? "..." : "Add URL"}
             </button>
           </div>
           {urlError && (

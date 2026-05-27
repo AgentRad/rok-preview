@@ -82,6 +82,13 @@ export const AUDIT_ACTIONS = [
   // the final Import-all click with row counts and mapping/filter hashes.
   "IMPORT_AI_ASKED",
   "CATALOG_IMPORT_COMMITTED",
+  // PLH-3h P2: supplier image manager. Every mutation on ProductImage is
+  // logged so a future audit can reconstruct the gallery state per product.
+  "IMAGE_UPLOADED",
+  "IMAGE_DELETED",
+  "IMAGES_REORDERED",
+  "IMAGE_SET_PRIMARY",
+  "IMAGE_ALT_UPDATED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -95,7 +102,9 @@ export type AuditTargetType =
   | "ReturnRequest"
   | "Address"
   | "QuoteRequest"
-  | "ManufacturerApplication";
+  | "ManufacturerApplication"
+  | "Product"
+  | "ProductImage";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

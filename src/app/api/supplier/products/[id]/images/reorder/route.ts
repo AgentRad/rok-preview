@@ -1,44 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-import type { User } from "@prisma/client";
-import { canEditCatalog, effectiveAccessToSupplier } from "@/lib/supplier-access";
+import { rateLimit } from "@/lib/rate-limit";
+import { writeAuditLog } from "@/lib/audit";
+import { authorizeProductEdit } from "@/lib/product-image-auth";
 
 export const runtime = "nodejs";
 
-async function authorize(productId: string) {
-  const user: User | null = await getCurrentUser();
-  if (!user || (user.role !== "SUPPLIER" && user.role !== "ADMIN")) {
-    return { error: NextResponse.json({ error: "Not authorized." }, { status: 403 }) };
-  }
-  if (user.role === "ADMIN") {
-    const product = await prisma.product.findUnique({ where: { id: productId } });
-    if (!product) {
-      return { error: NextResponse.json({ error: "Product not found." }, { status: 404 }) };
-    }
-    return { product };
-  }
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    include: { supplier: true },
-  });
-  if (!product) {
-    return { error: NextResponse.json({ error: "Product not found." }, { status: 404 }) };
-  }
-  const access = await effectiveAccessToSupplier(user, product.supplierId);
-  if (!access.ok || !canEditCatalog(access.role)) {
-    return { error: NextResponse.json({ error: "Not your product." }, { status: 403 }) };
-  }
-  return { product };
-}
-
-export async function PATCH(
+async function handle(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const auth = await authorize(id);
+  productId: string
+): Promise<NextResponse> {
+  const auth = await authorizeProductEdit(productId);
   if (auth.error) return auth.error;
+
+  const rl = await rateLimit("generic", `supplier:${auth.user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
+  }
 
   const body = await req.json().catch(() => ({}));
   const order: unknown = body.order;
@@ -51,7 +32,7 @@ export async function PATCH(
   const orderIds = order as string[];
 
   const existing = await prisma.productImage.findMany({
-    where: { productId: id },
+    where: { productId },
     select: { id: true },
   });
   const existingIds = new Set(existing.map((e) => e.id));
@@ -65,10 +46,8 @@ export async function PATCH(
     );
   }
 
-  // PLH-3h: (productId, ordinal) is unique, so writing sequential ordinals
-  // in one pass would collide mid-transaction. Two-step shuffle: move
-  // everyone to negative ordinals first (offset by -1000 to clear the
-  // positive band the unique key lives in), then write the final values.
+  // (productId, ordinal) is unique. Two-pass shuffle through negative
+  // ordinals so the unique constraint cannot collide mid-transaction.
   await prisma.$transaction([
     ...orderIds.map((imageId, idx) =>
       prisma.productImage.update({
@@ -85,13 +64,38 @@ export async function PATCH(
   ]);
 
   const first = await prisma.productImage.findFirst({
-    where: { productId: id },
+    where: { productId },
     orderBy: { ordinal: "asc" },
   });
   await prisma.product.update({
-    where: { id },
+    where: { id: productId },
     data: { imageUrl: first?.url ?? null },
   });
 
+  await writeAuditLog({
+    actor: auth.user,
+    action: "IMAGES_REORDERED",
+    targetType: "Product",
+    targetId: productId,
+    summary: `Reordered images for product ${productId}`,
+    metadata: { productId, order: orderIds },
+  });
+
   return NextResponse.json({ ok: true });
+}
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  return handle(req, id);
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  return handle(req, id);
 }

@@ -1,42 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-import type { User } from "@prisma/client";
-import { canEditCatalog, effectiveAccessToSupplier } from "@/lib/supplier-access";
+import { rateLimit } from "@/lib/rate-limit";
+import { writeAuditLog } from "@/lib/audit";
+import {
+  authorizeProductEdit,
+  MAX_IMAGES_PER_PRODUCT,
+} from "@/lib/product-image-auth";
 
 export const runtime = "nodejs";
-
-async function ownedProduct(user: User, productId: string) {
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    include: { supplier: true },
-  });
-  if (!product) return null;
-  const access = await effectiveAccessToSupplier(user, product.supplierId);
-  if (!access.ok || !canEditCatalog(access.role)) return null;
-  return product;
-}
-
-async function requireSupplierProduct(req: Request, productId: string) {
-  const user = await getCurrentUser();
-  if (!user || (user.role !== "SUPPLIER" && user.role !== "ADMIN")) {
-    return { error: NextResponse.json({ error: "Not authorized." }, { status: 403 }) };
-  }
-  // Admins bypass ownership; suppliers must own the product.
-  if (user.role === "ADMIN") {
-    const product = await prisma.product.findUnique({ where: { id: productId } });
-    if (!product) {
-      return { error: NextResponse.json({ error: "Product not found." }, { status: 404 }) };
-    }
-    return { product };
-  }
-  const product = await ownedProduct(user, productId);
-  if (!product) {
-    return { error: NextResponse.json({ error: "Not your product." }, { status: 403 }) };
-  }
-  void req;
-  return { product };
-}
 
 export async function GET(
   _req: Request,
@@ -47,16 +18,30 @@ export async function GET(
     where: { productId: id },
     orderBy: { ordinal: "asc" },
   });
-  return NextResponse.json({ images });
+  return NextResponse.json({ images, max: MAX_IMAGES_PER_PRODUCT });
 }
 
+/**
+ * POST: add an image by external URL. Kept for the "Add image by URL"
+ * fallback in the UI when Vercel Blob is not configured. Magic-byte
+ * validation only applies to direct uploads; external URLs are accepted
+ * as-is but capped to 12 per product and rate-limited per supplier.
+ */
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const auth = await requireSupplierProduct(req, id);
+  const auth = await authorizeProductEdit(id);
   if (auth.error) return auth.error;
+
+  const rl = await rateLimit("generic", `supplier:${auth.user.id}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
+  }
 
   const body = await req.json().catch(() => ({}));
   const url = String(body.url || "").trim();
@@ -70,66 +55,33 @@ export async function POST(
     );
   }
 
-  const last = await prisma.productImage.findFirst({
-    where: { productId: id },
-    orderBy: { ordinal: "desc" },
-    select: { ordinal: true },
-  });
-  const next = (last?.ordinal ?? -1) + 1;
+  const count = await prisma.productImage.count({ where: { productId: id } });
+  if (count >= MAX_IMAGES_PER_PRODUCT) {
+    return NextResponse.json(
+      { error: `Max ${MAX_IMAGES_PER_PRODUCT} images per product.` },
+      { status: 400 }
+    );
+  }
+
   const image = await prisma.productImage.create({
-    data: { productId: id, url, ordinal: next },
+    data: { productId: id, url, ordinal: count },
   });
 
-  // Keep the legacy Product.imageUrl in sync with the first image so the
-  // older single-image render path stays consistent until it is retired.
-  if (next === 0) {
+  if (count === 0) {
     await prisma.product.update({
       where: { id },
       data: { imageUrl: url },
     });
   }
 
+  await writeAuditLog({
+    actor: auth.user,
+    action: "IMAGE_UPLOADED",
+    targetType: "ProductImage",
+    targetId: image.id,
+    summary: `Added image by URL to product ${id}`,
+    metadata: { productId: id, source: "url", ordinal: image.ordinal },
+  });
+
   return NextResponse.json({ ok: true, image });
-}
-
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const auth = await requireSupplierProduct(req, id);
-  if (auth.error) return auth.error;
-
-  const body = await req.json().catch(() => ({}));
-  const imageId = String(body.imageId || "").trim();
-  if (!imageId) {
-    return NextResponse.json({ error: "imageId is required." }, { status: 400 });
-  }
-  const image = await prisma.productImage.findFirst({
-    where: { id: imageId, productId: id },
-  });
-  if (!image) {
-    return NextResponse.json({ error: "Image not found." }, { status: 404 });
-  }
-  await prisma.productImage.delete({ where: { id: imageId } });
-
-  // Repack positions and refresh Product.imageUrl from the remaining images.
-  const remaining = await prisma.productImage.findMany({
-    where: { productId: id },
-    orderBy: { ordinal: "asc" },
-  });
-  for (let i = 0; i < remaining.length; i++) {
-    if (remaining[i].ordinal !== i) {
-      await prisma.productImage.update({
-        where: { id: remaining[i].id },
-        data: { ordinal: i },
-      });
-    }
-  }
-  await prisma.product.update({
-    where: { id },
-    data: { imageUrl: remaining[0]?.url ?? null },
-  });
-
-  return NextResponse.json({ ok: true });
 }
