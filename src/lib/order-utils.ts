@@ -3,6 +3,8 @@ import { after } from "next/server";
 import { prisma } from "./db";
 import { sendPaymentReceived } from "./email";
 import { captureError } from "./observability";
+import { intuitConfigured } from "./qbo-auth";
+import { syncInvoice } from "./qbo-sync";
 
 export function generateReference(prefix = "PP"): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -96,6 +98,40 @@ export async function markOrderPaid(
           captureError(err, { subsystem: "email", op: "payment-received", orderId });
         }
       });
+
+      // PLH-3i P2: push the freshly paid Order to QuickBooks Online as a
+      // Customer + Invoice pair. Feature is gated on intuitConfigured() so
+      // dev / pre-connect deployments skip silently. Errors are swallowed
+      // at the after() boundary AFTER syncInvoice writes its own
+      // QBO_SYNC_FAILED audit row + captureError, so a QBO outage cannot
+      // break the buyer-facing payment flow.
+      if (intuitConfigured()) {
+        after(async () => {
+          try {
+            await syncInvoice({
+              id: paidOrder.id,
+              reference: paidOrder.reference,
+              buyerId: paidOrder.buyerId,
+              buyerEmail: paidOrder.buyerEmail,
+              buyerName: paidOrder.buyerName,
+              shipTo: paidOrder.shipTo,
+              subtotalCents: paidOrder.subtotalCents,
+              freightCents: paidOrder.freightCents,
+              feeCents: paidOrder.feeCents,
+              taxCents: paidOrder.taxCents,
+              totalCents: paidOrder.totalCents,
+              items: paidOrder.items.map((i) => ({
+                nameSnapshot: i.nameSnapshot,
+                skuSnapshot: i.skuSnapshot,
+                unitPriceCents: i.unitPriceCents,
+                qty: i.qty,
+              })),
+            });
+          } catch {
+            // already audited + captured inside syncInvoice
+          }
+        });
+      }
     }
   }
   return true;
