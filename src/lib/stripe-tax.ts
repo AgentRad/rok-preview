@@ -58,7 +58,18 @@ export async function lookupTaxExemption(
 ): Promise<TaxExemptionState> {
   if (!buyerId) return { isExempt: false, certificateUrl: null };
   const approved = await prisma.address.findFirst({
-    where: { userId: buyerId, taxExemptStatus: "APPROVED", deletedAt: null },
+    where: {
+      userId: buyerId,
+      taxExemptStatus: "APPROVED",
+      deletedAt: null,
+      // PLH-3j P4: skip certs that have expired so we don't waive tax
+      // on a stale cert. Null expiry is treated as "no date on file",
+      // which is allowed for pre-P4 certs.
+      OR: [
+        { taxExemptExpiresAt: null },
+        { taxExemptExpiresAt: { gt: new Date() } },
+      ],
+    },
     orderBy: { createdAt: "desc" },
   });
   return {

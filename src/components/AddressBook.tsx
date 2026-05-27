@@ -10,14 +10,23 @@ function TaxExemptRow({ address }: { address: Address }) {
   const [error, setError] = useState("");
   const [showUrlPaste, setShowUrlPaste] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
+  // PLH-3j P4: optional expiry date entered by the buyer at upload time.
+  const [expiresAtDraft, setExpiresAtDraft] = useState(
+    address.taxExemptExpiresAt
+      ? new Date(address.taxExemptExpiresAt).toISOString().slice(0, 10)
+      : ""
+  );
   const status = address.taxExemptStatus;
   const url = address.taxExemptCertificateUrl;
+  const expiresAt = address.taxExemptExpiresAt;
+  const isExpired = expiresAt ? new Date(expiresAt) <= new Date() : false;
 
   async function upload(file: File) {
     setBusy(true);
     setError("");
     const form = new FormData();
     form.append("file", file);
+    if (expiresAtDraft) form.append("expiresAt", expiresAtDraft);
     try {
       const res = await fetch(`/api/addresses/${address.id}/tax-exempt`, {
         method: "POST",
@@ -42,7 +51,10 @@ function TaxExemptRow({ address }: { address: Address }) {
       const res = await fetch(`/api/addresses/${address.id}/tax-exempt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: urlDraft.trim() }),
+        body: JSON.stringify({
+          url: urlDraft.trim(),
+          expiresAt: expiresAtDraft || null,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -84,6 +96,16 @@ function TaxExemptRow({ address }: { address: Address }) {
   return (
     <div style={{ marginTop: 10, fontSize: 12.5 }}>
       {badge && <div style={{ marginBottom: 6 }}>{badge}</div>}
+      {expiresAt && (
+        <div
+          className={isExpired ? "alert alert-error" : "muted-text"}
+          style={{ fontSize: 12, marginBottom: 6 }}
+        >
+          {isExpired
+            ? `Certificate expired on ${new Date(expiresAt).toLocaleDateString()}. Re-upload a current copy to keep tax-exempt status at checkout.`
+            : `Certificate expires ${new Date(expiresAt).toLocaleDateString()}.`}
+        </div>
+      )}
       <input
         ref={fileInput}
         type="file"
@@ -122,6 +144,19 @@ function TaxExemptRow({ address }: { address: Address }) {
           </>
         ) : (
           <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <label htmlFor={`exp-${address.id}`} style={{ fontSize: 12 }}>
+                Expiry (optional)
+              </label>
+              <input
+                id={`exp-${address.id}`}
+                type="date"
+                className="input-sm"
+                value={expiresAtDraft}
+                onChange={(e) => setExpiresAtDraft(e.target.value)}
+                style={{ width: 160 }}
+              />
+            </div>
             <button
               type="button"
               className="link-btn"
@@ -186,6 +221,10 @@ export type Address = {
   isDefault: boolean;
   taxExemptCertificateUrl?: string | null;
   taxExemptStatus?: string | null;
+  // PLH-3j P4: cert expiry. RSC may hand us either a Date (Prisma row)
+  // or an ISO string (after serialization). Both are normalized via
+  // new Date(...) on read.
+  taxExemptExpiresAt?: Date | string | null;
 };
 
 // PLH-2 Phase 4d (D4): curated country list. Server still enforces ISO

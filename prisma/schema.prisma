@@ -225,6 +225,10 @@ model Address {
   // computation on the order. Admin reviews the cert before approval.
   taxExemptCertificateUrl String?
   taxExemptStatus         String? // "PENDING" | "APPROVED" | "REJECTED" | null
+  // PLH-3j P4: cert expiry. Daily cron emails buyers 30 days out;
+  // checkout re-prompts when past expiry to avoid skipping tax on a
+  // stale cert.
+  taxExemptExpiresAt      DateTime?
   createdAt               DateTime @default(now())
   // PLH-3j P2: soft-delete so historical Order ship-to denorm is not
   // lost when the buyer removes the row from their address book.
@@ -233,6 +237,7 @@ model Address {
 
   @@index([userId])
   @@index([userId, deletedAt])
+  @@index([taxExemptExpiresAt])
 }
 
 model SearchEvent {

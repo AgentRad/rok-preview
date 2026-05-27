@@ -55,10 +55,26 @@ export async function POST(
 
   const contentType = req.headers.get("content-type") || "";
 
+  // PLH-3j P4: parse optional expiresAt from JSON or multipart form.
+  // ISO date string from the upload form. Null when omitted.
+  function parseExpiresAt(raw: unknown): Date | null | "invalid" {
+    if (raw === undefined || raw === null || raw === "") return null;
+    const d = new Date(String(raw));
+    if (Number.isNaN(d.getTime())) return "invalid";
+    return d;
+  }
+
   // ---- URL-paste fallback (JSON) ----------------------------------------
   if (contentType.includes("application/json")) {
     const body = await req.json().catch(() => ({}));
     const url = String(body.url || "").trim();
+    const exp = parseExpiresAt(body.expiresAt);
+    if (exp === "invalid") {
+      return NextResponse.json(
+        { error: "expiresAt must be an ISO date." },
+        { status: 400 }
+      );
+    }
     if (!url) {
       return NextResponse.json(
         { error: "Provide a certificate URL." },
@@ -78,6 +94,7 @@ export async function POST(
       data: {
         taxExemptCertificateUrl: url,
         taxExemptStatus: "PENDING",
+        taxExemptExpiresAt: exp,
       },
     });
     return NextResponse.json({ ok: true, url, status: "PENDING" });
@@ -96,6 +113,14 @@ export async function POST(
   const form = await req.formData().catch(() => null);
   if (!form) {
     return NextResponse.json({ error: "Invalid upload payload." }, { status: 400 });
+  }
+  const expRaw = form.get("expiresAt");
+  const exp = parseExpiresAt(expRaw);
+  if (exp === "invalid") {
+    return NextResponse.json(
+      { error: "expiresAt must be an ISO date." },
+      { status: 400 }
+    );
   }
   const file = form.get("file");
   if (!(file instanceof File)) {
@@ -129,6 +154,7 @@ export async function POST(
     data: {
       taxExemptCertificateUrl: blob.url,
       taxExemptStatus: "PENDING",
+      taxExemptExpiresAt: exp,
     },
   });
   return NextResponse.json({

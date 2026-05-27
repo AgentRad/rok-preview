@@ -1190,3 +1190,29 @@ export async function sendOrderCancelled(
     html: wrap("Order cancelled", body),
   });
 }
+
+/**
+ * PLH-3j P4: tax-exempt certificate expiry reminder. Sent by the daily
+ * cron 30 days before the cert expires. Buyer can refresh the cert from
+ * /settings to keep tax-exempt status active at checkout.
+ */
+export async function sendTaxExemptExpiryNotice(args: {
+  to: string;
+  recipientName: string;
+  addressLabel: string;
+  expiresAt: Date;
+  daysLeft: number;
+}): Promise<void> {
+  const url = siteUrl(`/settings`);
+  const pretty = args.expiresAt.toLocaleDateString();
+  const body = `
+    <p>Hi ${esc(args.recipientName)},</p>
+    <p>Your tax-exempt certificate on file for <strong>${esc(args.addressLabel)}</strong> expires on <strong>${esc(pretty)}</strong> (in ${args.daysLeft} days).</p>
+    <p>Upload a refreshed certificate to keep tax-exempt status applied at checkout. If the cert lapses, Stripe Tax will compute sales tax on your next order until a current cert is on file.</p>
+    <p style="margin-top:22px;">${btn(url, "Refresh certificate")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Tax-exempt certificate expires ${pretty}`,
+    html: wrap("Certificate expires soon", body),
+  });
+}
