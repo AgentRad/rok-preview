@@ -893,16 +893,18 @@ invoice section breakdown.
   delivery, so a per-slot delivered notification would be confusing).
 - `npx next build` clean. Zero em dashes. No new migration.
 
-**Inbound email is now LIVE and proven on prod (2026-05-26).** All four
+**Inbound email is now LIVE on Conrad's agentgaming Resend tenant
+(migrated 2026-05-27 off Jenna's safespacesitters tenant).** All four
 env vars set in Vercel Production + Preview/claude-branch:
 `INBOUND_EMAIL_PROVIDER=resend`,
-`INBOUND_EMAIL_DOMAIN=reply.partsport.agentgaming.gg`,
+`INBOUND_EMAIL_DOMAIN=inbound.partsport.agentgaming.gg` (new subdomain
+on Conrad's tenant),
 `INBOUND_REPLY_SECRET` (HMAC key for per-thread Reply-To token signing),
-`INBOUND_WEBHOOK_SECRET=whsec_*` (Svix signing secret from Resend).
+`INBOUND_WEBHOOK_SECRET=whsec_*` (Svix signing secret from new tenant),
+`RESEND_API_KEY=re_*` (outbound, from new tenant, full access).
 Resend webhook endpoint (`/api/email/inbound`) is configured to fire
 `email.received` events. Cloudflare DNS holds verified MX + SPF + DKIM
-records on `reply.partsport.agentgaming.gg` (inbound MX:
-`inbound-smtp.us-east-1.amazonaws.com priority 10`).
+records on `inbound.partsport.agentgaming.gg`.
 
 **Smoke test on prod 2026-05-26:** POST a Svix-signed payload to
 `/api/email/inbound` with a known-good `whsec_*` signature. Response
