@@ -35,6 +35,7 @@ import { getSupplierAttention } from "@/lib/attention";
 import { listClaimedManufacturers } from "@/lib/manufacturers";
 import { formatCents } from "@/lib/money";
 import SupplierAIAssistant from "@/components/SupplierAIAssistant";
+import SupplierNav from "@/components/SupplierNav";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,7 @@ export default async function SupplierDashboard({
     return (
       <>
         <SiteHeader />
+        <SupplierNav active="dashboard" />
         <main id="main" className="app-page">
           <div className="page-pad narrow">
             <h1 className="page-title">Supplier dashboard</h1>
@@ -192,6 +194,7 @@ export default async function SupplierDashboard({
   return (
     <>
       <SiteHeader />
+      <SupplierNav active="dashboard" />
       <main id="main" className="app-page">
         <div className="page-pad">
           {ctx?.actingAsAdmin && (
