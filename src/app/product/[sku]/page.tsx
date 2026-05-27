@@ -291,12 +291,8 @@ export default async function ProductPage({
                       />
                     )}
                     {product.supplier.name}{" "}
-                    {supplierRating.kind === "computed" ? (
+                    {supplierRating.kind === "computed" && (
                       <>★ {supplierRating.average.toFixed(1)} ({supplierRating.count})</>
-                    ) : (
-                      <span className="muted-text" style={{ fontSize: 12 }}>
-                        · New supplier
-                      </span>
                     )}
                   </span>
                 </div>
