@@ -394,8 +394,21 @@ async function handleInbound(req: Request) {
             threadId: order.id,
             recipientUserId: recipientUserIds.get(to) ?? null,
           });
-        } catch {
-          // Per-recipient swallow; one bad address doesn't drop the rest.
+        } catch (err) {
+          captureError(err, { subsystem: "email", op: "inbound-fan-out", to });
+          await writeAuditLog({
+            actor: { id: user.id, email: user.email },
+            action: "INBOUND_FAN_OUT_FAILED",
+            targetType: "Order",
+            targetId: order.id,
+            summary: `Inbound fan-out failed to ${to}`,
+            metadata: {
+              threadKind: "order",
+              threadId: order.id,
+              to,
+              error: String(err),
+            },
+          });
         }
       }
     });
@@ -499,8 +512,21 @@ async function handleInbound(req: Request) {
           threadId: quote.id,
           recipientUserId: recipientUserIds.get(to) ?? null,
         });
-      } catch {
-        // swallow per-recipient; the rest still send.
+      } catch (err) {
+        captureError(err, { subsystem: "email", op: "inbound-fan-out", to });
+        await writeAuditLog({
+          actor: { id: user.id, email: user.email },
+          action: "INBOUND_FAN_OUT_FAILED",
+          targetType: "QuoteRequest",
+          targetId: quote.id,
+          summary: `Inbound fan-out failed to ${to}`,
+          metadata: {
+            threadKind: "quote",
+            threadId: quote.id,
+            to,
+            error: String(err),
+          },
+        });
       }
     }
   });
