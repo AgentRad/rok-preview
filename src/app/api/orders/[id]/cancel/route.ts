@@ -28,8 +28,14 @@ export async function POST(
 
   // Only cancel before dispatch. After Shipped, the buyer must open a
   // return request once it arrives.
+  // PLH-3j P9: 409 on already-cancelled. The pre-fix 200 ok-true made a
+  // double-click look like two successful cancels and re-fired the
+  // cancellation email side effect downstream.
   if (order.status === "CANCELLED") {
-    return NextResponse.json({ ok: true });
+    return NextResponse.json(
+      { error: "Order is already cancelled." },
+      { status: 409 }
+    );
   }
   if (order.status === "FULFILLED" || order.shipmentStage === "Shipped" || order.shipmentStage === "Delivered") {
     return NextResponse.json(
