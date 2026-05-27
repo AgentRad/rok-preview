@@ -19,10 +19,13 @@ const INVOICE_STATUS_CLASS: Record<string, string> = {
 
 export default async function OrderInvoicePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
 
   const order = await prisma.order.findUnique({
     where: { id },
@@ -34,11 +37,21 @@ export default async function OrderInvoicePage({
   if (!order) notFound();
 
   const user = await getCurrentUser();
-  if (!user) redirect(`/login`);
+  // PLH-3c F4: guest-token invoice access. Outbound order emails for
+  // guest orders carry a signed `?t=` token bound to the buyer email.
+  // When present and valid we skip the login redirect and render the
+  // invoice for the guest.
+  const guestToken = typeof sp.t === "string" ? sp.t : "";
+  let isGuestViaToken = false;
+  if (guestToken) {
+    const { verifyOrderViewToken } = await import("@/lib/order-link");
+    isGuestViaToken = verifyOrderViewToken(order.id, order.buyerEmail, guestToken);
+  }
+  if (!user && !isGuestViaToken) redirect(`/login`);
 
-  const isAdmin = user.role === "ADMIN";
-  const isOwner = !!order.buyerId && order.buyerId === user.id;
-  if (!isAdmin && !isOwner) notFound();
+  const isAdmin = user?.role === "ADMIN";
+  const isOwner = !!user && !!order.buyerId && order.buyerId === user.id;
+  if (!isAdmin && !isOwner && !isGuestViaToken) notFound();
 
   if (order.status === "PENDING" || order.status === "CANCELLED") {
     return (
