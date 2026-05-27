@@ -9,6 +9,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import SupplierNav from "@/components/SupplierNav";
 import ActingAsBanner from "@/components/ActingAsBanner";
+import Link from "next/link";
 import { loadSupplierQuotes } from "@/components/supplier/data";
 import QuoteRequestsTable from "@/components/supplier/QuoteRequestsTable";
 
@@ -28,12 +29,15 @@ export default async function SupplierQuotesPage() {
   return (
     <>
       <SiteHeader />
-      <SupplierNav active="quotes" />
+      <SupplierNav active="quotes" sticky />
       <main id="main" className="app-page">
         <div className="page-pad">
           {ctx?.actingAsAdmin && (
             <ActingAsBanner supplierName={ctx.supplier.name} />
           )}
+          <div className="breadcrumb">
+            <Link href="/supplier">Supplier</Link> → Quotes
+          </div>
           <h1 className="page-title">Quote requests</h1>
           <p className="page-sub">Respond to buyer RFQs.</p>
           {ctx ? (

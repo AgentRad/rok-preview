@@ -8,6 +8,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import SupplierNav from "@/components/SupplierNav";
 import ActingAsBanner from "@/components/ActingAsBanner";
+import Link from "next/link";
 import {
   loadSupplierWithProducts,
   loadSupplierPayouts,
@@ -31,12 +32,15 @@ export default async function SupplierPayoutsPage() {
   return (
     <>
       <SiteHeader />
-      <SupplierNav active="payouts" />
+      <SupplierNav active="payouts" sticky />
       <main id="main" className="app-page">
         <div className="page-pad">
           {ctx?.actingAsAdmin && (
             <ActingAsBanner supplierName={ctx.supplier.name} />
           )}
+          <div className="breadcrumb">
+            <Link href="/supplier">Supplier</Link> → Payouts
+          </div>
           <h1 className="page-title">Payouts</h1>
           <p className="page-sub">Reserve, balance, and payout history.</p>
           {supplier ? (

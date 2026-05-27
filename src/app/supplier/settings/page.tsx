@@ -5,6 +5,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import SupplierNav from "@/components/SupplierNav";
 import ActingAsBanner from "@/components/ActingAsBanner";
+import Link from "next/link";
 import { isBlobConfigured } from "@/lib/blob-config";
 import {
   loadSupplierWithProducts,
@@ -43,7 +44,7 @@ export default async function SupplierSettingsPage({
     return (
       <>
         <SiteHeader />
-        <SupplierNav active="settings" />
+        <SupplierNav active="settings" sticky />
         <main id="main" className="app-page">
           <div className="page-pad narrow">
             <h1 className="page-title">Settings</h1>
@@ -67,12 +68,15 @@ export default async function SupplierSettingsPage({
   return (
     <>
       <SiteHeader />
-      <SupplierNav active="settings" />
+      <SupplierNav active="settings" sticky />
       <main id="main" className="app-page">
         <div className="page-pad">
           {ctx?.actingAsAdmin && (
             <ActingAsBanner supplierName={supplier.name} />
           )}
+          <div className="breadcrumb">
+            <Link href="/supplier">Supplier</Link> → Settings
+          </div>
           <h1 className="page-title">Settings</h1>
           <p className="page-sub">Company profile, legal, warehouses, payout method, team.</p>
 
