@@ -220,7 +220,11 @@ commits, 6 HIGH + 1 MEDIUM closed.
 - F5: `verifyAuth` fails closed in production when
   `INBOUND_WEBHOOK_SECRET` is unset.
 - F6: HMAC signature bumped from 16 to 32 hex chars (64 to 128 bits) in
-  `src/lib/inbound-email.ts`.
+  `src/lib/inbound-email.ts`. (REVERTED 2026-05-27, see PLH-3n: 32-char
+  sig pushed the Reply-To local-part to 66 chars, over RFC 5321's 64
+  limit, and Resend silently 422'd every thread email. Restored to 16
+  hex chars / 64 bits, which is still strong for a short-lived
+  per-thread token.)
 - F7: `rateLimit("messages", user:<id>)` on POST `/api/messages` at
   20/min/user.
 Migration: `20260606000000_add_message_inbound_fingerprint`.
@@ -791,6 +795,26 @@ dashboard IA split shipped by PLH-3l, and the OEM + admin polish tail
 shipped by PLH-3m. Buyer + supplier + OEM + admin surfaces all
 stripped to launch-ready via the POV-audit-driven PLH-3k / 3l / 3m
 rounds.**
+
+**PLH-3n (2026-05-27).** CRITICAL inbound-email fix. 1 commit.
+- Per-thread Reply-To addresses were silently failing every thread
+  email since PLH-3b F6 bumped the HMAC sig to 32 hex chars. The full
+  local-part `reply+<kind:1>.<cuid:25>.<sig:32>` ran 66 chars, over RFC
+  5321's 64-octet limit, and Resend rejected every send with a 422
+  "Invalid reply_to field". `send()`'s try/catch in `src/lib/email.ts`
+  swallowed the throw so Message rows saved but no mail left the
+  platform. Cut the sig back to 16 hex (64 bits, still strong for a
+  short-lived per-thread token). New local-part = 50 chars.
+  `parseReplyAddress()` already compared on actual sig length so it
+  picked up the new shape with no further code change. Added a
+  defensive `throw` in `replyAddress()` if the local-part ever crosses
+  64 again, so future cuid format changes fail loud instead of
+  silently dropping mail. No tokens in flight to migrate.
+- Smoke test 2026-05-27: admin posted a thread message on RFQ-87K9UN
+  via `/api/messages`, Message row created, outbound send fired via
+  `after()`. Real-world round-trip (reply to inbound webhook,
+  `INBOUND_FAN_OUT_OK` + Message row with `inboundFingerprint`)
+  pending Conrad's reply from rad@agentgaming.gg.
 
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
