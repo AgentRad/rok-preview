@@ -531,6 +531,109 @@ closed, plus the single-supplier-cart constraint lifted by PLH-3g,
 multi-image product galleries shipped by PLH-3h, and QuickBooks
 Online full OAuth sync shipped by PLH-3i.**
 
+**PLH-3j (2026-05-26).** Deferred polish batch from the post-PLH-2
+backlog. 17 fixes, one commit each, all shipped sequentially. Closes
+most of the MEDIUM/LOW debt that PLH-2 + PLH-3 audits explicitly
+deferred.
+- **P1 (146d84e):** address book hard cap of 25 per buyer. Counted
+  inside the same `$transaction` as the create so two concurrent
+  POSTs cannot both race past the limit. 400 with "Address book is
+  full. Delete an unused address first." when the cap is hit.
+- **P2 (ff95d80):** soft-delete Address. `Address.deletedAt` nullable
+  timestamp + `(userId, deletedAt)` index. DELETE flips the column
+  instead of removing the row, so historical Orders that snapshotted
+  the ship-to from this address keep their reference. Read paths
+  (address book list, tax-exempt queries, admin attention,
+  stripe-tax lookup) filter `deletedAt = null`. New audit action
+  `ADDRESS_SOFT_DELETED`.
+- **P3 (d7b54d0):** phone format validation via `libphonenumber-js`.
+  `validateAddress` parses phone against the address country; invalid
+  numbers reject 400 with structured `{ field: "phone", error }`.
+  Blank phone still passes (phone is optional).
+- **P4 (44069a6):** tax-exempt cert expiry + reminder cron.
+  `Address.taxExemptExpiresAt` nullable + index. Upload UI exposes
+  an optional date input; the file POST and URL POST both carry
+  `expiresAt` through. `lookupTaxExemption` filters out expired
+  certs so checkout no longer waives tax on a stale cert. New cron
+  `/api/cron/tax-exempt-expiry` (04:30 UTC) emails buyers 30 days
+  out via `sendTaxExemptExpiryNotice`, audit-logs
+  `TAX_EXEMPT_EXPIRY_NOTICE`, with a 25-day idempotency guard.
+- **P5 (6b87bc3):** re-subscribe affordance on the unsubscribe
+  response page. New `/api/email/resubscribe` route accepts the same
+  signed token, re-verifies, and flips `notifyMarketingEmails` back
+  to true. The unsubscribe HTML now renders a Re-subscribe button
+  inline.
+- **P6 (e135419):** `MAX_PER_RUN=200` + ASC + `hasMore` on the
+  remaining crons (anonymize-deleted-accounts, cleanup-unverified-
+  accounts, payout-retry). health-check is a fixed-size probe set
+  (no per-row backlog) so it returns `hasMore: false` for response
+  shape consistency.
+- **P7 (f1fd73d):** reconcile mismatch AuditLog dedupe. Partial
+  unique index `AuditLog_reconcile_mismatch_dedup_uniq` on
+  `(action, targetId, metadata->>'kind', metadata->>'windowStart')`
+  scoped to `RECONCILIATION_MISMATCH`. The reconcile cron writes
+  mismatch rows via raw `INSERT ... ON CONFLICT DO NOTHING`.
+- **P8 (86ca793):** refund amount visible on the buyer's order page.
+  Order page include now pulls the most recent Refund row; renders
+  "Refunded on `<date>`: $X.XX" below the Total when
+  `Order.refundedCents > 0`.
+- **P9 (8d04464):** cancel idempotency. POST
+  `/api/orders/[id]/cancel` returns 409 with
+  `{ error: "Order is already cancelled." }` when status is already
+  CANCELLED (was a misleading 200 ok-true).
+- **P10 (f546f5e):** `/account` order history pagination. Initial
+  server load takes 25; new `OrderHistoryTable` client component
+  streams subsequent pages from `/api/account/orders?page=N`.
+  Where-clause pins to the calling user's id so the `page` param
+  cannot leak another buyer's orders.
+- **P11 (eb12762):** `/admin/audit` pagination already shipped at
+  P9.5 build (50-per-page, page query param, Previous/Next links,
+  indexed filter columns). No code change; inline comment documents
+  the verification so a future audit does not re-flag.
+- **P12 (856533b):** supplier-health alert thresholds configurable
+  via env. `SUPPLIER_HEALTH_REFUND_RATE` / `_DAYS_TO_SHIP` /
+  `_OWED_CENTS` / `_INACTIVE_DAYS` with the prior hardcoded defaults
+  (0.05, 7, 0, 30). Alert labels render the active threshold.
+- **P13 (22497e2):** `manufacturer` editable on supplier Product
+  PATCH. Validated via `isClaimedManufacturer` (PLH-3c F1 soft-brand
+  model). Empty string is allowed (clear a stale legacy value).
+- **P14 (82dd7be):** product ownership belt-and-suspenders. PATCH
+  resolves the product via
+  `findFirst({ id, supplierId: { in: ownedSupplierIds } })` for
+  non-admin callers, where `ownedSupplierIds` unions
+  `SupplierMember` and legacy direct-ownership rows. The existing
+  role check stays for the role split.
+- **P15 (1e12b55):** cancel order email respects notification
+  preferences. `sendOrderCancelled` now gates through
+  `shouldSendToUser(order.buyerId, "order")` when the order has a
+  logged-in buyer (PLH-3b F1 pattern). Guest orders still send
+  unconditionally.
+- **P16 (f436e85):** OEM logo blob cleanup on re-upload. PLH-3c F8
+  randomized the path which kills URL guessing but means a same-path
+  overwrite no longer evicts the prior blob. POST now reads the
+  previous `manufacturerLogoUrl`, then `del()`s it from Vercel Blob
+  after the DB row points at the new URL. Best-effort + Sentry on
+  failure.
+- **P17 (89809bf):** `scripts/README.md` documenting the smoke-test
+  scripts pattern, the no-secrets-in-script rule, the curl cookie
+  jar trap, and the post-leak rotation playbook.
+
+Migrations new in PLH-3j:
+- `prisma/migrations/20260611010000_address_soft_delete`
+- `prisma/migrations/20260611020000_tax_exempt_expires_at`
+- `prisma/migrations/20260611030000_reconcile_mismatch_dedup`
+
+New dependency: `libphonenumber-js` (P3, tree-shakable phone parsing).
+
+`npx next build` clean across all 17 commits. Zero em dashes throughout
+PLH-3j.
+
+**Cumulative across all rounds including PLH-3j: 28 CRITICAL + 62 HIGH
+closed, plus the launch-time single-supplier-cart constraint lifted by
+PLH-3g, multi-image product galleries shipped by PLH-3h, QuickBooks
+Online full OAuth sync shipped by PLH-3i, and the post-PLH-2 deferred-
+polish backlog now closed by PLH-3j.**
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no

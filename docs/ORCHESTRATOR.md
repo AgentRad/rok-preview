@@ -422,6 +422,30 @@ substitute from P12 commit 5 with real Intuit API sync.
 - `npx next build` clean across P1..P5. Zero em dashes
   throughout PLH-3i.
 
+**PLH-3j (2026-05-26).** Deferred polish batch from the PLH-2 audit
+backlog. 17 fixes, one commit each, sequential push per fix.
+- P1 address book hard cap (25/buyer). P2 Address.deletedAt soft-
+  delete + read-path filters. P3 libphonenumber-js phone validation.
+  P4 tax-exempt cert expiry + daily reminder cron + checkout filter.
+  P5 re-subscribe button on unsubscribe response + new
+  `/api/email/resubscribe` route. P6 MAX_PER_RUN on the remaining
+  unbounded crons. P7 reconcile mismatch dedupe via partial unique
+  index + ON CONFLICT DO NOTHING. P8 refund line on buyer order page.
+  P9 cancel 409 on already-cancelled. P10 `/account` order history
+  pagination. P11 confirmed `/admin/audit` pagination already in
+  place (inline doc only). P12 supplier-health thresholds env-driven.
+  P13 manufacturer editable on supplier Product PATCH (claimed-brand
+  gated). P14 product ownership findFirst belt-and-suspenders. P15
+  sendOrderCancelled gates on notifyOrderEmails. P16 OEM logo blob
+  cleanup on re-upload. P17 scripts/ README.
+- Migrations new in PLH-3j:
+  - `20260611010000_address_soft_delete`
+  - `20260611020000_tax_exempt_expires_at`
+  - `20260611030000_reconcile_mismatch_dedup`
+- New dep: `libphonenumber-js`.
+- Every commit built clean. Zero em dashes. Zero drops.
+- Final HEAD: `89809bf`.
+
 ## Inbound email feature: LIVE + smoke-proven on prod (2026-05-26)
 
 The Resend webhook is configured and pointing at
@@ -534,22 +558,25 @@ These are MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4c. The Phase 4c
 - **Slice / trim edge cases.** `tagline.slice(0, 140).trim()` can produce a string shorter than 140 chars and then a different-length string after trim; user-visible character count drifts. Trim first, then slice.
 - **Blob path leaks user id.** `oems/${user.id}/logo.${ext}` exposes the OEM's User id in the public blob URL. Use a hash or per-OEM random suffix instead.
 
-## Post-launch backlog (deferred from PLH-2 Phase 4d address-book + notif-prefs audit)
+## Post-launch backlog (deferred from PLH-2 Phase 4d address-book + notif-prefs audit) — SHIPPED via PLH-3j
 
-These are MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4d. The Phase 4d commit closed the four CRITICAL/HIGH items: D1 (per-user notification preference flags `notifyOrderEmails` / `notifyMarketingEmails` / `notifyProductUpdates`, `shouldSendToUser` gate, /settings Notifications card, PATCH `/api/account/notification-preferences` rate-limited + auth-gated, RFC 8058 List-Unsubscribe header on outbound mail, public signed-token `/api/email/unsubscribe`), D2 (per-user `rateLimit("generic", user:${id})` on /api/addresses POST + /api/addresses/[id] PATCH/DELETE + /api/addresses/[id]/tax-exempt POST/DELETE), D3 (per-field length caps in `validateAddress`, structured `{ field, error }` 400), D4 (ISO alpha-2 country regex, per-country postal regex US/CA/GB + generic fallback, tax-exempt blob flipped to `access:"private"` with new auth+audit `/api/addresses/[id]/tax-exempt/download` route, `detectMagic` MIME sniff with PDF/JPEG/PNG only, SVG removed, https-only URL-paste). The list below is queued for a post-launch polish round, not for soft launch.
+All five items in this list shipped via PLH-3j (P1/P2/P3/P4/P5). Kept
+in this section for the historical paper trail.
 
-- **Address bound on quantity.** Buyers can create unlimited saved addresses; add a hard cap (e.g. 25) before insert.
-- **Soft-delete addresses referenced by historical orders.** Today `DELETE` removes the row; if an old order embedded an Address relation we lose denorm history. Mirror the Supplier soft-delete pattern.
-- **Phone format validation.** Phone is capped but not format-checked; a libphonenumber parse would catch obvious typos.
-- **List the unsubscribed user a re-subscribe affordance in the unsubscribe response HTML.** Currently they have to find /settings on their own.
-- **Tax-exempt cert expiry.** Resale certs expire (1-3 years depending on state); add an `taxExemptExpiresAt` column and admin reminder cron.
+These were MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4d. The Phase 4d commit closed the four CRITICAL/HIGH items: D1 (per-user notification preference flags `notifyOrderEmails` / `notifyMarketingEmails` / `notifyProductUpdates`, `shouldSendToUser` gate, /settings Notifications card, PATCH `/api/account/notification-preferences` rate-limited + auth-gated, RFC 8058 List-Unsubscribe header on outbound mail, public signed-token `/api/email/unsubscribe`), D2 (per-user `rateLimit("generic", user:${id})` on /api/addresses POST + /api/addresses/[id] PATCH/DELETE + /api/addresses/[id]/tax-exempt POST/DELETE), D3 (per-field length caps in `validateAddress`, structured `{ field, error }` 400), D4 (ISO alpha-2 country regex, per-country postal regex US/CA/GB + generic fallback, tax-exempt blob flipped to `access:"private"` with new auth+audit `/api/addresses/[id]/tax-exempt/download` route, `detectMagic` MIME sniff with PDF/JPEG/PNG only, SVG removed, https-only URL-paste). The list below is queued for a post-launch polish round, not for soft launch.
+
+- **Address bound on quantity. SHIPPED (PLH-3j P1).** Hard cap of 25 per buyer, counted inside the create $transaction.
+- **Soft-delete addresses referenced by historical orders. SHIPPED (PLH-3j P2).** `Address.deletedAt` + read-path filters + DELETE flips the column instead of removing the row.
+- **Phone format validation. SHIPPED (PLH-3j P3).** `libphonenumber-js` parse in `validateAddress`.
+- **Re-subscribe affordance in the unsubscribe response HTML. SHIPPED (PLH-3j P5).** New `/api/email/resubscribe` route + button on the unsubscribe success page.
+- **Tax-exempt cert expiry. SHIPPED (PLH-3j P4).** `Address.taxExemptExpiresAt` + UI date input + `/api/cron/tax-exempt-expiry` daily reminder + `lookupTaxExemption` filters expired certs.
 
 ## Post-launch backlog (deferred from PLH-2 Phase 4e crons audit)
 
 These are MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4e. The Phase 4e commit closed the five CRITICAL/HIGH items: E1 (auto-deliver routed through `isAuthorizedCronRequest` so prod fails closed when CRON_SECRET is unset), E2 (auto-deliver no longer swallows email failures; new `AUTO_DELIVER_EMAIL_FAILED` audit + `Order.deliveryEmailSentAt` timestamp + Sentry on `sendOrderDelivered` throw), E3 (reserve-release two-stage so the Stripe transfer fires AFTER the row is staked out but BEFORE `reserveBalanceCents` is decremented; new `status` column on `SupplierReserveTransaction` with PENDING/COMPLETED/FAILED lifecycle and stage-3 re-read + Math.min on fresh balance), E4 (`MAX_PER_RUN=200` cap on auto-deliver and reserve-release, ASC ordering by oldest first, `hasMore` in response payload), E5 (`ReconciliationState` singleton with `cursor` column; reconcile now walks forward in 7-day chunks one window per invocation with 1000/1000 charges+transfers caps, advances cursor only on a non-capped run). New migration: `20260604000000_plh2_phase4e_cron_audit`. The list below is queued for a post-launch polish round, not for soft launch.
 
-- **Apply MAX_PER_RUN to remaining crons.** Phase 4e capped auto-deliver and reserve-release. The other cron loops (anonymize-deleted-accounts, cleanup-unverified-accounts, connect-sync, payout-retry, health-check) iterate users/suppliers/payouts unbounded. A first-run-after-outage backlog on any of them could still time out the Vercel function. Add a 200-per-run cap with ASC-by-creation ordering and a `hasMore` field.
-- **Reconcile mismatch dedupe.** When a capped run replays the same window, the same mismatch can be written multiple times to AuditLog. Add a unique index on `(action, targetId, metadata->>'kind', metadata->>'windowStart')` or a check-then-write to suppress duplicates.
+- **Apply MAX_PER_RUN to remaining crons. SHIPPED (PLH-3j P6).** Capped anonymize-deleted-accounts, cleanup-unverified-accounts, payout-retry at 200/run with ASC ordering and `hasMore`. health-check returns `hasMore: false` (fixed-size probe set). connect-sync was already capped at PLH-3e B9.
+- **Reconcile mismatch dedupe. SHIPPED (PLH-3j P7).** Partial unique index `AuditLog_reconcile_mismatch_dedup_uniq` on `(action, targetId, metadata->>'kind', metadata->>'windowStart')` scoped to `RECONCILIATION_MISMATCH`; reconcile writes via raw `INSERT ... ON CONFLICT DO NOTHING`.
 - **Reserve-release orphan cleanup.** A PENDING `SupplierReserveTransaction` whose process died between Stage 1 and Stage 3 (and where the Stripe transfer either landed or did not) will never resolve on its own. Add a sweeper that flags PENDING rows older than 1 hour with a metadata note for admin review.
 - **Auto-deliver email retry surface.** `AUTO_DELIVER_EMAIL_FAILED` rows currently require an admin to manually re-notify the buyer from `/admin/audit`. A small "resend delivery email" button on the order detail page would close the loop.
 - **Reconcile cursor admin view.** No UI surfaces the current cursor; a long backlog is only visible via the JSON response. Add a small card on `/ops` showing cursor + window + `hasMore`.
