@@ -159,7 +159,7 @@ export default function OemProfileEditor({
             )}
           </div>
           <div className="muted-text" style={{ fontSize: 11.5, marginTop: 8 }}>
-            PNG, JPG, or WEBP, square, under 2 MB.
+            PNG / JPG / WEBP, square, under 2 MB.
             {!blobConfigured && (
               <>
                 <br />
