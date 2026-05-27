@@ -66,6 +66,10 @@ export async function POST(
     );
   }
 
+  if (user && user.role !== "ADMIN" && !user.emailVerified) {
+    return NextResponse.json({ error: "Verify your email before completing checkout. Request a new verification link from /account.", code: "EMAIL_NOT_VERIFIED" }, { status: 403 });
+  }
+
   if (quote.status !== "ACCEPTED" || quote.quotedUnitCents == null) {
     return NextResponse.json(
       { error: "Accept the quote first." },
