@@ -497,6 +497,11 @@ model Refund {
   refundedBy      String? // User.id of the admin who triggered it
   status          String   @default("succeeded") // succeeded | pending | failed
   createdAt       DateTime @default(now())
+  // PLH-3i P3: id of the QBO RefundReceipt document this Refund pushed
+  // to QuickBooks Online. Null = not yet synced (or sync skipped because
+  // the original Invoice wasn't synced; reconcile cron in P4 will catch
+  // those). Idempotency primitive for syncRefund().
+  qboRefundReceiptId String?
 
   @@index([orderId])
   @@index([returnRequestId])

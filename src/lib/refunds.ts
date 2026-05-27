@@ -1,8 +1,11 @@
 import "server-only";
+import { after } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "./db";
 import { writeAuditLog } from "./audit";
 import { captureError } from "./observability";
+import { intuitConfigured } from "./qbo-auth";
+import { syncRefund } from "./qbo-sync";
 
 /**
  * Stripe refund engine. Used by /api/admin/orders/[id]/refund. Pulls the
@@ -581,6 +584,30 @@ export async function refundOrder(args: {
   if (targetSlotId) {
     const slot = order.supplierSlots.find((sl) => sl.id === targetSlotId);
     slotSupplierName = slot?.supplier?.name ?? null;
+  }
+
+  // PLH-3i P3: push a RefundReceipt to QuickBooks Online. Mirrors the
+  // markOrderPaid invoice-sync pattern: gated on intuitConfigured(),
+  // fired via after() so the caller's response isn't blocked on the
+  // Intuit round-trip, and errors swallowed at the after() boundary
+  // AFTER syncRefund writes its own QBO_SYNC_FAILED audit row +
+  // captureError. A QBO outage cannot break the admin refund flow.
+  if (intuitConfigured()) {
+    const refundIdForSync = refund.id;
+    const amountForSync = amount;
+    const slotSupplierNameForSync = slotSupplierName;
+    after(async () => {
+      try {
+        await syncRefund({
+          orderId: order.id,
+          refundId: refundIdForSync,
+          amountCents: amountForSync,
+          slotSupplierName: slotSupplierNameForSync,
+        });
+      } catch {
+        // already audited + captured inside syncRefund
+      }
+    });
   }
 
   return {

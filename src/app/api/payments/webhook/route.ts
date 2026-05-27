@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getProvider } from "@/lib/payments";
 import { markOrderPaid } from "@/lib/order-utils";
@@ -6,6 +6,8 @@ import { applySupplierClawback } from "@/lib/refunds";
 import { syncSupplierConnectStatus } from "@/lib/stripe-connect";
 import { writeAuditLog } from "@/lib/audit";
 import { captureError } from "@/lib/observability";
+import { intuitConfigured } from "@/lib/qbo-auth";
+import { syncRefund } from "@/lib/qbo-sync";
 
 export const runtime = "nodejs";
 // Webhook signatures verify against the raw body. Next.js gives us the raw
@@ -204,6 +206,52 @@ export async function POST(req: Request) {
                     subsystem: "payments",
                     op: "webhook-refund-clawback",
                     stripeRefundId: r.id,
+                  });
+                }
+
+                // PLH-3i P3: out-of-band Stripe-dashboard refunds also
+                // sync to QBO. Mirror the admin-refund path (refundOrder
+                // -> after()) for parity. Look up the Refund row we
+                // just inserted by stripeRefundId. Errors swallowed at
+                // the after() boundary AFTER syncRefund writes its own
+                // QBO_SYNC_FAILED audit row.
+                if (intuitConfigured()) {
+                  const orderIdForSync = order.id;
+                  const orderReferenceForSync = order.reference;
+                  const stripeRefundIdForSync = r.id;
+                  const amountForSync = r.amountCents;
+                  const slotIdForSync = r.metadata?.partsportSlotId || "";
+                  after(async () => {
+                    try {
+                      const refundRow = await prisma.refund.findUnique({
+                        where: { stripeRefundId: stripeRefundIdForSync },
+                        select: { id: true },
+                      });
+                      if (!refundRow) return;
+                      let slotSupplierName: string | null = null;
+                      if (slotIdForSync) {
+                        const slot = await prisma.orderSupplierSlot.findUnique(
+                          {
+                            where: { id: slotIdForSync },
+                            include: { supplier: { select: { name: true } } },
+                          }
+                        );
+                        slotSupplierName = slot?.supplier?.name ?? null;
+                      }
+                      await syncRefund({
+                        orderId: orderIdForSync,
+                        refundId: refundRow.id,
+                        amountCents: amountForSync,
+                        slotSupplierName,
+                      });
+                    } catch (err) {
+                      captureError(err, {
+                        subsystem: "qbo-sync",
+                        op: "webhook-refund-sync",
+                        orderReference: orderReferenceForSync,
+                        stripeRefundId: stripeRefundIdForSync,
+                      });
+                    }
                   });
                 }
               }

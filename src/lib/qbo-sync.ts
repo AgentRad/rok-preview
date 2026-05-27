@@ -332,3 +332,181 @@ export async function syncInvoice(
     throw err;
   }
 }
+
+/**
+ * PLH-3i P3: sync a PartsPort Refund to QuickBooks Online as a
+ * RefundReceipt linked to the original Invoice.
+ *
+ * Idempotent on Refund.qboRefundReceiptId (skip-if-set). Skips silently
+ * when the original Invoice was never synced to QBO (qboInvoiceId null),
+ * since RefundReceipt.LinkedTxn requires a real QBO invoice id to
+ * reference. The daily reconcile cron landing in P4 will pick up any
+ * order whose invoice is unsynced (likely a QBO disconnect at payment
+ * time) and back-fill the invoice; a follow-up pass can then sync the
+ * refund.
+ *
+ * Failure path mirrors syncInvoice: writes QBO_SYNC_FAILED audit row +
+ * captureError, then rethrows. The caller wraps in after() so the
+ * buyer-facing refund flow doesn't break on QBO outages.
+ */
+export async function syncRefund(args: {
+  orderId: string;
+  refundId: string;
+  amountCents: number;
+  slotSupplierName?: string | null;
+}): Promise<{ qboRefundReceiptId?: string; skipped?: boolean }> {
+  const refund = await prisma.refund.findUnique({
+    where: { id: args.refundId },
+    select: { id: true, qboRefundReceiptId: true },
+  });
+  if (!refund) {
+    throw new Error(`syncRefund: refund ${args.refundId} not found`);
+  }
+  // Idempotent: already synced.
+  if (refund.qboRefundReceiptId) {
+    return { qboRefundReceiptId: refund.qboRefundReceiptId, skipped: true };
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: args.orderId },
+    include: {
+      buyer: { select: { id: true, qboCustomerId: true } },
+      invoice: { select: { qboInvoiceId: true } },
+    },
+  });
+  if (!order) {
+    throw new Error(`syncRefund: order ${args.orderId} not found`);
+  }
+
+  const qboInvoiceId = order.invoice?.qboInvoiceId || null;
+  if (!qboInvoiceId) {
+    // Original invoice was never pushed to QBO (likely QBO disconnected
+    // at the time of payment). Skip and audit; the P4 reconcile cron is
+    // expected to back-fill the invoice, after which a re-run picks up
+    // the refund.
+    await writeAuditLog({
+      actor: { id: "system", email: "system@partsport" },
+      action: "QBO_REFUND_SYNCED",
+      targetType: "Order",
+      targetId: order.id,
+      summary: `Refund ${args.refundId} on ${order.reference} skipped: original invoice not synced to QBO`,
+      metadata: {
+        orderId: order.id,
+        refundId: args.refundId,
+        skipped: true,
+        reason: "invoice_not_synced",
+      },
+    });
+    return { skipped: true };
+  }
+
+  try {
+    const customerId = await ensureQboCustomer({
+      userId: order.buyerId,
+      buyerEmail: order.buyerEmail,
+      displayName: order.buyerName || order.buyerEmail,
+      billingAddress: order.shipTo,
+    });
+
+    const amountDollars = args.amountCents / 100;
+    const description = `Refund for order ${order.reference}${
+      args.slotSupplierName ? ` (${args.slotSupplierName})` : ""
+    }`;
+    // Short, stable doc number suffix off the refund id so admins can
+    // cross-reference. QBO DocNumber caps at 21 chars; REF-<ref>-<6char>
+    // sits comfortably under for typical 11-char PartsPort references.
+    const docNumber = `REF-${order.reference}-${args.refundId.slice(-6)}`.slice(
+      0,
+      21
+    );
+
+    // PaymentMethodRef.value = "1" assumes the QBO realm has the default
+    // "Cash" payment method seeded at id "1", which both Intuit's
+    // sandbox companies and freshly provisioned production companies
+    // ship with. If a realm has renamed/deleted that record the call
+    // will 400 and the QBO_SYNC_FAILED audit row surfaces it.
+    //
+    // DepositToAccountRef is intentionally omitted on the first try.
+    // Some QBO realms accept a RefundReceipt without it; those that
+    // reject can be re-handled by a follow-up that posts with
+    // DepositToAccountRef.value = "35" (Undeposited Funds in the
+    // sandbox default chart). The retry path is out of scope this
+    // round; we let the call fail loudly and the reconcile cron in
+    // P4 catches and retries.
+    const payload: Record<string, unknown> = {
+      CustomerRef: { value: customerId },
+      Line: [
+        {
+          DetailType: "SalesItemLineDetail",
+          Amount: amountDollars,
+          Description: description,
+          SalesItemLineDetail: {
+            ItemRef: { value: QBO_DEFAULT_ITEM_ID },
+            Qty: 1,
+            UnitPrice: amountDollars,
+          },
+        },
+      ],
+      // LinkedTxn ties the RefundReceipt back to the original Invoice
+      // in QBO so it shows up in the customer activity view under the
+      // invoice. Supported on Intuit v3.
+      LinkedTxn: [{ TxnId: qboInvoiceId, TxnType: "Invoice" }],
+      DocNumber: docNumber,
+      PrivateNote: `PartsPort refund ${args.refundId}`,
+      PaymentMethodRef: { value: "1" },
+    };
+
+    const res = await qboFetch("/refundreceipt", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const json = (await res.json()) as { RefundReceipt?: { Id: string } };
+    const qboRefundReceiptId = json.RefundReceipt?.Id;
+    if (!qboRefundReceiptId) {
+      throw new Error("Intuit /refundreceipt response missing RefundReceipt.Id");
+    }
+
+    const cred = await requireCredential();
+    await prisma.$transaction(async (tx) => {
+      await tx.refund.update({
+        where: { id: refund.id },
+        data: { qboRefundReceiptId },
+      });
+    });
+    await writeAuditLog({
+      actor: { id: "system", email: "system@partsport" },
+      action: "QBO_REFUND_SYNCED",
+      targetType: "Order",
+      targetId: order.id,
+      summary: `Synced refund ${args.refundId} on ${order.reference} to QBO RefundReceipt ${qboRefundReceiptId}`,
+      metadata: {
+        orderId: order.id,
+        refundId: args.refundId,
+        qboRefundReceiptId,
+        realmId: cred.realmId,
+      },
+    });
+    return { qboRefundReceiptId };
+  } catch (err) {
+    await writeAuditLog({
+      actor: { id: "system", email: "system@partsport" },
+      action: "QBO_SYNC_FAILED",
+      targetType: "Order",
+      targetId: order.id,
+      summary: `QBO refund sync failed for refund ${args.refundId} on ${order.reference}`,
+      metadata: {
+        orderId: order.id,
+        refundId: args.refundId,
+        kind: "refund",
+        error: String(err instanceof Error ? err.message : err).slice(0, 500),
+      },
+    });
+    captureError(err, {
+      subsystem: "qbo-sync",
+      op: "syncRefund",
+      orderId: order.id,
+      refundId: args.refundId,
+    });
+    throw err;
+  }
+}
