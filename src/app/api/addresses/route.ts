@@ -41,31 +41,50 @@ export async function POST(req: Request) {
   }
 
   const setDefault = Boolean(body.isDefault);
-  const created = await prisma.$transaction(async (tx) => {
-    if (setDefault) {
-      await tx.address.updateMany({
-        where: { userId: user.id, isDefault: true },
-        data: { isDefault: false },
+  let created;
+  try {
+    // PLH-3j P1: hard cap of 25 saved addresses per buyer. Counted
+    // inside the $transaction so two concurrent POSTs cannot both
+    // sneak past 25.
+    created = await prisma.$transaction(async (tx) => {
+      const liveCount = await tx.address.count({
+        where: { userId: user.id },
       });
-    }
-    const existingCount = await tx.address.count({ where: { userId: user.id } });
-    return tx.address.create({
-      data: {
-        userId: user.id,
-        label: String(body.label || "").trim(),
-        recipient: String(body.recipient).trim(),
-        company: String(body.company || "").trim(),
-        line1: String(body.line1).trim(),
-        line2: String(body.line2 || "").trim(),
-        city: String(body.city).trim(),
-        region: String(body.region).trim(),
-        postalCode: String(body.postalCode).trim().toUpperCase(),
-        country: String(body.country || "US").trim().toUpperCase(),
-        phone: String(body.phone || "").trim(),
-        isDefault: setDefault || existingCount === 0,
-      },
+      if (liveCount >= 25) {
+        throw new Error("ADDRESS_BOOK_FULL");
+      }
+      if (setDefault) {
+        await tx.address.updateMany({
+          where: { userId: user.id, isDefault: true },
+          data: { isDefault: false },
+        });
+      }
+      return tx.address.create({
+        data: {
+          userId: user.id,
+          label: String(body.label || "").trim(),
+          recipient: String(body.recipient).trim(),
+          company: String(body.company || "").trim(),
+          line1: String(body.line1).trim(),
+          line2: String(body.line2 || "").trim(),
+          city: String(body.city).trim(),
+          region: String(body.region).trim(),
+          postalCode: String(body.postalCode).trim().toUpperCase(),
+          country: String(body.country || "US").trim().toUpperCase(),
+          phone: String(body.phone || "").trim(),
+          isDefault: setDefault || liveCount === 0,
+        },
+      });
     });
-  });
+  } catch (e) {
+    if (e instanceof Error && e.message === "ADDRESS_BOOK_FULL") {
+      return NextResponse.json(
+        { error: "Address book is full. Delete an unused address first." },
+        { status: 400 }
+      );
+    }
+    throw e;
+  }
 
   return NextResponse.json({ ok: true, address: created });
 }
