@@ -230,11 +230,7 @@ export default async function ProductPage({
                     <span>SKU {product.sku}</span>
                   </>
                 ) : (
-                  <>
-                    <span className="muted-text">No reviews yet</span>
-                    <span>·</span>
-                    <span>SKU {product.sku}</span>
-                  </>
+                  <span>SKU {product.sku}</span>
                 )}
               </div>
               <div className="detail-price">
