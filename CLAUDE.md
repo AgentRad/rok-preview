@@ -816,6 +816,31 @@ rounds.**
   `INBOUND_FAN_OUT_OK` + Message row with `inboundFingerprint`)
   pending Conrad's reply from rad@agentgaming.gg.
 
+**PLH-3n bug #2 (2026-05-27).** CRITICAL inbound-email follow-up. 1
+commit. Once outbound mail flowed again (sig back to 16 hex), Conrad
+replied from rad@agentgaming.gg at 21:46 UTC and the webhook returned
+`{"ok":true,"ignored":"empty body"}` — message never landed on the
+thread. Root cause: Resend's `email.received` webhook payload is
+METADATA ONLY (from, to, subject, email_id, message_id, attachments).
+text/html are NOT included; they must be fetched via
+`GET https://api.resend.com/emails/receiving/{email_id}` with
+`Authorization: Bearer ${RESEND_API_KEY}`.
+- Fix in `src/app/api/email/inbound/route.ts`: after `parseBodyFromRaw`,
+  if provider=resend and text+html are both empty and the raw payload's
+  `data.email_id` is set, fetch the body. On missing `RESEND_API_KEY`,
+  non-2xx response, or thrown fetch error, returns
+  `200 {"ok":true,"ignored":"body fetch failed"}` + `captureError` /
+  console.error so Resend stops retrying instead of looping forever.
+  Successful fetch logs `text.length` / `html.length` for future smoke
+  tests. Updated the docblock at the top of route.ts to document the
+  Resend metadata-only payload shape.
+- Real-world verification 2026-05-27: re-fired Conrad's actual reply
+  (email_id `e95dafe3-b8a0-4a22-a94e-e43d92ac93be`, body "got it")
+  against the live preview webhook with a freshly Svix-signed payload.
+  Response `200 {"ok":true,"posted":"quote","id":"cmpokkr5y0003l704715ph61l"}`.
+  Message row created with `inboundFingerprint` set, fan-out fired via
+  `after()`. End-to-end Resend inbound round-trip is now proven.
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no
