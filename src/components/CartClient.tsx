@@ -5,7 +5,7 @@ import Link from "next/link";
 import ProductImage from "./ProductImage";
 import { primaryImageUrl } from "@/lib/product-images";
 import { getCart, setQty, onCartChange, type CartLine } from "@/lib/cart";
-import { formatCents, FEE_RATE_LABEL } from "@/lib/money";
+import { formatCents } from "@/lib/money";
 import { computeOrderTotals } from "@/lib/order-totals";
 
 type LookupProduct = {
@@ -68,7 +68,7 @@ export default function CartClient() {
       quoteOnly: products[l.sku].quoteOnly,
     }))
   );
-  const { subtotalCents: subtotal, freightCents, freight, feeCents: fee, totalCents } = totals;
+  const { subtotalCents: subtotal, freightCents, freight, totalCents } = totals;
 
   if (loading) {
     return <p className="muted-text">Loading your cart…</p>;
@@ -188,10 +188,6 @@ export default function CartClient() {
               </span>
             </span>
             <span>{freightCents > 0 ? formatCents(freightCents) : freight.basis === "FREIGHT_QUOTED" ? "TBD" : formatCents(0)}</span>
-          </div>
-          <div className="summary-line">
-            <span>Marketplace fee ({FEE_RATE_LABEL})</span>
-            <span style={{ color: "var(--amber-deep)" }}>{formatCents(fee)}</span>
           </div>
           <div className="summary-line">
             <span>Sales tax</span>
