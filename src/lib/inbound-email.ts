@@ -14,7 +14,7 @@ import crypto from "node:crypto";
  * where:
  *   kind = "o" for an Order thread, "q" for a Quote thread
  *   id   = the cuid of the Order or QuoteRequest
- *   sig  = the first 16 hex chars of HMAC-SHA256(secret, `${kind}.${id}`)
+ *   sig  = the first 32 hex chars (128 bits) of HMAC-SHA256(secret, `${kind}.${id}`)
  *
  * The full token (`<kind>.<id>.<sig>`) is short enough to fit in standard
  * email locals and is opaque enough that nobody can forge a reply address
@@ -54,7 +54,7 @@ function sign(kind: ThreadKind, id: string): string {
     .createHmac("sha256", s)
     .update(`${KIND_CODE[kind]}.${id}`)
     .digest("hex")
-    .slice(0, 16);
+    .slice(0, 32);
 }
 
 /**
