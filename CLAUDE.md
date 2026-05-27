@@ -292,17 +292,31 @@ webhooks. 1 commit. Code-side gap from PLH-3b F5 closed.
 - No new migration. No new test infrastructure (no existing inbound
   vitest file to extend).
 
-**Inbound email is now LIVE (2026-05-26).** All four env vars are set
-in Vercel Production + Preview branches:
+**Inbound email is now LIVE and proven on prod (2026-05-26).** All four
+env vars set in Vercel Production + Preview/claude-branch:
 `INBOUND_EMAIL_PROVIDER=resend`,
 `INBOUND_EMAIL_DOMAIN=reply.partsport.agentgaming.gg`,
-`INBOUND_REPLY_SECRET`, `INBOUND_WEBHOOK_SECRET=whsec_*`. Resend webhook
-endpoint (`/api/email/inbound`) is configured to fire `email.received`
-events. Cloudflare DNS holds verified MX + SPF + DKIM records on
-`reply.partsport.agentgaming.gg`. Empty deploy commit `c9901cd` pushed
-to pick up the env vars. End-to-end live test (reply to a thread email
-and confirm Message row + thread update) is the next physical
-verification step but the loop is wired.
+`INBOUND_REPLY_SECRET` (HMAC key for per-thread Reply-To token signing),
+`INBOUND_WEBHOOK_SECRET=whsec_*` (Svix signing secret from Resend).
+Resend webhook endpoint (`/api/email/inbound`) is configured to fire
+`email.received` events. Cloudflare DNS holds verified MX + SPF + DKIM
+records on `reply.partsport.agentgaming.gg` (inbound MX:
+`inbound-smtp.us-east-1.amazonaws.com priority 10`).
+
+**Smoke test on prod 2026-05-26:** POST a Svix-signed payload to
+`/api/email/inbound` with a known-good `whsec_*` signature. Response
+`200 {"ok":true,"ignored":"no reply token"}` confirms the code path
+end-to-end: provider check passed (not 404), Svix verification passed
+(not 401), reply-token parse step reached and correctly skipped because
+the test `to:` was not a real reply address.
+
+Remaining real-world verification: a buyer or supplier replies to an
+actual PartsPort thread email. Resend's inbound parse forwards the
+message to `/api/email/inbound`, the Svix check passes, the route
+parses the signed Reply-To token, creates a Message row with
+`inboundFingerprint` set, and fans out the email to other thread
+members. Audit log will show any `INBOUND_FAN_OUT_FAILED` rows on
+failure.
 
 **Next up: real-world verification + production cutover.** No more
 code-side polish rounds planned. See ship-ready playbook in

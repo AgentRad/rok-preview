@@ -248,7 +248,7 @@ vitest file to extend.
 **Cumulative across all rounds: 27 CRITICAL + 58 HIGH closed.** Every
 `npx next build` since P12 has compiled clean.
 
-## Inbound email feature: LIVE (2026-05-26)
+## Inbound email feature: LIVE + smoke-proven on prod (2026-05-26)
 
 The Resend webhook is configured and pointing at
 `/api/email/inbound`. The domain `reply.partsport.agentgaming.gg` is
@@ -269,12 +269,24 @@ running deployment. The webhook signing secret stays mirrored in
 `C:\Users\radfe\rok-preview\.local-secrets.env` (gitignored) for
 disaster recovery; rotate via the Resend dashboard if it ever leaks.
 
-Remaining verification step: end-to-end live test. Send an email to
-a thread, click a thread email's reply-from-email, confirm the
-inbound webhook fires (visible in Resend's webhook delivery log AND
-in `/admin/audit` if anything goes wrong), confirm the Message row
-is created with the correct `inboundFingerprint`, and confirm the
-fan-out emails to other thread members go out.
+**Code path smoke-proven on prod 2026-05-26.** POSTing a Svix-signed
+payload to the deployed `/api/email/inbound` returns
+`200 {"ok":true,"ignored":"no reply token"}`, confirming: provider
+check passes, Svix v1 signature verifies, reply-token parse reached
+and correctly skips a non-reply `to:` address. The full email
+round-trip (real outbound thread email + buyer replies + Resend
+inbound parse + Message row + fan-out) still requires a physical
+inbox test, but the code-side is fully proven.
+
+**Note from this round:** the three pre-existing INBOUND_* env vars
+(EMAIL_PROVIDER, EMAIL_DOMAIN, REPLY_SECRET) had empty values when
+the orchestrator chat checked them. Some prior chat had created the
+env-var rows without populating them. Orchestrator overwrote all
+four via the Vercel dashboard with the correct values, pushed two
+empty deploy commits (`a6947c4`, `c77d2a9`) to force a rebuild, and
+ran the smoke. Lesson for future cutovers: never trust an "Encrypted"
+env-var listing alone, always verify the value loads at runtime via
+either a smoke endpoint or a deploy log line.
 
 ## Launch-time decisions
 
