@@ -34,12 +34,17 @@ export default async function SupplierHealthPage() {
     },
   });
 
-  // Pull all orderItems with their orders + refund totals to compute
-  // per-supplier metrics in-process. Marketplace is small enough that
-  // this is fine; tighten with a CTE later when volume warrants.
+  // PLH-3a B2: bound the orderItems query to the YTD window. All in-process
+  // buckets (D30 / D90 / YTD) live inside YTD anyway, so pulling rows older
+  // than Jan 1 of the current year was pure waste. As marketplace volume
+  // grows this stops the page from scanning the full lifetime of every
+  // historical line item on each load.
   const items = await prisma.orderItem.findMany({
+    where: { order: { createdAt: { gte: new Date(YTD_START) } } },
     include: {
-      order: { select: { id: true, status: true, createdAt: true, refundedCents: true, totalCents: true, paidAt: true, shippedAt: true, shipmentStage: true } },
+      order: { select: { id: true, status: true, createdAt: true,
+        refundedCents: true, totalCents: true, paidAt: true,
+        shippedAt: true, shipmentStage: true } },
       product: { select: { supplierId: true } },
     },
   });
