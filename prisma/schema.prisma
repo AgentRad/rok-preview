@@ -134,6 +134,12 @@ model User {
   notifyProductUpdates       Boolean              @default(true)
   createdAt                  DateTime             @default(now())
   accountTokens              AccountToken[]
+  // PLH-3c F3: OEM approval gate. A MANUFACTURER user submits a
+  // ManufacturerApplication when they pick a brand name; admin must
+  // APPROVE it before User.manufacturerName is written and the
+  // storefront becomes live.
+  manufacturerApplication    ManufacturerApplication?
+  reviewedManufacturerApps   ManufacturerApplication[] @relation("ReviewedManufacturerApps")
 }
 
 /**
@@ -707,6 +713,32 @@ model ReconciliationState {
   id        String   @id @default("singleton")
   cursor    DateTime?
   updatedAt DateTime @updatedAt
+}
+
+/// PLH-3c F3: OEM approval gate. Anyone signing up as MANUFACTURER must
+/// submit a brand name for admin review; the public storefront and the
+/// claimed-brand dropdown only surface APPROVED rows. Existing
+/// manufacturerName users are auto-backfilled to APPROVED in the
+/// 20260607010000 migration.
+model ManufacturerApplication {
+  id               String       @id @default(cuid())
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manufacturerName String
+  status           MfgAppStatus @default(PENDING)
+  submittedAt      DateTime     @default(now())
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewedBy       User?        @relation("ReviewedManufacturerApps", fields: [reviewedByUserId], references: [id])
+  rejectionReason  String?
+
+  @@index([status])
+}
+
+enum MfgAppStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model SupplierApplication {

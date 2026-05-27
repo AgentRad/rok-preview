@@ -85,6 +85,7 @@ export async function PATCH(req: Request) {
     data.companyLogoUrl = url === "" ? null : url;
   }
 
+  let pendingNotice: string | null = null;
   if (user.role === "MANUFACTURER" && manufacturerName !== undefined) {
     // Check uniqueness: another MANUFACTURER user can't already hold this brand.
     if (manufacturerName !== null) {
@@ -103,21 +104,76 @@ export async function PATCH(req: Request) {
           { status: 409 }
         );
       }
+      // PLH-3c F3: don't write User.manufacturerName directly. Create or
+      // update a PENDING ManufacturerApplication for admin review. The
+      // storefront stays dark and the dropdown stays empty until an
+      // admin APPROVES.
+      const existing = await prisma.manufacturerApplication.findUnique({
+        where: { userId: user.id },
+      });
+      if (!existing || existing.status !== "APPROVED") {
+        await prisma.manufacturerApplication.upsert({
+          where: { userId: user.id },
+          create: {
+            userId: user.id,
+            manufacturerName,
+            status: "PENDING",
+          },
+          update: {
+            manufacturerName,
+            status: "PENDING",
+            submittedAt: new Date(),
+            reviewedAt: null,
+            reviewedByUserId: null,
+            rejectionReason: null,
+          },
+        });
+        pendingNotice = `Your brand claim for "${manufacturerName}" is pending admin review. Your storefront stays hidden until it's approved.`;
+        try {
+          const { sendOemApplicationSubmitted } = await import("@/lib/email");
+          await sendOemApplicationSubmitted({
+            userEmail: user.email,
+            userName: user.name,
+            manufacturerName,
+          });
+        } catch {
+          // best-effort
+        }
+      } else if (existing.status === "APPROVED" && existing.manufacturerName !== manufacturerName) {
+        // Re-submission with a different brand name: park as PENDING and
+        // clear the live storefront until admin re-approves.
+        await prisma.manufacturerApplication.update({
+          where: { userId: user.id },
+          data: {
+            manufacturerName,
+            status: "PENDING",
+            submittedAt: new Date(),
+            reviewedAt: null,
+            reviewedByUserId: null,
+            rejectionReason: null,
+          },
+        });
+        data.manufacturerName = null;
+        pendingNotice = `Brand name changed. Your storefront is offline until admin re-approves "${manufacturerName}".`;
+      }
+    } else {
+      // Clearing the brand name. Allowed; also wipe any pending application
+      // so the next set creates a fresh PENDING row.
+      data.manufacturerName = null;
+      await prisma.manufacturerApplication.deleteMany({
+        where: { userId: user.id, status: { not: "APPROVED" } },
+      });
     }
   }
 
   await prisma.user.update({
     where: { id: user.id },
-    data: {
-      ...data,
-      ...(user.role === "MANUFACTURER" && manufacturerName !== undefined
-        ? { manufacturerName }
-        : {}),
-    },
+    data,
   });
 
   return NextResponse.json({
     ok: true,
     ...(brandMismatchWarning ? { warning: brandMismatchWarning } : {}),
+    ...(pendingNotice ? { pending: pendingNotice } : {}),
   });
 }

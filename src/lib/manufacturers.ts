@@ -12,10 +12,15 @@ import { prisma } from "./db";
  */
 
 export async function listClaimedManufacturers(): Promise<string[]> {
+  // PLH-3c F3: only surface MANUFACTURER users whose
+  // ManufacturerApplication is APPROVED. Unapproved brands are invisible
+  // to suppliers (so the dropdown can't be used to launder a phantom
+  // brand into the catalog) and invisible to buyers (storefront 404).
   const rows = await prisma.user.findMany({
     where: {
       role: "MANUFACTURER",
       manufacturerName: { not: null },
+      manufacturerApplication: { status: "APPROVED" },
     },
     select: { manufacturerName: true },
   });
@@ -36,6 +41,7 @@ export async function isClaimedManufacturer(name: string): Promise<boolean> {
     where: {
       role: "MANUFACTURER",
       manufacturerName: { equals: trimmed, mode: "insensitive" },
+      manufacturerApplication: { status: "APPROVED" },
     },
     select: { id: true },
   });

@@ -38,7 +38,14 @@ type ResolvedBrand = {
 async function resolveBrand(slug: string): Promise<ResolvedBrand | null> {
   // Try claimed brands first.
   const oems = await prisma.user.findMany({
-    where: { role: "MANUFACTURER", manufacturerName: { not: null } },
+    where: {
+      role: "MANUFACTURER",
+      manufacturerName: { not: null },
+      // PLH-3c F3: only APPROVED OEMs get the editorial storefront. An
+      // unapproved or pending OEM falls through to the unclaimed-stub
+      // branch below, which renders catalog-only with a Claim CTA.
+      manufacturerApplication: { status: "APPROVED" },
+    },
     select: {
       manufacturerName: true,
       manufacturerTagline: true,

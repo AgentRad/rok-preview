@@ -15,6 +15,40 @@ export const dynamic = "force-dynamic";
 export default async function OemDashboard() {
   const user = await requireRole("MANUFACTURER");
   const brand = user.manufacturerName || "";
+  // PLH-3c F3: gate render on an APPROVED ManufacturerApplication. An
+  // OEM with a PENDING or REJECTED row sees a status banner instead of
+  // the editor; the public storefront also stays dark until approved.
+  const app = await prisma.manufacturerApplication.findUnique({
+    where: { userId: user.id },
+  });
+  if (app && app.status !== "APPROVED") {
+    return (
+      <>
+        <SiteHeader />
+        <main id="main" className="app-page">
+          <div className="page-pad narrow">
+            <h1 className="page-title">Manufacturer dashboard</h1>
+            {app.status === "PENDING" ? (
+              <div className="alert alert-info" style={{ marginTop: 16 }}>
+                Your brand claim for <strong>{app.manufacturerName}</strong> is
+                pending admin review. Your storefront stays hidden until it is
+                approved. We will email you when the review is complete.
+              </div>
+            ) : (
+              <div className="alert alert-error" style={{ marginTop: 16 }}>
+                Your brand claim for <strong>{app.manufacturerName}</strong>{" "}
+                was not approved.
+                {app.rejectionReason ? ` Reason: ${app.rejectionReason}.` : ""}{" "}
+                Update your brand name on /account to re-submit, or contact
+                support.
+              </div>
+            )}
+          </div>
+        </main>
+        <SiteFooter />
+      </>
+    );
+  }
 
   if (!brand) {
     return (

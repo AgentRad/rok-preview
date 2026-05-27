@@ -73,6 +73,10 @@ export const AUDIT_ACTIONS = [
   // PLH-3b F4: an inbound fan-out email failed for a specific recipient;
   // the rest of the loop continues, this row preserves the trail.
   "INBOUND_FAN_OUT_FAILED",
+  // PLH-3c F3: admin approved or rejected a MANUFACTURER's brand claim.
+  // Approval writes User.manufacturerName; rejection stores a reason.
+  "OEM_APPLICATION_APPROVED",
+  "OEM_APPLICATION_REJECTED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -85,7 +89,8 @@ export type AuditTargetType =
   | "Payout"
   | "ReturnRequest"
   | "Address"
-  | "QuoteRequest";
+  | "QuoteRequest"
+  | "ManufacturerApplication";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

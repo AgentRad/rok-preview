@@ -938,3 +938,63 @@ export async function sendDeletedAccountSignInAttempt(args: {
     from: FROM_AUTH,
   });
 }
+
+/**
+ * PLH-3c F3: OEM application emails. Sent on submission (notify admin
+ * team), approval (notify OEM), and rejection (notify OEM with reason).
+ */
+export async function sendOemApplicationSubmitted(args: {
+  userEmail: string;
+  userName: string;
+  manufacturerName: string;
+}): Promise<void> {
+  const adminTo = process.env.ADMIN_EMAIL || "admin@partsport.agentgaming.gg";
+  const reviewUrl = siteUrl("/admin/manufacturer-applications");
+  const body = `
+    <p>A new OEM brand claim is pending review.</p>
+    <p><strong>${esc(args.manufacturerName)}</strong></p>
+    <p>Submitted by ${esc(args.userName)} (${esc(args.userEmail)}).</p>
+    <p style="margin-top:22px;">${btn(reviewUrl, "Review applications")}</p>`;
+  await send({
+    to: adminTo,
+    subject: `OEM brand claim: ${args.manufacturerName}`,
+    html: wrap("New brand claim", body),
+  });
+}
+
+export async function sendOemApplicationApproved(args: {
+  userEmail: string;
+  userName: string;
+  manufacturerName: string;
+}): Promise<void> {
+  const url = siteUrl("/oem");
+  const body = `
+    <p>Hi ${esc(args.userName)},</p>
+    <p>Your brand claim for <strong>${esc(args.manufacturerName)}</strong> has been approved. Your storefront is now live and PartsPort distributors can list products under your brand.</p>
+    <p style="margin-top:22px;">${btn(url, "Open your dashboard")}</p>`;
+  await send({
+    to: args.userEmail,
+    subject: `Your PartsPort brand "${args.manufacturerName}" is approved`,
+    html: wrap("Brand approved", body),
+  });
+}
+
+export async function sendOemApplicationRejected(args: {
+  userEmail: string;
+  userName: string;
+  manufacturerName: string;
+  reason: string;
+}): Promise<void> {
+  const url = siteUrl("/account");
+  const body = `
+    <p>Hi ${esc(args.userName)},</p>
+    <p>Your brand claim for <strong>${esc(args.manufacturerName)}</strong> was not approved.</p>
+    <p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Reason:</strong> ${esc(args.reason)}</p>
+    <p>You can update your brand name and re-submit, or reach out to support.</p>
+    <p style="margin-top:22px;">${btn(url, "Update your profile")}</p>`;
+  await send({
+    to: args.userEmail,
+    subject: `Your PartsPort brand claim was not approved`,
+    html: wrap("Brand claim review", body),
+  });
+}
