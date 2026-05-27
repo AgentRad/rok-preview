@@ -245,8 +245,34 @@ handles the `{ type, data: { ... } }` envelope shape. PLH-3b F5
 fail-closed rule preserved. No new migration; no existing inbound
 vitest file to extend.
 
-**Cumulative across all rounds: 27 CRITICAL + 58 HIGH closed.** Every
-`npx next build` since P12 has compiled clean.
+**PLH-3e (2026-05-26).** Targeted hardening, 8 commits. Section A
+shipped 3 verified fixes; Section B evaluated 10 claims, shipped 5,
+dropped 5.
+- F1 (CRITICAL): `/api/checkout-from-quote/[id]` 410 on expired
+  quote (closes the gap where an ACCEPTED-then-expired quote could
+  still convert to a PENDING Order at the locked price).
+- F2 (HIGH): same route enforces `user.emailVerified` (admins exempt).
+- F3 (HIGH): admin application approve wrapped in `$transaction`
+  with re-check on PENDING inside the tx; 409 on concurrent second
+  POST. All writes route through `tx.`.
+- B2 (HIGH): `PATCH /api/quotes/[id]` "quote" action rejects
+  suppliers whose status is not APPROVED or publicVisible is false.
+- B7: bank last-4 in audit metadata replaced with first-8-hex of
+  sha256(last4); diff visibility preserved, digits no longer leak.
+- B8: `POST /api/applications` rejects new applications from an
+  email whose SUPPLIER User has a SUSPENDED Supplier.
+- B9: `/api/cron/connect-sync` MAX_PER_RUN=200, ASC by id, hasMore
+  in response. Mirrors PLH-2 Phase 4e pattern.
+- B10: `PATCH /api/admin/suppliers/[id]` go-live flip wrapped in
+  `$transaction` so the readiness inputs cannot race the update.
+
+Drops: B1 (already gated via effectiveAccessToSupplier), B3 (real
+fix needs optimistic concurrency; backlog), B4 (supplier's own data,
+no tenant crossing), B5 (Shippo freightSource surfacing needs schema
+changes; backlog), B6 (surcharge trust needs address API; deferred).
+
+No new migrations. **Cumulative across all rounds: 28 CRITICAL + 62
+HIGH closed.** Every `npx next build` since P12 has compiled clean.
 
 ## Inbound email feature: LIVE + smoke-proven on prod (2026-05-26)
 

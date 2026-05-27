@@ -268,7 +268,8 @@ Migrations: `20260607000000_unique_oem_manufacturer_name`,
 
 **Cumulative across P12 + PLH-1 + PLH-2 + PLH-3a + PLH-3b + PLH-3c +
 PLH-3d: 27 CRITICAL + 58 HIGH closed.** Every `npx next build` since
-P12 has compiled clean. Zero em dashes throughout.
+P12 has compiled clean. Zero em dashes throughout. (See PLH-3e block
+below for the updated scorecard after that round.)
 
 **PLH-3d (2026-05-26).** Svix signature verification for Resend inbound
 webhooks. 1 commit. Code-side gap from PLH-3b F5 closed.
@@ -291,6 +292,60 @@ webhooks. 1 commit. Code-side gap from PLH-3b F5 closed.
   INBOUND_WEBHOOK_SECRET returns 401; dev passes through.
 - No new migration. No new test infrastructure (no existing inbound
   vitest file to extend).
+
+**PLH-3e (2026-05-26).** Targeted hardening round, 8 commits. Section A
+shipped 3 verified fixes. Section B evaluated 10 unverified claims, 5
+shipped and 5 dropped.
+- F1 (CRITICAL): `/api/checkout-from-quote/[id]` now returns 410 when
+  `quote.quoteExpiresAt` is in the past. Closes the gap where an
+  ACCEPTED-then-expired quote could still produce a PENDING Order at
+  the original locked price.
+- F2 (HIGH): same route now requires `user.emailVerified` (admins
+  exempt). Mirrors the verify gate already in place on `/accept` and
+  `/api/quotes/[id]` quote action.
+- F3 (HIGH): `/api/admin/applications/[id]` approve block wrapped in
+  `prisma.$transaction`. Re-reads `app.status === "PENDING"` inside
+  the transaction, throws ALREADY_REVIEWED so a concurrent second
+  POST returns 409 instead of duplicating Supplier + SupplierMember
+  rows. All writes use `tx.`.
+- B2 (HIGH): `PATCH /api/quotes/[id]` "quote" action now rejects
+  suppliers whose `status !== "APPROVED" || !publicVisible`. The
+  existing `userHasAccessToSupplier` only verified membership; this
+  closes the same suspended-supplier gap PLH-1 commit 3 closed for
+  orders.
+- B7: bank last-4 in audit metadata replaced with first-8-hex of
+  `sha256(last4)`. Investigators still see "did it change?" via the
+  previous-vs-new hash mismatch; the audit log no longer leaks the
+  digits.
+- B8: `POST /api/applications` precheck rejects new applications when
+  a User row with `role=SUPPLIER` and a SUSPENDED Supplier already
+  exists for the email. Returns 400 "Contact support to reactivate."
+- B9: `/api/cron/connect-sync` now MAX_PER_RUN=200, `orderBy: { id:
+  "asc" }`, returns `{ ok, processed, disabled, errors, hasMore }`.
+  Mirrors PLH-2 Phase 4e auto-deliver / reserve-release pattern.
+- B10: `PATCH /api/admin/suppliers/[id]` go-live flip (publicVisible
+  false to true) now reads readiness inputs + writes the update
+  inside a single `$transaction`. Concurrent doc deletion or product
+  deactivation cannot race the gate.
+
+Section B drops:
+- B1: `/api/supplier/products/[id]` already gates through
+  `effectiveAccessToSupplier(product.supplierId)` after the findUnique;
+  no defensive rewrite needed.
+- B3: stock/price concurrent edit deferred. No simple inline fix; the
+  real solution is optimistic concurrency (updatedAt + check). Backlog.
+- B4: `/api/supplier/ai-assistant` reads only the calling supplier's
+  own data, not a tenant crossing. No escalation path. Cap on top-N
+  SKUs would need refactor that doesn't pay back.
+- B5: Shippo fallback UX needs schema changes (freightSource on the
+  rate, render path on checkout summary). Non-trivial, backlogged.
+- B6: surcharge trust deferred; real fix needs address-validation API.
+
+No new migrations. Every `npx next build` since PLH-3d still
+compiles clean. Zero em dashes.
+
+**Cumulative across P12 + PLH-1 + PLH-2 + PLH-3a + PLH-3b + PLH-3c +
+PLH-3d + PLH-3e: 28 CRITICAL + 62 HIGH closed.**
 
 **Inbound email is now LIVE and proven on prod (2026-05-26).** All four
 env vars set in Vercel Production + Preview/claude-branch:
@@ -454,6 +509,25 @@ endpoints, per-page SEO metadata.
   idempotent and insert-only: it will NOT update existing rows on re-seed.
 - `npx prisma migrate dev` for every schema change; commit the generated migration.
   `npx next build` must pass before every commit.
+
+## Disk hygiene (STANDING RULE)
+
+After a polish round or migration, sweep the working tree for dead
+weight before pushing. Targets to delete without asking:
+
+- `.next/`, `dist/`, `out/`, `.vercel/`, `.turbo/` build caches
+- `*.log`, `*.tsbuildinfo`, `test-runs/`
+- `node_modules/.cache/`, Playwright browser caches if no test run is
+  queued
+- Curl cookie jars (`jar.txt`, `cookies.txt`, `*.cookie-jar`). These
+  are also a security risk (PartsPort has rotated `SESSION_SECRET`
+  once after `jar.txt` was committed)
+- Probe scripts and one-off `*-test.mjs` / `*-probe.mjs` / `*-out.txt`
+  files the testing team drops in the repo root (already covered by
+  `.gitignore` but worth pruning from disk too)
+
+Never delete: source code, MD docs, schema files, prisma migrations,
+`.local-secrets.env`, anything under `.claude/`.
 
 ## Doc maintenance (STANDING RULE for every chat, NO EXCEPTIONS)
 
