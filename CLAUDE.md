@@ -703,6 +703,64 @@ multi-image galleries shipped by PLH-3h, QuickBooks Online full OAuth
 sync shipped by PLH-3i, the post-PLH-2 deferred-polish backlog closed
 by PLH-3j, and the buyer-UX strip-back round shipped by PLH-3k.**
 
+**PLH-3l (2026-05-27).** Supplier dashboard IA split. 8 commits, one
+per phase, sequential push. The previous `/supplier` was a single
+giant scroll mixing daily-ops signals (stats, attention, ship queue)
+with infrequent setup (logo, legal docs, warehouses, payout method,
+team). PLH-3l carves it into 5 tabs: Dashboard, Products, Quotes,
+Payouts, Settings. SupplierNav is sticky across all surfaces.
+- P1 carved out `/supplier/products`, `/supplier/payouts`,
+  `/supplier/quotes`, `/supplier/settings` as thin auth-gated wrappers
+  rendering a new `SupplierNav` (server component, `active` prop sets
+  highlighted tab). Existing `/supplier/catalog-import` URL preserved.
+- P2 pure refactor: 13 sections extracted from `/supplier/page.tsx`
+  into `src/components/supplier/*` (StatsRow, AttentionPanel,
+  GoLiveReadiness, CompanyLogoEditor, LegalDocsEditor,
+  WarehousesEditor, PayoutMethodEditor, CatalogEditor, TeamManager,
+  ReserveBalanceCard, PayoutsTable, QuoteRequestsTable,
+  IncomingOrdersTable). Shared per-supplier data loaders live in
+  `src/components/supplier/data.ts`. Zero visual diff.
+- P3 wired each sub-route to render only its sections.
+  `/supplier/products` = CatalogEditor (manager + AI import tile + CSV
+  import + orders.csv export). `/supplier/payouts` = ReserveBalanceCard
+  + PayoutsTable. `/supplier/quotes` = QuoteRequestsTable.
+  `/supplier/settings` = full GoLiveReadiness + CompanyLogoEditor +
+  LegalDocsEditor + WarehousesEditor + PayoutMethodEditor +
+  TeamManager.
+- P4 trimmed `/supplier` itself to daily ops: SupplierNav + header +
+  StatsRow + AI assistant tile + AttentionPanel + GoLiveReadiness +
+  CompactTiles. All editor cards removed from the dashboard; available
+  under their sub-routes.
+- P5 GoLiveReadiness on the dashboard gets `hideWhenComplete`, so
+  once readiness is 10/10 AND the supplier is public, the checklist
+  disappears from the dashboard. Full checklist still renders at
+  `/supplier/settings`.
+- P6 CompactTiles 1-line summaries: "📋 N open RFQs · oldest D days
+  → View all", "📦 N paid orders awaiting ship → View orders", "💰 $X
+  in payouts due → View payouts". Whole tile clickable; tile grid
+  returns null when nothing is pending.
+- P7 SupplierNav sticky (`position: sticky; top: 0; z-index: 40`) via
+  a `sticky` prop. All five surfaces pass it. Breadcrumb "Supplier →
+  <Section>" added above `page-title` on each sub-route using the
+  existing `.breadcrumb` class.
+- P8 docs + internal link cleanup. `actionHref` strings in
+  `src/lib/attention.ts` swapped from `/supplier#payouts` to
+  `/supplier/payouts`, and the low-stock attention link from
+  `/supplier` to `/supplier/products`. `prisma/seed.mjs` comment
+  reference to `/supplier#profile` updated to `/supplier/settings`.
+  CLAUDE.md + docs/ORCHESTRATOR.md PLH-3l blocks added.
+
+No schema changes, no new dependencies, no new crons. Pure UI/IA
+refactor. Every `npx next build` between commits compiled clean. Zero
+em dashes.
+
+**Cumulative across all rounds including PLH-3l: 28 CRITICAL + 62 HIGH
+closed, plus the single-supplier-cart constraint lifted by PLH-3g,
+multi-image galleries shipped by PLH-3h, QuickBooks Online full OAuth
+sync shipped by PLH-3i, the PLH-2 deferred-polish backlog closed by
+PLH-3j, the buyer-UX strip-back shipped by PLH-3k, and the supplier
+dashboard IA split shipped by PLH-3l.**
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no

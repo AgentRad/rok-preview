@@ -248,7 +248,7 @@ export async function getSupplierAttention(
       title: `${formatCents(total)} in payouts due`,
       body: `${payoutsDue.length} payout${payoutsDue.length === 1 ? "" : "s"} scheduled. PartsPort releases on cleared funds.`,
       actionLabel: "View payouts",
-      actionHref: `/supplier#payouts`,
+      actionHref: `/supplier/payouts`,
       severity: "info",
     });
   }
@@ -263,7 +263,7 @@ export async function getSupplierAttention(
           : `${p.sku} is at ${p.stock} unit${p.stock === 1 ? "" : "s"}`,
       body: `${p.name}. Update stock or buyers see backorder.`,
       actionLabel: "Update stock",
-      actionHref: `/supplier`,
+      actionHref: `/supplier/products`,
       severity: p.stock === 0 ? "warning" : "info",
     });
   }

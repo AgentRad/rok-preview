@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Supplier brand marks. Sourced from ui-avatars.com which serves clean
 // monogram SVGs - good enough for launch when we don't have real logos
 // from each supplier yet. Replace with a Vercel Blob-hosted PNG/SVG once
-// the supplier uploads their own through /supplier#profile. Background
+// the supplier uploads their own through /supplier/settings. Background
 // colors chosen to feel industrial (deep, muted tones).
 const logo = (name, bg, color = "ffffff") =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=400&background=${bg}&color=${color}&bold=true&format=svg`;

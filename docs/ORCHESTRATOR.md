@@ -476,6 +476,33 @@ filter on `/catalog` behind a native `<details>` expander
 URLs keep selected state visible). Every commit built clean. Zero
 em dashes. Final HEAD: `aa0a527` (before docs commit).
 
+**PLH-3l (2026-05-27).** Supplier dashboard IA split. 8 commits, one
+per phase, sequential push. Before this round `/supplier` was a single
+long-scroll mixing daily-ops signals (stats, attention, ship queue)
+with infrequent setup (logo, legal docs, warehouses, payout method,
+team), giving suppliers no place to land for the recurring "what do I
+need to do today?" question.
+- 5-tab IA: Dashboard | Products | Quotes | Payouts | Settings.
+  SupplierNav renders sticky across all surfaces.
+- /supplier/catalog-import URL preserved (PLH-3f) and linked from
+  /supplier/products via CatalogEditor.
+- /supplier dashboard now renders: header (supplier name + rating +
+  signed-in-as) + StatsRow (4 KPIs) + collapsible SupplierAIAssistant
+  tile + AttentionPanel + conditional GoLiveReadiness (hidden when
+  10/10 + public) + CompactTiles (📋 RFQs / 📦 ship queue / 💰 payouts
+  due, each 1-line, clickable, dot-separated).
+- 13 sections extracted from the prior monolith into
+  `src/components/supplier/*` with shared data loaders in
+  `src/components/supplier/data.ts`. /supplier/settings holds the full
+  GoLiveReadiness checklist so veterans can still review every gate.
+- Internal /supplier# anchor refs cleaned up in attention.ts and
+  seed.mjs.
+- No schema changes, no new deps, no new crons. Pure UI/IA refactor.
+  Every commit compiled clean via `npx next build`. Zero em dashes.
+- Per-commit hashes: P1 `5d65f6a`, P2 `bdc9ff9`, P3 `d8e3df8`, P4
+  `c531c07`, P5 `57c895a`, P6 `c548141`, P7 `79bb139`, P8 lands with
+  this docs change.
+
 ## Inbound email feature: LIVE + smoke-proven on prod (2026-05-26)
 
 The Resend webhook is configured and pointing at
