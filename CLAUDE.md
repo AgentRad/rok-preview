@@ -292,12 +292,24 @@ webhooks. 1 commit. Code-side gap from PLH-3b F5 closed.
 - No new migration. No new test infrastructure (no existing inbound
   vitest file to extend).
 
-Code-side blocker for Resend inbound email is closed. Only remaining
-step is the Vercel env-var flip:
-`INBOUND_EMAIL_PROVIDER=resend`, `INBOUND_EMAIL_DOMAIN`,
-`INBOUND_REPLY_SECRET`, `INBOUND_WEBHOOK_SECRET` (the `whsec_*` secret
-saved locally in `.local-secrets.env`). Once those are set, inbound
-reply-by-email goes live.
+**Inbound email is now LIVE (2026-05-26).** All four env vars are set
+in Vercel Production + Preview branches:
+`INBOUND_EMAIL_PROVIDER=resend`,
+`INBOUND_EMAIL_DOMAIN=reply.partsport.agentgaming.gg`,
+`INBOUND_REPLY_SECRET`, `INBOUND_WEBHOOK_SECRET=whsec_*`. Resend webhook
+endpoint (`/api/email/inbound`) is configured to fire `email.received`
+events. Cloudflare DNS holds verified MX + SPF + DKIM records on
+`reply.partsport.agentgaming.gg`. Empty deploy commit `c9901cd` pushed
+to pick up the env vars. End-to-end live test (reply to a thread email
+and confirm Message row + thread update) is the next physical
+verification step but the loop is wired.
+
+**Next up: real-world verification + production cutover.** No more
+code-side polish rounds planned. See ship-ready playbook in
+`LAUNCH_PLAN.md`. Cutover steps queued: Stripe live-mode keys flip,
+demo data wipe, first real supplier (THRADD) onboarding, attorney
+review of legal pages, optional brand rename + entity separation
+(rehosting off the AgentRad / agentrad orbit per Conrad's plan).
 
 ## Launch-time constraints
 

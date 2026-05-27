@@ -248,24 +248,33 @@ vitest file to extend.
 **Cumulative across all rounds: 27 CRITICAL + 58 HIGH closed.** Every
 `npx next build` since P12 has compiled clean.
 
-## Inbound email feature: code-side closed, env-flip pending
+## Inbound email feature: LIVE (2026-05-26)
 
 The Resend webhook is configured and pointing at
 `/api/email/inbound`. The domain `reply.partsport.agentgaming.gg` is
 verified for both send and receive (Cloudflare DNS, AWS SES inbound
-MX live). The `email.received` event is enabled and the webhook
-signing secret is saved locally to
-`C:\Users\radfe\rok-preview\.local-secrets.env` (gitignored).
+MX live, all four records: DKIM TXT, SPF MX + TXT, inbound MX, DMARC
+TXT).
 
-PLH-3d shipped the Svix v1 verifier, so `verifyAuth()` now matches
-Resend's signed-header format. The code-side blocker is closed.
+PLH-3d shipped the Svix v1 verifier at `7c5ec7f`, so `verifyAuth()`
+now matches Resend's signed-header format. All four Vercel env vars
+are set in Production + Preview:
+- `INBOUND_EMAIL_PROVIDER=resend`
+- `INBOUND_EMAIL_DOMAIN=reply.partsport.agentgaming.gg`
+- `INBOUND_REPLY_SECRET` (HMAC key for the per-thread Reply-To token)
+- `INBOUND_WEBHOOK_SECRET=whsec_*` (Svix signing secret from Resend)
 
-Remaining step is the Vercel env-var flip:
-`INBOUND_EMAIL_PROVIDER=resend`, `INBOUND_EMAIL_DOMAIN`,
-`INBOUND_REPLY_SECRET`, `INBOUND_WEBHOOK_SECRET` (the `whsec_*`
-secret). Once set, the orchestrator chat runs a live test:
-reply to a thread email, confirm the inbound webhook fires, confirm
-the reply posts back into the thread and fans out.
+Empty deploy commit `c9901cd` pushed to force the env vars into the
+running deployment. The webhook signing secret stays mirrored in
+`C:\Users\radfe\rok-preview\.local-secrets.env` (gitignored) for
+disaster recovery; rotate via the Resend dashboard if it ever leaks.
+
+Remaining verification step: end-to-end live test. Send an email to
+a thread, click a thread email's reply-from-email, confirm the
+inbound webhook fires (visible in Resend's webhook delivery log AND
+in `/admin/audit` if anything goes wrong), confirm the Message row
+is created with the correct `inboundFingerprint`, and confirm the
+fan-out emails to other thread members go out.
 
 ## Launch-time decisions
 
