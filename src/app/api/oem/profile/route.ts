@@ -30,10 +30,13 @@ export async function PATCH(req: Request) {
     manufacturerLogoUrl?: string | null;
   } = {};
   if (typeof body.tagline === "string") {
-    data.manufacturerTagline = body.tagline.slice(0, 140).trim();
+    // PLH-3c F6: trim before slicing so the user-visible character count
+    // doesn't drift after a save (slice-then-trim could land below the
+    // 140 cap whenever the input had trailing whitespace).
+    data.manufacturerTagline = body.tagline.trim().slice(0, 140);
   }
   if (typeof body.bio === "string") {
-    data.manufacturerBio = body.bio.slice(0, 1200).trim();
+    data.manufacturerBio = body.bio.trim().slice(0, 1200);
   }
   if (typeof body.website === "string") {
     // PLH-2 Phase 4c (C4): hard validation of the website URL. Reject
