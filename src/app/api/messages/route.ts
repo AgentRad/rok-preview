@@ -32,6 +32,7 @@ export async function POST(req: Request) {
   }
 
   const recipients = new Set<string>();
+  const recipientUserIds = new Map<string, string | null>();
   let subjectPrefix = "";
   let context = "";
   let threadUrl = "";
@@ -61,9 +62,17 @@ export async function POST(req: Request) {
     }
     // Buyer message goes to each supplier email + admin (BCC bundled). Supplier
     // message goes to the buyer + admin. Admin message goes to both.
-    if (!isBuyer) recipients.add(order.buyerEmail);
+    if (!isBuyer) {
+      recipients.add(order.buyerEmail);
+      recipientUserIds.set(order.buyerEmail, order.buyerId || null);
+    }
     if (!isOrderSupplier) {
-      for (const it of order.items) recipients.add(it.product.supplier.contactEmail);
+      for (const it of order.items) {
+        recipients.add(it.product.supplier.contactEmail);
+        if (!recipientUserIds.has(it.product.supplier.contactEmail)) {
+          recipientUserIds.set(it.product.supplier.contactEmail, null);
+        }
+      }
     }
     subjectPrefix = `Order ${order.reference}`;
     context = `your order ${order.reference}`;
@@ -89,8 +98,16 @@ export async function POST(req: Request) {
     if (!isBuyer && !isAdmin && !isQuoteSupplier) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }
-    if (!isBuyer) recipients.add(quote.buyerEmail);
-    if (!isQuoteSupplier) recipients.add(quote.product.supplier.contactEmail);
+    if (!isBuyer) {
+      recipients.add(quote.buyerEmail);
+      recipientUserIds.set(quote.buyerEmail, quote.buyerId || null);
+    }
+    if (!isQuoteSupplier) {
+      recipients.add(quote.product.supplier.contactEmail);
+      if (!recipientUserIds.has(quote.product.supplier.contactEmail)) {
+        recipientUserIds.set(quote.product.supplier.contactEmail, null);
+      }
+    }
     subjectPrefix = `RFQ ${quote.reference}`;
     context = `RFQ ${quote.reference} for ${quote.product.name}`;
     threadUrl = siteUrl(`/quotes/${quote.id}`);
@@ -122,6 +139,7 @@ export async function POST(req: Request) {
           threadUrl,
           threadKind,
           threadId,
+          recipientUserId: recipientUserIds.get(to) ?? null,
         });
       } catch (err) {
         captureError(err, { subsystem: "email", op: "thread-message", to });

@@ -536,7 +536,12 @@ export async function sendThreadMessage(args: {
   threadUrl: string;
   threadKind: ThreadKind;
   threadId: string;
+  recipientUserId?: string | null;
 }): Promise<void> {
+  if (args.recipientUserId) {
+    const ok = await shouldSendToUser(args.recipientUserId, "order");
+    if (!ok) return;
+  }
   const safeBody = args.body
     .split("\n")
     .map((line) => `<p style="margin:0 0 8px;">${line ? esc(line) : "&nbsp;"}</p>`)

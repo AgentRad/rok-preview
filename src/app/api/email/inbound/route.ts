@@ -280,6 +280,7 @@ async function handleInbound(req: Request) {
         threadUrl: url,
         threadKind: target.kind,
         threadId: target.id,
+        recipientUserId: null,
       }).catch(() => undefined);
     }
     return NextResponse.json({ ok: true, ignored: "unknown sender" });
@@ -329,9 +330,19 @@ async function handleInbound(req: Request) {
     });
     // Fan out to the other people on the thread (mirrors POST /api/messages).
     const recipients = new Set<string>();
-    if (!isBuyer) recipients.add(order.buyerEmail);
+    const recipientUserIds = new Map<string, string | null>();
+    if (!isBuyer) {
+      recipients.add(order.buyerEmail);
+      recipientUserIds.set(order.buyerEmail, order.buyerId || null);
+    }
     for (const it of order.items) {
-      if (!isOrderSupplier) recipients.add(it.product.supplier?.contactEmail || "");
+      if (!isOrderSupplier) {
+        const email = it.product.supplier?.contactEmail || "";
+        recipients.add(email);
+        if (email && !recipientUserIds.has(email)) {
+          recipientUserIds.set(email, null);
+        }
+      }
     }
     recipients.delete("");
     recipients.delete(user.email);
@@ -350,6 +361,7 @@ async function handleInbound(req: Request) {
             threadUrl: siteUrl(`/orders/${order.id}`),
             threadKind: "order",
             threadId: order.id,
+            recipientUserId: recipientUserIds.get(to) ?? null,
           });
         } catch {
           // Per-recipient swallow; one bad address doesn't drop the rest.
@@ -391,8 +403,17 @@ async function handleInbound(req: Request) {
     },
   });
   const recipients = new Set<string>();
-  if (!isBuyer) recipients.add(quote.buyerEmail);
-  if (!isQuoteSupplier) recipients.add(quote.product.supplier.contactEmail);
+  const recipientUserIds = new Map<string, string | null>();
+  if (!isBuyer) {
+    recipients.add(quote.buyerEmail);
+    recipientUserIds.set(quote.buyerEmail, quote.buyerId || null);
+  }
+  if (!isQuoteSupplier) {
+    recipients.add(quote.product.supplier.contactEmail);
+    if (!recipientUserIds.has(quote.product.supplier.contactEmail)) {
+      recipientUserIds.set(quote.product.supplier.contactEmail, null);
+    }
+  }
   recipients.delete("");
   recipients.delete(user.email);
   // P9.5 HIGH 11: same after() wrap for the quote thread side.
@@ -408,6 +429,7 @@ async function handleInbound(req: Request) {
           threadUrl: siteUrl(`/quotes/${quote.id}`),
           threadKind: "quote",
           threadId: quote.id,
+          recipientUserId: recipientUserIds.get(to) ?? null,
         });
       } catch {
         // swallow per-recipient; the rest still send.
