@@ -32,6 +32,7 @@ import QuoteResponder from "@/components/QuoteResponder";
 import ActingAsBanner from "@/components/ActingAsBanner";
 import AttentionFeed from "@/components/AttentionFeed";
 import { getSupplierAttention } from "@/lib/attention";
+import { listClaimedManufacturers } from "@/lib/manufacturers";
 import { formatCents } from "@/lib/money";
 import SupplierAIAssistant from "@/components/SupplierAIAssistant";
 
@@ -132,6 +133,12 @@ export default async function SupplierDashboard({
       take: 10,
     }),
   ]);
+
+  // PLH-3c F1: claimed-OEM dropdown for the add-product form. Suppliers
+  // can no longer free-type a brand name; they pick from this list.
+  const claimedManufacturers = showCatalog
+    ? await listClaimedManufacturers()
+    : [];
 
   const readiness = computeReadiness(
     {
@@ -349,6 +356,7 @@ export default async function SupplierDashboard({
                 widthIn: p.widthIn,
                 heightIn: p.heightIn,
               }))}
+              manufacturers={claimedManufacturers}
             />
           )}
 

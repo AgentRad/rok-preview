@@ -267,8 +267,10 @@ function Row({ p }: { p: SupplierProduct }) {
 
 export default function SupplierProductManager({
   products,
+  manufacturers,
 }: {
   products: SupplierProduct[];
+  manufacturers: string[];
 }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
@@ -364,7 +366,18 @@ export default function SupplierProductManager({
               </div>
               <div>
                 <label>Manufacturer</label>
-                <input value={form.manufacturer} onChange={(e) => set("manufacturer", e.target.value)} required />
+                <select
+                  value={form.manufacturer}
+                  onChange={(e) => set("manufacturer", e.target.value)}
+                  required
+                >
+                  <option value="">Select a brand</option>
+                  {manufacturers.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="form-row two">

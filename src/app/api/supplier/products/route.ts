@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { ICON_KEYS } from "@/components/PartIcon";
 import { canEditCatalog, getActiveSupplierContext } from "@/lib/supplier-access";
+import { isClaimedManufacturer } from "@/lib/manufacturers";
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
@@ -69,6 +70,17 @@ export async function POST(req: Request) {
   if (!sku || !name || !category || !manufacturer || !(price > 0)) {
     return NextResponse.json(
       { error: "SKU, name, category, manufacturer and a price are required." },
+      { status: 400 }
+    );
+  }
+  // PLH-3c F1: soft brand model. Manufacturer must be a claimed OEM
+  // on PartsPort. Suppliers cannot mint phantom brands by free-typing
+  // a name into the form.
+  if (!(await isClaimedManufacturer(manufacturer))) {
+    return NextResponse.json(
+      {
+        error: `"${manufacturer}" is not a brand on PartsPort yet. Ask the brand owner to claim their storefront, or pick from the dropdown.`,
+      },
       { status: 400 }
     );
   }
