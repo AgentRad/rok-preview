@@ -6,6 +6,11 @@ import { AUDIT_ACTIONS } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
+// PLH-3j P11: pagination is already in place on this page (50-per-page,
+// page query param + Previous/Next links below). No code change needed
+// for this fix; this comment documents the verification. Filters use
+// indexed columns (actorId, targetType/targetId, createdAt) so the
+// page stays cheap as the AuditLog table grows.
 const PAGE_SIZE = 50;
 
 const TARGET_TYPES = [
