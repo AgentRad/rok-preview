@@ -10,7 +10,17 @@ import { useRouter } from "next/navigation";
  * shared markOrderShipped helper. Same end state as the admin ops console's
  * Shipped transition.
  */
-export default function FulfillButton({ orderId }: { orderId: string }) {
+export default function FulfillButton({
+  orderId,
+  slotId,
+}: {
+  orderId: string;
+  // PLH-3g P8: the supplier dashboard passes the caller's own slot id so
+  // markSlotShipped only flips that supplier's slice of a multi-supplier
+  // order. The server falls back to the supplier's slot lookup when
+  // omitted; passing it explicitly avoids the extra round-trip.
+  slotId?: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [carrier, setCarrier] = useState("");
@@ -26,7 +36,7 @@ export default function FulfillButton({ orderId }: { orderId: string }) {
       const res = await fetch(`/api/orders/${orderId}/fulfill`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ carrier, trackingCode: tracking }),
+        body: JSON.stringify({ carrier, trackingCode: tracking, slotId }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

@@ -99,14 +99,19 @@ export async function POST(req: Request) {
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-  const [orders30d, payouts, refunds90d, orders90d, returns90d] = await Promise.all([
+  const [orders30d, payouts, refunds90d, orders90d, returns90d, slots90d] = await Promise.all([
     prisma.order.findMany({
       where: {
         createdAt: { gte: thirtyDaysAgo },
         items: { some: { product: { supplierId } } },
         status: { in: ["PAID", "FULFILLED", "REFUNDED"] },
       },
-      include: { items: { include: { product: true } } },
+      include: {
+        items: { include: { product: true } },
+        // PLH-3g P8: pull THIS supplier's slot only so financial rollups
+        // never include another supplier's slice of a multi-supplier order.
+        supplierSlots: { where: { supplierId } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.payout.findMany({
@@ -138,6 +143,16 @@ export async function POST(req: Request) {
       select: { id: true, status: true, reason: true, createdAt: true },
       orderBy: { createdAt: "desc" },
     }),
+    // PLH-3g P8: per-supplier slot financials over 90 days.
+    // refund rate = sum(refundedCents) / sum(subtotalCents) for THIS
+    // supplier's slots only.
+    prisma.orderSupplierSlot.findMany({
+      where: {
+        supplierId,
+        order: { createdAt: { gte: ninetyDaysAgo } },
+      },
+      select: { subtotalCents: true, refundedCents: true },
+    }),
   ]);
 
   // Build per-SKU sales rollup over the 30-day window (the assistant uses
@@ -150,9 +165,16 @@ export async function POST(req: Request) {
   let avgDaysToShip = 0;
   let shippedCount = 0;
   for (const o of orders30d) {
+    // PLH-3g P8: prefer the supplier's slot subtotal as canonical revenue
+    // for this supplier on the order; falls back to item math for any
+    // pre-P3 order without a slot row yet.
+    const slot = o.supplierSlots[0];
+    if (slot) {
+      revenue30dCents += slot.subtotalCents;
+    }
     for (const it of o.items) {
       if (it.product.supplierId !== supplierId) continue;
-      revenue30dCents += it.unitPriceCents * it.qty;
+      if (!slot) revenue30dCents += it.unitPriceCents * it.qty;
       const row = skuRollup.get(it.skuSnapshot) ?? {
         sku: it.skuSnapshot,
         name: it.nameSnapshot,
@@ -184,8 +206,16 @@ export async function POST(req: Request) {
     .sort((a, b) => b.unitsSold - a.unitsSold)
     .slice(0, 10);
 
-  const refundedCents90d = refunds90d.reduce((s, r) => s + r.amountCents, 0);
-  const refundRate90d = orders90d > 0 ? refunds90d.length / orders90d : 0;
+  // PLH-3g P8: per-supplier refund rate uses slot-scoped totals.
+  // Old metric (refunds.length / orders.count) treated this supplier's
+  // share of a multi-supplier order as a whole refunded order, which
+  // overstated the rate. New metric:
+  //   refundRateBySlot = sum(slot.refundedCents) / sum(slot.subtotalCents)
+  const slotSubtotal90d = slots90d.reduce((s, x) => s + x.subtotalCents, 0);
+  const slotRefunded90d = slots90d.reduce((s, x) => s + x.refundedCents, 0);
+  const refundedCents90d = slotRefunded90d;
+  const refundRate90d =
+    slotSubtotal90d > 0 ? slotRefunded90d / slotSubtotal90d : 0;
 
   const inventory = supplier.products
     .filter((p) => p.active)
@@ -233,8 +263,11 @@ export async function POST(req: Request) {
     refunds90Days: {
       count: refunds90d.length,
       totalCents: refundedCents90d,
+      // PLH-3g P8: rate is sum(slot.refundedCents) / sum(slot.subtotalCents)
+      // for this supplier's slots only, not refundCount / orderCount.
       rate: Number(refundRate90d.toFixed(4)),
       totalOrders: orders90d,
+      slotSubtotalCents: slotSubtotal90d,
       items: refunds90d.slice(0, 10).map((r) => ({
         orderReference: r.order.reference,
         amountCents: r.amountCents,

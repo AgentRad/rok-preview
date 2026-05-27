@@ -3,23 +3,21 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import {
   canFulfillOrders,
+  getActiveSupplierContext,
   userHasAccessToSupplier,
 } from "@/lib/supplier-access";
-import { markOrderShipped } from "@/lib/shipping";
+import { markOrderShipped, markSlotShipped } from "@/lib/shipping";
 
 export const runtime = "nodejs";
 
 /**
- * Supplier marks an order Shipped. Requires carrier + trackingCode (same as
- * the admin ops console). Sets shipmentStage = "Shipped", emits the shipped
- * email, and creates the supplier payout via the shared markOrderShipped
- * helper. Does NOT flip status to FULFILLED on its own; Delivered happens
- * later (admin advance, buyer confirm-receipt, or the 14-day auto-deliver
- * cron).
+ * Supplier (or admin) marks shipment Shipped.
  *
- * Authorization: SUPPLIER members whose team role can fulfill, OR ADMIN.
- * For suppliers, the user must have access to every supplier on the order's
- * line items (in practice a single-supplier order today, but defensive).
+ * PLH-3g P8: scoped to the caller's OWN OrderSupplierSlot. For SUPPLIER
+ * callers we resolve the active supplier context and locate that
+ * supplier's slot on the order; we never ship another supplier's slot.
+ * Admins can pass an explicit `slotId` (preferred) or fall back to the
+ * legacy whole-order ship via markOrderShipped.
  */
 export async function POST(
   req: Request,
@@ -32,35 +30,79 @@ export async function POST(
   }
   const order = await prisma.order.findUnique({
     where: { id },
-    include: { items: { include: { product: true } } },
+    select: { id: true },
   });
   if (!order) {
     return NextResponse.json({ error: "Order not found." }, { status: 404 });
   }
+
+  const body = (await req.json().catch(() => null)) as {
+    carrier?: string;
+    trackingCode?: string;
+    slotId?: string;
+  } | null;
+  const carrier = body?.carrier ?? "";
+  const trackingCode = body?.trackingCode ?? "";
+
   if (user.role === "SUPPLIER") {
-    const supplierIds = Array.from(
-      new Set(order.items.map((i) => i.product.supplierId))
-    );
-    const checks = await Promise.all(
-      supplierIds.map((sid) => userHasAccessToSupplier(user.id, sid))
-    );
-    const allowed = checks.every((c) => c.ok && canFulfillOrders(c.role));
-    if (!allowed) {
+    const ctx = await getActiveSupplierContext(user);
+    if (!ctx || !canFulfillOrders(ctx.role)) {
       return NextResponse.json(
         { error: "Your role on this order doesn't allow shipping." },
         { status: 403 }
       );
     }
+    const supplierId = ctx.supplier.id;
+    // Locate THIS supplier's slot on the order. If none, this supplier
+    // has nothing to ship on this order: 403.
+    const slot = await prisma.orderSupplierSlot.findUnique({
+      where: { orderId_supplierId: { orderId: id, supplierId } },
+      select: { id: true },
+    });
+    if (!slot) {
+      return NextResponse.json(
+        { error: "You have no shipment on this order." },
+        { status: 403 }
+      );
+    }
+    const result = await markSlotShipped(slot.id, { carrier, trackingCode });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    return NextResponse.json(result);
   }
-  const body = (await req.json().catch(() => null)) as {
-    carrier?: string;
-    trackingCode?: string;
-  } | null;
-  const result = await markOrderShipped(
-    id,
-    body?.carrier ?? "",
-    body?.trackingCode ?? ""
-  );
+
+  // ADMIN: ship a specific slot if slotId given, else ship the whole order.
+  if (body?.slotId) {
+    const slot = await prisma.orderSupplierSlot.findUnique({
+      where: { id: body.slotId },
+      select: { id: true, orderId: true, supplierId: true },
+    });
+    if (!slot || slot.orderId !== id) {
+      return NextResponse.json(
+        { error: "Shipment slot not found on this order." },
+        { status: 404 }
+      );
+    }
+    // Defensive: admin acting-as a supplier must still have access.
+    const ctx = await getActiveSupplierContext(user);
+    if (ctx?.actingAsAdmin && ctx.supplier.id !== slot.supplierId) {
+      const check = await userHasAccessToSupplier(user.id, slot.supplierId);
+      if (!check.ok) {
+        return NextResponse.json(
+          { error: "No access to this supplier's slot." },
+          { status: 403 }
+        );
+      }
+    }
+    const result = await markSlotShipped(slot.id, { carrier, trackingCode });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    return NextResponse.json(result);
+  }
+
+  const result = await markOrderShipped(id, carrier, trackingCode);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

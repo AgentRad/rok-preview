@@ -99,7 +99,13 @@ export default async function SupplierDashboard({
         items: { some: { product: { supplierId: supplier.id } } },
         status: { in: ["PAID", "FULFILLED"] },
       },
-      include: { items: { include: { product: true } } },
+      include: {
+        items: { include: { product: true } },
+        // PLH-3g P8: pull this supplier's slot only. On multi-supplier
+        // orders we render slot-level shipment + financial data; other
+        // suppliers' slots stay hidden.
+        supplierSlots: { where: { supplierId: supplier.id } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.quoteRequest.findMany({
@@ -163,8 +169,16 @@ export default async function SupplierDashboard({
     .filter((p) => p.status === "PAID")
     .reduce((s, p) => s + p.amountCents, 0);
 
+  // PLH-3g P8: revenue from this supplier's slot subtotal when present
+  // (canonical post-P3 source). Falls back to item math on pre-P3 orders
+  // that don't have slots yet.
   let revenue = 0;
   for (const o of orders) {
+    const slot = o.supplierSlots[0];
+    if (slot) {
+      revenue += slot.subtotalCents;
+      continue;
+    }
     for (const it of o.items) {
       if (it.product.supplierId === supplier.id)
         revenue += it.unitPriceCents * it.qty;
@@ -634,10 +648,18 @@ export default async function SupplierDashboard({
                       const mine = o.items.filter(
                         (i) => i.product.supplierId === supplier.id
                       );
-                      const mineTotal = mine.reduce(
-                        (s, i) => s + i.unitPriceCents * i.qty,
-                        0
-                      );
+                      // PLH-3g P8: slot-scoped financials + ship state.
+                      // Suppliers never see the order-level total or the
+                      // aggregate shipmentStage when other suppliers are
+                      // on the same order.
+                      const slot = o.supplierSlots[0] ?? null;
+                      const mineTotal = slot
+                        ? slot.subtotalCents + slot.freightCents
+                        : mine.reduce(
+                            (s, i) => s + i.unitPriceCents * i.qty,
+                            0
+                          );
+                      const slotStage = slot?.shipmentStage ?? "Pending";
                       return (
                         <tr key={o.id}>
                           <td style={{ fontWeight: 700 }}>{o.reference}</td>
@@ -650,29 +672,40 @@ export default async function SupplierDashboard({
                             ))}
                           </td>
                           <td>
-                            <span className={"badge " + (STATUS_CLASS[o.status] || "")}>
-                              {o.status}
+                            <span
+                              className={
+                                "badge " +
+                                (slotStage === "Shipped" ||
+                                slotStage === "Delivered"
+                                  ? "badge-fulfilled"
+                                  : "badge-pending")
+                              }
+                            >
+                              {slotStage}
                             </span>
                           </td>
                           <td className="num">{formatCents(mineTotal)}</td>
                           <td className="num">
-                            {/* Show the Mark shipped form only on PAID
-                                orders that haven't already been shipped or
-                                delivered. After this we hand off to /ops
-                                for the Delivered transition. */}
+                            {/* PLH-3g P8: ship action scoped to THIS
+                                supplier's slot. The slot stage drives the
+                                button; sibling suppliers' slots don't
+                                affect this row. */}
                             {o.status === "PAID" &&
-                              o.shipmentStage !== "Shipped" &&
-                              o.shipmentStage !== "Delivered" &&
-                              canFulfill && <FulfillButton orderId={o.id} />}
-                            {o.status === "PAID" &&
-                              o.shipmentStage === "Shipped" && (
-                                <span
-                                  className="muted-text"
-                                  style={{ fontSize: 12 }}
-                                >
-                                  Shipped {o.carrier ?? ""} {o.trackingCode ?? ""}
-                                </span>
+                              slot &&
+                              slotStage !== "Shipped" &&
+                              slotStage !== "Delivered" &&
+                              canFulfill && (
+                                <FulfillButton orderId={o.id} slotId={slot.id} />
                               )}
+                            {o.status === "PAID" && slotStage === "Shipped" && (
+                              <span
+                                className="muted-text"
+                                style={{ fontSize: 12 }}
+                              >
+                                Shipped {slot?.carrier ?? ""}{" "}
+                                {slot?.trackingCode ?? ""}
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );

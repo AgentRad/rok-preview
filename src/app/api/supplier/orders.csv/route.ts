@@ -62,6 +62,11 @@ export async function GET(req: Request) {
     },
     include: {
       items: { include: { product: true } },
+      // PLH-3g P8: per-supplier slot so the CSV reflects slot-level
+      // shipment + financials, not the cross-supplier Order aggregate.
+      supplierSlots: supplier
+        ? { where: { supplierId: supplier.id } }
+        : true,
     },
     orderBy: { createdAt: "asc" },
   });
@@ -81,6 +86,11 @@ export async function GET(req: Request) {
     "Qty",
     "Unit Price",
     "Line Total",
+    // Slot-level totals (this supplier's portion only when scoped).
+    "Slot Subtotal",
+    "Slot Freight",
+    "Slot Fee",
+    "Slot Refunded",
   ];
   const lines: string[] = [row(header)];
 
@@ -88,15 +98,21 @@ export async function GET(req: Request) {
     const items = supplier
       ? o.items.filter((i) => i.product.supplierId === supplier.id)
       : o.items;
+    // For supplier-scoped exports there's exactly one slot (or zero on
+    // pre-P3 orders). For admin/unscoped, leave slot blank when ambiguous.
+    const slot = supplier ? (o.supplierSlots[0] ?? null) : null;
+    const stage = slot ? slot.shipmentStage : o.shipmentStage || "";
+    const carrier = slot ? slot.carrier ?? "" : o.carrier || "";
+    const tracking = slot ? slot.trackingCode ?? "" : o.trackingCode || "";
     for (const it of items) {
       lines.push(
         row([
           o.reference,
           o.createdAt.toISOString().slice(0, 10),
           o.status,
-          o.shipmentStage || "",
-          o.carrier || "",
-          o.trackingCode || "",
+          stage,
+          carrier,
+          tracking,
           o.buyerName,
           o.buyerEmail,
           it.skuSnapshot,
@@ -105,6 +121,10 @@ export async function GET(req: Request) {
           it.qty,
           dollars(it.unitPriceCents),
           dollars(it.unitPriceCents * it.qty),
+          slot ? dollars(slot.subtotalCents) : "",
+          slot ? dollars(slot.freightCents) : "",
+          slot ? dollars(slot.feeCents) : "",
+          slot ? dollars(slot.refundedCents) : "",
         ])
       );
     }

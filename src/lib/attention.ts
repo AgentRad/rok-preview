@@ -157,16 +157,44 @@ export async function getSupplierAttention(
       orderBy: { createdAt: "asc" },
       include: { product: { select: { name: true } } },
     }),
-    prisma.order.findMany({
-      where: {
-        status: "PAID",
-        shipmentStage: { notIn: ["Shipped", "Delivered"] },
-        items: { some: { product: { supplierId } } },
-      },
-      orderBy: { paidAt: "asc" },
-      select: { id: true, reference: true, paidAt: true, shipmentStage: true },
-      take: 10,
-    }),
+    // PLH-3g P8: scope the "to ship" feed to THIS supplier's slot. On a
+    // multi-supplier order, the order-level shipmentStage might already
+    // be "Partial: 1 of 2 shipped" while this supplier still hasn't
+    // shipped their slot; the old query missed those.
+    prisma.order
+      .findMany({
+        where: {
+          status: "PAID",
+          supplierSlots: {
+            some: {
+              supplierId,
+              shipmentStage: { notIn: ["Shipped", "Delivered"] },
+            },
+          },
+        },
+        orderBy: { paidAt: "asc" },
+        select: {
+          id: true,
+          reference: true,
+          paidAt: true,
+          shipmentStage: true,
+          supplierSlots: {
+            where: { supplierId },
+            select: { shipmentStage: true },
+          },
+        },
+        take: 10,
+      })
+      .then((rows) =>
+        rows.map((r) => ({
+          id: r.id,
+          reference: r.reference,
+          paidAt: r.paidAt,
+          // Surface the slot stage (this supplier's view), not the
+          // cross-supplier aggregate.
+          shipmentStage: r.supplierSlots[0]?.shipmentStage ?? r.shipmentStage,
+        }))
+      ),
     prisma.payout.findMany({
       where: { supplierId, status: "DUE" },
       orderBy: { createdAt: "asc" },
