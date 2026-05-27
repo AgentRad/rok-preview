@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { sendOrderDelivered } from "@/lib/email";
 import { captureError } from "@/lib/observability";
-import { markOrderDelivered } from "@/lib/shipping";
+import { markOrderDelivered, loadOrderLite } from "@/lib/shipping";
 
 export const runtime = "nodejs";
 
@@ -48,10 +48,7 @@ export async function POST(
     return NextResponse.json({ error: r.error }, { status: r.status });
   }
   if (r.orderFullyDeliveredNow) {
-    const updated = await prisma.order.findUnique({
-      where: { id },
-      include: { items: true },
-    });
+    const updated = await loadOrderLite(id);
     if (updated) {
       after(async () => {
         try {

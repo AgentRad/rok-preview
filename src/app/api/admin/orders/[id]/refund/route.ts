@@ -87,14 +87,16 @@ export async function POST(
   // "Thanks for your order" confirmation template. The buyer was
   // getting the wrong email pre-fix; the verify chat caught this.
   const refundedCents = result.amountCents;
+  const slotSupplierName = result.slotSupplierName;
   after(async () => {
     try {
-      const order = await prisma.order.findUnique({
-        where: { id },
-        include: { items: true },
-      });
+      const { loadOrderLite } = await import("@/lib/shipping");
+      const order = await loadOrderLite(id);
       if (order) {
-        await sendOrderRefunded(order, refundedCents, reason);
+        // PLH-3g P7: name the supplier on scoped (slot/item) refunds so
+        // the buyer email reads "Supplier X's portion refunded" rather
+        // than the generic "your order was refunded".
+        await sendOrderRefunded(order, refundedCents, reason, slotSupplierName);
       }
     } catch (err) {
       captureError(err, {

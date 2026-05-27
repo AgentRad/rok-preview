@@ -604,7 +604,35 @@ export async function POST(req: Request) {
   // the previous fire-and-forget `.catch(...)` which broke on serverless.
   after(async () => {
     try {
-      await sendOrderConfirmation(order);
+      // PLH-3g P7: re-fetch with supplierSlots + per-item supplierId so
+      // multi-supplier orders render per-supplier sections in the email.
+      const fresh = await prisma.order.findUnique({
+        where: { id: order.id },
+        include: {
+          items: { include: { product: { select: { supplierId: true } } } },
+          supplierSlots: { include: { supplier: { select: { name: true } } } },
+        },
+      });
+      const lite = fresh
+        ? {
+            ...fresh,
+            supplierSlots: fresh.supplierSlots.map((s) => ({
+              id: s.id,
+              supplierId: s.supplierId,
+              supplierName: s.supplier?.name ?? null,
+              subtotalCents: s.subtotalCents,
+              freightCents: s.freightCents,
+              feeCents: s.feeCents,
+              carrier: s.carrier,
+              trackingCode: s.trackingCode,
+              trackingUrl: s.trackingUrl,
+              shipmentStage: s.shipmentStage,
+              shippedAt: s.shippedAt,
+              deliveredAt: s.deliveredAt,
+            })),
+          }
+        : order;
+      await sendOrderConfirmation(lite);
     } catch (err) {
       captureError(err, { subsystem: "email", op: "order-confirmation", orderId: order.id });
     }

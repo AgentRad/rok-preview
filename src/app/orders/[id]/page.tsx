@@ -44,6 +44,9 @@ export default async function OrderPage({
     returns: { orderBy: { createdAt: "desc" as const } },
     messages: { orderBy: { createdAt: "asc" as const } },
     reviews: { select: { productId: true, rating: true, createdAt: true } },
+    supplierSlots: {
+      include: { supplier: { select: { id: true, name: true, logoUrl: true } } },
+    },
   };
   const initial = await prisma.order.findUnique({
     where: { id },
@@ -112,6 +115,9 @@ export default async function OrderPage({
     return 0; // PAID, not yet picked up by supplier
   })();
   const trackingUrl = trackingLink(order.carrier, order.trackingCode);
+  const isMultiSupplier = (order.supplierSlots?.length ?? 0) > 1;
+  const slotItems = (supplierId: string) =>
+    order.items.filter((it) => it.product.supplierId === supplierId);
 
   return (
     <>
@@ -171,7 +177,178 @@ export default async function OrderPage({
             </div>
           )}
 
-          {paid && stageIndex >= 2 && order.carrier && order.trackingCode && (
+          {paid && isMultiSupplier && (
+            <div className="multi-supplier-shipments" style={{ marginTop: 18 }}>
+              <h2 style={{ fontSize: 18, marginBottom: 10 }}>
+                Shipments from {order.supplierSlots.length} suppliers
+              </h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {order.supplierSlots.map((slot) => {
+                  const items = slotItems(slot.supplierId);
+                  const link = slot.trackingUrl
+                    || trackingLink(slot.carrier, slot.trackingCode);
+                  const slotStage = slot.shipmentStage || "Pending";
+                  const slotBadge =
+                    slotStage === "Delivered"
+                      ? "badge-fulfilled"
+                      : slotStage === "Shipped"
+                      ? "badge-paid"
+                      : "badge-pending";
+                  return (
+                    <div
+                      key={slot.id}
+                      className="card"
+                      style={{ padding: 0 }}
+                    >
+                      <div
+                        className="card-head"
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          {slot.supplier?.logoUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={slot.supplier.logoUrl}
+                              alt=""
+                              className="invoice-supplier-logo"
+                            />
+                          )}
+                          <h3 style={{ margin: 0, fontSize: 15 }}>
+                            {slot.supplier?.name || "Supplier"}
+                          </h3>
+                        </div>
+                        <span className={"badge " + slotBadge}>{slotStage}</span>
+                      </div>
+                      <div className="card-body">
+                        <table className="table" style={{ marginTop: 0 }}>
+                          <thead>
+                            <tr>
+                              <th>Part</th>
+                              <th className="num">Unit price</th>
+                              <th className="num">Qty</th>
+                              <th className="num">Line total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((it) => (
+                              <tr key={it.id}>
+                                <td>
+                                  <div style={{ fontWeight: 600 }}>
+                                    {it.nameSnapshot}
+                                  </div>
+                                  <div
+                                    className="muted-text"
+                                    style={{ fontSize: 12 }}
+                                  >
+                                    {it.skuSnapshot}
+                                  </div>
+                                </td>
+                                <td className="num">
+                                  {formatCents(it.unitPriceCents)}
+                                </td>
+                                <td className="num">{it.qty}</td>
+                                <td className="num">
+                                  {formatCents(it.unitPriceCents * it.qty)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div
+                          style={{
+                            maxWidth: 280,
+                            marginLeft: "auto",
+                            marginTop: 10,
+                          }}
+                        >
+                          <div className="summary-line">
+                            <span>Subtotal</span>
+                            <span>{formatCents(slot.subtotalCents)}</span>
+                          </div>
+                          <div className="summary-line">
+                            <span>Freight</span>
+                            <span>{formatCents(slot.freightCents)}</span>
+                          </div>
+                          <div className="summary-line">
+                            <span>Platform fee</span>
+                            <span>{formatCents(slot.feeCents)}</span>
+                          </div>
+                          {slot.refundedCents > 0 && (
+                            <div className="summary-line">
+                              <span>Refunded</span>
+                              <span>
+                                {"-"}
+                                {formatCents(slot.refundedCents)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {slot.shippedAt && slot.carrier && slot.trackingCode && (
+                          <div
+                            className="tracking-card"
+                            style={{ marginTop: 12 }}
+                          >
+                            <div className="tracking-head">
+                              <div>
+                                <div className="invoice-meta-label">Tracking</div>
+                                <div
+                                  style={{
+                                    fontWeight: 700,
+                                    fontSize: 15,
+                                    marginTop: 4,
+                                  }}
+                                >
+                                  {slot.carrier}
+                                </div>
+                                <div
+                                  className="muted-text"
+                                  style={{
+                                    fontFamily: "var(--mono)",
+                                    fontSize: 13,
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  {slot.trackingCode}
+                                </div>
+                              </div>
+                              {link && (
+                                <a
+                                  className="btn btn-dark btn-sm"
+                                  href={link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  Track shipment
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        <div
+                          className="muted-text"
+                          style={{ fontSize: 12, marginTop: 10 }}
+                        >
+                          {slot.shippedAt
+                            ? `Shipped ${slot.shippedAt.toLocaleDateString()}`
+                            : "Awaiting dispatch"}
+                          {slot.deliveredAt
+                            ? ` · Delivered ${slot.deliveredAt.toLocaleDateString()}`
+                            : ""}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {paid && !isMultiSupplier && stageIndex >= 2 && order.carrier && order.trackingCode && (
             <div className="tracking-card">
               <div className="tracking-head">
                 <div>

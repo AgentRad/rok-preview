@@ -347,6 +347,53 @@ compiles clean. Zero em dashes.
 **Cumulative across P12 + PLH-1 + PLH-2 + PLH-3a + PLH-3b + PLH-3c +
 PLH-3d + PLH-3e: 28 CRITICAL + 62 HIGH closed.**
 
+**PLH-3g P7 (2026-05-26).** Buyer UI for per-supplier shipments and
+invoice section breakdown.
+- `/orders/[id]` page now fetches `supplierSlots` (with supplier
+  identity). Single-supplier orders render unchanged. Multi-supplier
+  orders render a stacked card-per-slot block above the invoice summary:
+  supplier header with per-slot shipmentStage badge, items filtered by
+  `product.supplierId`, per-slot subtotal/freight/fee/refunded, slot
+  tracking card (uses `slot.trackingUrl` when set, otherwise builds via
+  the `trackingLink` helper from carrier+code), and per-slot
+  shippedAt/deliveredAt timestamps. The legacy aggregate tracking card
+  only renders for single-supplier orders.
+- `/orders/[id]/invoice` page: single invoice with per-supplier
+  sub-sections when slots > 1. Each section shows supplier header, that
+  supplier's items, section subtotal, section freight. Order-level
+  totals (subtotal/freight/fee/tax/total) stay at the bottom unchanged.
+- `src/lib/email.ts`: `OrderLite.supplierSlots` (optional) carries
+  per-slot data; `isMultiSupplier`, `itemsForSlot`, `slotBlock`,
+  `perSupplierSections` helpers added. `sendOrderShipped` gains
+  `{ slotSupplierId? }` opt: when present and order is multi-supplier,
+  renders a single-supplier-scoped email ("Supplier X shipped their
+  portion"); when omitted on a multi-supplier order, renders the
+  aggregate roll-up. Single-supplier orders unchanged.
+  `sendOrderConfirmation` and `sendOrderDelivered` render per-supplier
+  sections automatically when slots > 1. `sendOrderRefunded` accepts an
+  optional `scopeSupplierName` parameter so scoped (slot/item) refunds
+  email reads "Supplier X's portion refunded" rather than the generic
+  "order refunded".
+- `src/lib/shipping.ts`: `loadOrderLite(orderId)` helper exported.
+  `markSlotShipped` after()-block now uses it, fires the per-slot ship
+  email, and (when the just-shipped slot was the last) fires a single
+  aggregate roll-up email.
+- `src/lib/refunds.ts`: `RefundResult.slotSupplierName` returned for
+  slot/item-scoped refunds. The refund route passes it through to
+  `sendOrderRefunded`.
+- Three Delivered email call sites (auto-deliver cron, ops route, buyer
+  confirm-receipt) now re-fetch via `loadOrderLite` so the email body
+  reflects per-supplier sections on multi-supplier orders.
+- `/cart` and `/checkout` already group by supplier from PLH-3g P2; no
+  changes needed.
+- Design choice: per-slot ship emails are more informative for buyers
+  who care about which part of the order is on the way. The aggregate
+  roll-up still fires once when the LAST slot ships so the buyer has a
+  single "all shipments are now on the way" record. Delivered email
+  stays aggregate-only (the 30-day return window opens on full
+  delivery, so a per-slot delivered notification would be confusing).
+- `npx next build` clean. Zero em dashes. No new migration.
+
 **Inbound email is now LIVE and proven on prod (2026-05-26).** All four
 env vars set in Vercel Production + Preview/claude-branch:
 `INBOUND_EMAIL_PROVIDER=resend`,

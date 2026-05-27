@@ -308,6 +308,10 @@ export type RefundResult =
       refundId: string;
       stripeRefundId: string | null;
       amountCents: number;
+      // PLH-3g P7: when the refund was scoped to a slot or item, surface
+      // the affected supplier name so the buyer email can say "Supplier
+      // X's portion refunded" rather than the generic "order refunded".
+      slotSupplierName?: string | null;
     }
   | { ok: false; error: string; status: number };
 
@@ -344,7 +348,7 @@ export async function refundOrder(args: {
     where: { id: args.orderId },
     include: {
       items: { include: { product: true } },
-      supplierSlots: true,
+      supplierSlots: { include: { supplier: { select: { name: true } } } },
     },
   });
   if (!order) {
@@ -571,5 +575,19 @@ export async function refundOrder(args: {
     },
   });
 
-  return { ok: true, refundId: refund.id, stripeRefundId, amountCents: amount };
+  // PLH-3g P7: surface affected supplier name for scoped refunds so the
+  // outbound buyer email can name them.
+  let slotSupplierName: string | null = null;
+  if (targetSlotId) {
+    const slot = order.supplierSlots.find((sl) => sl.id === targetSlotId);
+    slotSupplierName = slot?.supplier?.name ?? null;
+  }
+
+  return {
+    ok: true,
+    refundId: refund.id,
+    stripeRefundId,
+    amountCents: amount,
+    slotSupplierName,
+  };
 }

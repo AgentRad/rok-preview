@@ -4,7 +4,7 @@ import { sendOrderDelivered } from "@/lib/email";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { writeAuditLog } from "@/lib/audit";
 import { captureError } from "@/lib/observability";
-import { markOrderDelivered } from "@/lib/shipping";
+import { markOrderDelivered, loadOrderLite } from "@/lib/shipping";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,10 +73,7 @@ export async function GET(req: Request) {
         errors.push(`${c.reference}: ${r.error}`);
         continue;
       }
-      const updated = await prisma.order.findUnique({
-        where: { id: c.id },
-        include: { items: true },
-      });
+      const updated = await loadOrderLite(c.id);
       if (!updated) {
         errors.push(`${c.reference}: order vanished mid-flip`);
         continue;

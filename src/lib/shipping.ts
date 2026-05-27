@@ -83,6 +83,41 @@ function computeAggregate(
 }
 
 /**
+ * PLH-3g P7: re-fetch an Order in the shape `OrderLite` expects for the
+ * multi-supplier email templates. Includes `supplierSlots` with the
+ * supplier name attached so the email templates can render per-supplier
+ * sections. Single-supplier orders work the same; the lite list is just
+ * length 1.
+ */
+export async function loadOrderLite(orderId: string) {
+  const fresh = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: { include: { product: { select: { supplierId: true } } } },
+      supplierSlots: { include: { supplier: { select: { name: true } } } },
+    },
+  });
+  if (!fresh) return null;
+  return {
+    ...fresh,
+    supplierSlots: fresh.supplierSlots.map((s) => ({
+      id: s.id,
+      supplierId: s.supplierId,
+      supplierName: s.supplier?.name ?? null,
+      subtotalCents: s.subtotalCents,
+      freightCents: s.freightCents,
+      feeCents: s.feeCents,
+      carrier: s.carrier,
+      trackingCode: s.trackingCode,
+      trackingUrl: s.trackingUrl,
+      shipmentStage: s.shipmentStage,
+      shippedAt: s.shippedAt,
+      deliveredAt: s.deliveredAt,
+    })),
+  };
+}
+
+/**
  * Per-supplier ship dispatch. Idempotent: a slot already in Shipped or
  * Delivered state returns { alreadyShipped: true } without rewriting.
  * Runs inside a $transaction so the slot update + aggregate Order
@@ -125,7 +160,7 @@ export async function markSlotShipped(
   const orderId = order.id;
   const supplierId = slot.supplierId;
 
-  const { allDelivered } = await prisma.$transaction(async (tx) => {
+  const { allDelivered, allShippedOrDelivered } = await prisma.$transaction(async (tx) => {
     const now = new Date();
     await tx.orderSupplierSlot.update({
       where: { id: slotId },
@@ -163,7 +198,10 @@ export async function markSlotShipped(
         ...orderShippedAtPatch,
       },
     });
-    return { allDelivered: agg.allDelivered };
+    return {
+      allDelivered: agg.allDelivered,
+      allShippedOrDelivered: agg.allShippedOrDelivered,
+    };
   });
 
   after(async () => {
@@ -189,11 +227,23 @@ export async function markSlotShipped(
 
   after(async () => {
     try {
-      const fresh = await prisma.order.findUnique({
-        where: { id: orderId },
-        include: { items: true },
-      });
-      if (fresh) await sendOrderShipped(fresh);
+      // PLH-3g P7: per-slot ship email. For multi-supplier orders the
+      // buyer gets one notification per supplier dispatch ("Supplier X
+      // shipped their portion of your order"). The roll-up "all
+      // suppliers have shipped" email also fires once when the LAST
+      // slot transitions, so the buyer has a single source confirming
+      // the full order is on the way.
+      const freshLite = await loadOrderLite(orderId);
+      if (!freshLite) return;
+      const multi = freshLite.supplierSlots.length > 1;
+      if (multi) {
+        await sendOrderShipped(freshLite, { slotSupplierId: supplierId });
+        if (allShippedOrDelivered) {
+          await sendOrderShipped(freshLite);
+        }
+      } else {
+        await sendOrderShipped(freshLite);
+      }
     } catch (err) {
       console.error("[email] order-shipped failed:", err);
     }

@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { sendOrderDelivered } from "@/lib/email";
-import { markOrderShipped, markOrderDelivered } from "@/lib/shipping";
+import { markOrderShipped, markOrderDelivered, loadOrderLite } from "@/lib/shipping";
 import { captureError } from "@/lib/observability";
 
 const STAGES = ["Processing", "Shipped", "Delivered"] as const;
@@ -73,10 +73,7 @@ export async function POST(
       return NextResponse.json({ error: r.error }, { status: r.status });
     }
     if (r.orderFullyDeliveredNow) {
-      const updated = await prisma.order.findUnique({
-        where: { id },
-        include: { items: true },
-      });
+      const updated = await loadOrderLite(id);
       if (updated) {
         after(async () => {
           try {

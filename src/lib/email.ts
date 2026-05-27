@@ -274,7 +274,32 @@ type OrderLite = {
   freightCarrier?: string | null;
   freightService?: string | null;
   freightSurcharges?: unknown;
-  items: { nameSnapshot: string; skuSnapshot: string; qty: number; supplierName: string }[];
+  items: {
+    nameSnapshot: string;
+    skuSnapshot: string;
+    qty: number;
+    supplierName: string;
+    unitPriceCents?: number;
+    product?: { supplierId?: string | null } | null;
+  }[];
+  // PLH-3g P7: per-supplier slot data for multi-supplier orders. When
+  // length > 1, order emails switch to a per-supplier breakdown view.
+  // Single-supplier orders pass an empty/length-1 slots list and the
+  // existing one-block layout is used.
+  supplierSlots?: {
+    id: string;
+    supplierId: string;
+    supplierName?: string | null;
+    subtotalCents: number;
+    freightCents: number;
+    feeCents: number;
+    carrier?: string | null;
+    trackingCode?: string | null;
+    trackingUrl?: string | null;
+    shipmentStage?: string | null;
+    shippedAt?: Date | null;
+    deliveredAt?: Date | null;
+  }[];
 };
 
 // P9.5 MED 23: freight detail in the totals block. Pulls carrier/service
@@ -343,13 +368,82 @@ function totals(order: OrderLite): string {
     </table>`;
 }
 
+// PLH-3g P7: multi-supplier helpers. When an order has > 1 slot the
+// buyer wants to see what's coming from whom; the templates switch to
+// per-supplier sections that mirror the on-site order page.
+function isMultiSupplier(order: OrderLite): boolean {
+  return (order.supplierSlots?.length ?? 0) > 1;
+}
+
+function itemsForSlot(
+  order: OrderLite,
+  supplierId: string
+): OrderLite["items"] {
+  return order.items.filter((it) => it.product?.supplierId === supplierId);
+}
+
+function slotBlock(
+  order: OrderLite,
+  slot: NonNullable<OrderLite["supplierSlots"]>[number],
+  opts: { showTracking?: boolean } = {}
+): string {
+  const items = itemsForSlot(order, slot.supplierId);
+  const rows = items
+    .map(
+      (it) =>
+        `<tr><td style="padding:6px 0;font-size:13px;">${esc(it.nameSnapshot)} <span style="color:#9b988d;">(${esc(it.skuSnapshot)})</span></td><td style="padding:6px 0;font-size:13px;text-align:right;">&times; ${it.qty}</td></tr>`
+    )
+    .join("");
+  const trackLink = slot.trackingUrl
+    ? slot.trackingUrl
+    : trackingLink(slot.carrier ?? null, slot.trackingCode ?? null);
+  const stageLabel = esc(slot.shipmentStage || "Pending");
+  const tracking =
+    opts.showTracking && slot.shippedAt && slot.carrier
+      ? `<div style="margin:10px 0 0;padding:10px 12px;background:#ffffff;border:1px solid #e2e0d9;border-radius:3px;">
+           <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6f6d64;">Tracking</div>
+           <div style="font-weight:700;font-size:13px;margin-top:2px;">${esc(slot.carrier)}</div>
+           <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6f6d64;">${esc(slot.trackingCode ?? "")}</div>
+           ${trackLink ? `<div style="margin-top:6px;"><a href="${trackLink}" style="color:#1a1916;font-weight:600;text-decoration:underline;font-size:12.5px;">Track with the carrier</a></div>` : ""}
+         </div>`
+      : "";
+  return `
+    <div style="margin:14px 0;padding:14px 16px;background:#f3f2ef;border-left:3px solid #1a1916;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;">
+        <div style="font-weight:700;font-size:14px;">${esc(slot.supplierName || "Supplier")}</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#6f6d64;">${stageLabel}</div>
+      </div>
+      <table cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;">${rows}</table>
+      <table cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;border-top:1px solid #e2e0d9;">
+        <tr><td style="padding:5px 0;font-size:12.5px;color:#6f6d64;">Subtotal</td><td style="padding:5px 0;font-size:12.5px;text-align:right;">${formatCents(slot.subtotalCents)}</td></tr>
+        <tr><td style="padding:5px 0;font-size:12.5px;color:#6f6d64;">Freight</td><td style="padding:5px 0;font-size:12.5px;text-align:right;">${formatCents(slot.freightCents)}</td></tr>
+      </table>
+      ${tracking}
+    </div>`;
+}
+
+function perSupplierSections(
+  order: OrderLite,
+  opts: { showTracking?: boolean } = {}
+): string {
+  if (!order.supplierSlots || order.supplierSlots.length === 0) return "";
+  return order.supplierSlots.map((s) => slotBlock(order, s, opts)).join("");
+}
+
 export async function sendOrderConfirmation(order: OrderLite): Promise<void> {
   const url = orderViewUrl(order);
+  const multi = isMultiSupplier(order);
+  const lead = multi
+    ? `<p>We have received your order <strong>${esc(order.reference)}</strong>. Payment is the next step. Your order ships from ${order.supplierSlots!.length} suppliers; each section below tracks separately.</p>`
+    : `<p>We have received your order <strong>${esc(order.reference)}</strong>. Payment is the next step. Once received, the supplier will begin preparing your parts.</p>`;
+  const itemsBlock = multi
+    ? perSupplierSections(order)
+    : `<table cellpadding="0" cellspacing="0" width="100%" style="margin:12px 0;">${lineRows(order)}</table>`;
   const body = `
     <p>Hi ${esc(order.buyerName)},</p>
-    <p>We have received your order <strong>${esc(order.reference)}</strong>. Payment is the next step. Once received, the supplier will begin preparing your parts.</p>
+    ${lead}
     ${buyerBranding(order)}
-    <table cellpadding="0" cellspacing="0" width="100%" style="margin:12px 0;">${lineRows(order)}</table>
+    ${itemsBlock}
     ${totals(order)}
     <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
   await send({
@@ -375,10 +469,63 @@ export async function sendPaymentReceived(order: OrderLite): Promise<void> {
   });
 }
 
-export async function sendOrderShipped(order: OrderLite): Promise<void> {
+/**
+ * PLH-3g P7: per-supplier ship notifications.
+ *
+ * When `slotSupplierId` is provided, the email is scoped to that single
+ * supplier's portion of the order: only that slot's items, tracking, and
+ * a summary of what's still pending from other suppliers. Fires once per
+ * slot dispatch in `markSlotShipped` so a buyer with a multi-supplier
+ * order gets one ship email per supplier as their pieces dispatch.
+ *
+ * When `slotSupplierId` is omitted, the email is the legacy aggregate
+ * "your order has shipped" notice. Single-supplier orders use this
+ * unchanged. Multi-supplier orders also fire this once at the LAST slot
+ * dispatch as a roll-up confirming the full order is on the way.
+ */
+export async function sendOrderShipped(
+  order: OrderLite,
+  opts: { slotSupplierId?: string } = {}
+): Promise<void> {
   const url = orderViewUrl(order);
+  const multi = isMultiSupplier(order);
+
+  if (opts.slotSupplierId && multi && order.supplierSlots) {
+    const slot = order.supplierSlots.find(
+      (s) => s.supplierId === opts.slotSupplierId
+    );
+    if (!slot) return;
+    const otherSlots = order.supplierSlots.filter(
+      (s) => s.supplierId !== opts.slotSupplierId
+    );
+    const remaining = otherSlots.filter(
+      (s) => s.shipmentStage !== "Shipped" && s.shipmentStage !== "Delivered"
+    );
+    const remainingBlock =
+      remaining.length > 0
+        ? `<p style="font-size:13px;color:#6f6d64;">Still pending from ${remaining
+            .map((s) => esc(s.supplierName || "another supplier"))
+            .join(", ")}. Those will get their own tracking when dispatched.</p>`
+        : `<p style="font-size:13px;color:#6f6d64;">All suppliers on this order have now dispatched.</p>`;
+    const supplierName = esc(slot.supplierName || "Your supplier");
+    const body = `
+      <p>Hi ${esc(order.buyerName)},</p>
+      <p>${supplierName} has dispatched their portion of order <strong>${esc(order.reference)}</strong>.</p>
+      ${buyerBranding(order)}
+      ${slotBlock(order, slot, { showTracking: true })}
+      ${remainingBlock}
+      <p>For LTL freight, please inspect the shipment on arrival and note any damage on the carrier delivery receipt before signing.</p>
+      <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
+    await send({
+      to: order.buyerEmail,
+      subject: `${slot.supplierName || "Supplier"} shipped part of order ${order.reference}`,
+      html: wrap("A shipment is on the way", body),
+    });
+    return;
+  }
+
   const link = trackingLink(order.carrier, order.trackingCode);
-  const trackBlock = order.carrier
+  const trackBlock = !multi && order.carrier
     ? `<div style="margin:14px 0;padding:14px 16px;background:#f3f2ef;border-left:3px solid #1a1916;">
          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6f6d64;">Tracking</div>
          <div style="font-weight:700;margin-top:4px;">${esc(order.carrier)}</div>
@@ -386,11 +533,18 @@ export async function sendOrderShipped(order: OrderLite): Promise<void> {
          ${link ? `<div style="margin-top:10px;"><a href="${link}" style="color:#1a1916;font-weight:600;text-decoration:underline;">Track with the carrier</a></div>` : ""}
        </div>`
     : "";
+  const multiBlock = multi
+    ? perSupplierSections(order, { showTracking: true })
+    : "";
+  const headline = multi
+    ? `<p>Every supplier on your order <strong>${esc(order.reference)}</strong> has now dispatched. The full breakdown is below.</p>`
+    : `<p>Your order <strong>${esc(order.reference)}</strong> has shipped.</p>`;
   const body = `
     <p>Hi ${esc(order.buyerName)},</p>
-    <p>Your order <strong>${esc(order.reference)}</strong> has shipped.</p>
+    ${headline}
     ${buyerBranding(order)}
     ${trackBlock}
+    ${multiBlock}
     <p>For LTL freight, please inspect the shipment on arrival and note any damage on the carrier delivery receipt before signing.</p>
     <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
   await send({
@@ -410,13 +564,18 @@ export async function sendOrderShipped(order: OrderLite): Promise<void> {
 export async function sendOrderRefunded(
   order: OrderLite,
   refundedCents: number,
-  reason: string
+  reason: string,
+  scopeSupplierName?: string | null
 ): Promise<void> {
   const url = orderViewUrl(order);
   const isFull = refundedCents >= order.totalCents;
+  const supplierScope = scopeSupplierName && isMultiSupplier(order);
+  const headline = supplierScope
+    ? `<p>${esc(scopeSupplierName!)}'s portion of order <strong>${esc(order.reference)}</strong> has been refunded: <strong>${formatCents(refundedCents)}</strong>.</p>`
+    : `<p>${isFull ? "A full refund" : `A partial refund of <strong>${formatCents(refundedCents)}</strong>`} has been issued for order <strong>${esc(order.reference)}</strong>.</p>`;
   const body = `
     <p>Hi ${esc(order.buyerName)},</p>
-    <p>${isFull ? "A full refund" : `A partial refund of <strong>${formatCents(refundedCents)}</strong>`} has been issued for order <strong>${esc(order.reference)}</strong>.</p>
+    ${headline}
     ${reason ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;color:#3a3833;font-size:13px;"><strong>Reason:</strong> ${esc(reason)}</p>` : ""}
     <p>Funds will reach your card or bank in 5 to 10 business days, depending on your issuer. The refund will appear as a credit on the statement that includes the original PartsPort charge.</p>
     ${buyerBranding(order)}
@@ -430,9 +589,14 @@ export async function sendOrderRefunded(
 
 export async function sendOrderDelivered(order: OrderLite): Promise<void> {
   const url = orderViewUrl(order);
+  const multi = isMultiSupplier(order);
+  const perSupplier = multi
+    ? perSupplierSections(order, { showTracking: false })
+    : "";
   const body = `
     <p>Hi ${esc(order.buyerName)},</p>
-    <p>Order <strong>${esc(order.reference)}</strong> has been marked delivered. If anything is missing or damaged, please report it within the claim window in the supplier agreement.</p>
+    <p>Order <strong>${esc(order.reference)}</strong> has been marked delivered${multi ? " (every supplier on the order has now delivered)" : ""}. If anything is missing or damaged, please report it within the claim window in the supplier agreement.</p>
+    ${perSupplier}
     <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
   await send({
     to: order.buyerEmail,

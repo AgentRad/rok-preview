@@ -32,6 +32,9 @@ export default async function OrderInvoicePage({
     include: {
       items: { include: { product: { include: { supplier: true } } } },
       invoice: true,
+      supplierSlots: {
+        include: { supplier: { select: { id: true, name: true, logoUrl: true } } },
+      },
     },
   });
   if (!order) notFound();
@@ -211,49 +214,126 @@ export default async function OrderInvoicePage({
             </div>
           </div>
 
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Part</th>
-                  <th>Supplier</th>
-                  <th className="num">Unit price</th>
-                  <th className="num">Qty</th>
-                  <th className="num">Line total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {order.items.map((it) => (
-                  <tr key={it.id}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{it.nameSnapshot}</div>
-                      <div className="muted-text" style={{ fontSize: 12 }}>
-                        {it.skuSnapshot}
+          {order.supplierSlots.length > 1 ? (
+            <div className="invoice-supplier-sections">
+              {order.supplierSlots.map((slot) => {
+                const items = order.items.filter(
+                  (it) => it.product.supplierId === slot.supplierId
+                );
+                return (
+                  <div key={slot.id} className="invoice-supplier-section" style={{ marginTop: 12 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        margin: "14px 0 8px",
+                        paddingBottom: 6,
+                        borderBottom: "1px solid var(--line)",
+                      }}
+                    >
+                      {slot.supplier?.logoUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={slot.supplier.logoUrl}
+                          alt=""
+                          className="invoice-supplier-logo"
+                        />
+                      )}
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>
+                        {slot.supplier?.name || "Supplier"}
                       </div>
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        {it.product?.supplier?.logoUrl && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={it.product.supplier.logoUrl}
-                            alt=""
-                            className="invoice-supplier-logo"
-                          />
-                        )}
-                        <span>{it.supplierName}</span>
+                    </div>
+                    <div className="table-wrap">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Part</th>
+                            <th className="num">Unit price</th>
+                            <th className="num">Qty</th>
+                            <th className="num">Line total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((it) => (
+                            <tr key={it.id}>
+                              <td>
+                                <div style={{ fontWeight: 600 }}>
+                                  {it.nameSnapshot}
+                                </div>
+                                <div className="muted-text" style={{ fontSize: 12 }}>
+                                  {it.skuSnapshot}
+                                </div>
+                              </td>
+                              <td className="num">{formatCents(it.unitPriceCents)}</td>
+                              <td className="num">{it.qty}</td>
+                              <td className="num">
+                                {formatCents(it.unitPriceCents * it.qty)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{ maxWidth: 280, marginLeft: "auto", marginTop: 6 }}>
+                      <div className="summary-line">
+                        <span>Section subtotal</span>
+                        <span>{formatCents(slot.subtotalCents)}</span>
                       </div>
-                    </td>
-                    <td className="num">{formatCents(it.unitPriceCents)}</td>
-                    <td className="num">{it.qty}</td>
-                    <td className="num">
-                      {formatCents(it.unitPriceCents * it.qty)}
-                    </td>
+                      <div className="summary-line">
+                        <span>Section freight</span>
+                        <span>{formatCents(slot.freightCents)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Part</th>
+                    <th>Supplier</th>
+                    <th className="num">Unit price</th>
+                    <th className="num">Qty</th>
+                    <th className="num">Line total</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {order.items.map((it) => (
+                    <tr key={it.id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{it.nameSnapshot}</div>
+                        <div className="muted-text" style={{ fontSize: 12 }}>
+                          {it.skuSnapshot}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {it.product?.supplier?.logoUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={it.product.supplier.logoUrl}
+                              alt=""
+                              className="invoice-supplier-logo"
+                            />
+                          )}
+                          <span>{it.supplierName}</span>
+                        </div>
+                      </td>
+                      <td className="num">{formatCents(it.unitPriceCents)}</td>
+                      <td className="num">{it.qty}</td>
+                      <td className="num">
+                        {formatCents(it.unitPriceCents * it.qty)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <div className="invoice-totals">
             <div className="summary-line">
