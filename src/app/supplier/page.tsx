@@ -384,6 +384,27 @@ export default async function SupplierDashboard({
           </div>
 
           {showCatalog && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-head">
+                <h2>Import catalog with AI</h2>
+                <Link
+                  href="/supplier/catalog-import"
+                  className="btn btn-primary btn-sm"
+                >
+                  Open assistant
+                </Link>
+              </div>
+              <div className="card-body">
+                <p className="muted-text" style={{ fontSize: 13, margin: 0 }}>
+                  Paste any sheet (CSV, TSV, or .xlsx). The AI maps your
+                  columns to the PartsPort schema, you chat to refine the
+                  rules, then click Import. Nothing goes live until you do.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {showCatalog && (
             <div className="card">
               <div className="card-head">
                 <h2>Bulk catalog import (CSV)</h2>

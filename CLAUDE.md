@@ -420,6 +420,60 @@ PLH-3d + PLH-3e + PLH-3g: 28 CRITICAL + 62 HIGH closed, plus the
 launch-time single-supplier-cart constraint resolved by the PLH-3g
 multi-supplier refactor.**
 
+**PLH-3f (2026-05-26).** Conversational AI catalog import assistant
+at `/supplier/catalog-import`. Single feature, three commits.
+- New `src/lib/import-mapping.ts`: pure mapping primitives (no
+  Prisma). `inferMapping(headers)` heuristically maps source
+  columns to PartsPort fields by header similarity. `applyMapping`
+  produces canonical PartsPort rows with transforms (`identity`,
+  `cents-to-dollars`, `dollars-to-cents`, `literal`, `boolean`)
+  and row filters (`totals`, `empty`, custom regex).
+  `validateRow` mirrors the field-level checks the existing
+  POST /api/supplier/products applied. `detectDelimiter` samples
+  the first ten lines.
+- New `src/lib/import-ai.ts`: Anthropic streaming wrapper.
+  `streamMappingHelp` returns an async iterable of text chunks.
+  Constant system prompt with ephemeral `cache_control` explains
+  the PartsPort schema and the required final JSON shape
+  `{ explanation, proposed_mapping, proposed_filters }`. Supplier
+  data goes in the user turn so the system cache keeps hitting.
+  4000-char cap on `userMessage`. Model `claude-sonnet-4-6` mirrors
+  the supplier AI assistant. 503 when `ANTHROPIC_API_KEY` unset.
+- Extended `/api/supplier/catalog-import` route to multiplex on
+  `body.action`. `"parse"` reads raw CSV/TSV/Excel-clipboard or a
+  base64 `.xlsx` blob, returns delimiter + headers + 25-row sample
+  + inferred mapping. `"chat"` streams the AI reply. `"commit"`
+  applies the supplied mapping + filters, runs field +
+  `isClaimedManufacturer` validation, runs the existing PLH-2
+  Phase 4a batched-transaction insert path (100-row batches,
+  P2025/P2002 row-level errors, partial-result tail). Legacy
+  `{ csv, commit }` body still works for the existing
+  `CatalogCsvImport` component (preserved inline).
+- New rate-limit buckets: `import-ai` (30/hr/supplier) for chat,
+  `catalog-import` (30/hr/supplier) for parse/commit. Auth-gated
+  to SUPPLIER role with `canEditCatalog`.
+- New `/supplier/catalog-import` page with three-panel client UI
+  (`AICatalogImport.tsx`). Left: paste textarea + `.csv/.tsv/.xlsx`
+  uploader + manual mapping dropdowns + current-filters readout.
+  Center: AI chat panel streaming via `fetch` + `ReadableStream`
+  reader (mirrors `SupplierAIAssistant.tsx`); after each reply,
+  extracts the final fenced JSON block and swaps the proposed
+  mapping + filters in. Right: live preview of the first 25 rows
+  with red-tinted rows on validation failure. Bottom: `Import all
+  (N rows)` button disabled until valid count > 0.
+- Audit: `IMPORT_AI_ASKED` per chat turn (question hash, no raw
+  text). `CATALOG_IMPORT_COMMITTED` on commit with rowCount,
+  mappingHash, filterHash, created/updated/invalid counts, batch
+  results. Both added to `AUDIT_ACTIONS`.
+- New supplier-dashboard tile at the top of the catalog section
+  linking to the assistant; the legacy CSV import block stays in
+  place below it.
+- Dependency added: `xlsx` (SheetJS community build) for
+  in-memory `.xlsx` parsing. 2 MB cap, never persisted to disk.
+- No schema changes.
+- `npx next build` clean. Zero em dashes. `/supplier/catalog-import`
+  ships at 5.01 kB / 113 kB First Load JS.
+
 **PLH-3g P7 (2026-05-26).** Buyer UI for per-supplier shipments and
 invoice section breakdown.
 - `/orders/[id]` page now fetches `supplierSlots` (with supplier

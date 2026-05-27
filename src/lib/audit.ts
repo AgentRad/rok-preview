@@ -77,6 +77,11 @@ export const AUDIT_ACTIONS = [
   // Approval writes User.manufacturerName; rejection stores a reason.
   "OEM_APPLICATION_APPROVED",
   "OEM_APPLICATION_REJECTED",
+  // PLH-3f: conversational AI catalog import. IMPORT_AI_ASKED records the
+  // chat turns (hash only, no raw text). CATALOG_IMPORT_COMMITTED records
+  // the final Import-all click with row counts and mapping/filter hashes.
+  "IMPORT_AI_ASKED",
+  "CATALOG_IMPORT_COMMITTED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

@@ -317,6 +317,26 @@ Zero em dashes throughout.
 **Cumulative across all rounds, including PLH-3g: 28 CRITICAL + 62
 HIGH closed, plus the single-supplier-cart constraint lifted.**
 
+**PLH-3f (2026-05-26).** Workspace-style conversational AI catalog
+import assistant at `/supplier/catalog-import`. Three commits.
+Supplier pastes CSV/TSV/Excel-clipboard or uploads `.csv`/`.xlsx`,
+server infers a column-to-PartsPort-field mapping, supplier chats
+with the AI to refine it ("Cat# is SKU", "prices are in cents",
+"ignore totals row", "B/O means quote-only"), preview renders the
+first 25 rows after applying mapping + filters, supplier clicks
+Import to run the existing PLH-2 Phase 4a batched-transaction
+insert path. New libs: `src/lib/import-mapping.ts` (pure
+heuristics + apply + validate), `src/lib/import-ai.ts` (Anthropic
+streaming + JSON proposal extraction). Route
+`/api/supplier/catalog-import` extended to multiplex on
+`body.action` (`parse`/`chat`/`commit`); legacy `{ csv, commit }`
+body still works for the existing CatalogCsvImport component.
+New rate-limit buckets `import-ai` and `catalog-import`
+(both 30/hr/supplier). Audit actions `IMPORT_AI_ASKED` and
+`CATALOG_IMPORT_COMMITTED` added. Manufacturer field gated by
+`isClaimedManufacturer` per PLH-3c F1. New `xlsx` dependency.
+No schema changes. Build clean.
+
 ## Inbound email feature: LIVE + smoke-proven on prod (2026-05-26)
 
 The Resend webhook is configured and pointing at
