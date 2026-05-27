@@ -8,6 +8,7 @@ import {
   canSendMessages,
   userHasAccessToSupplier,
 } from "@/lib/supplier-access";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,13 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  }
+  const limit = await rateLimit("messages", `user:${user.id}`);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Slow down a moment, then try again." },
+      { status: 429 }
+    );
   }
   const body = await req.json().catch(() => ({}));
   const orderId = body.orderId ? String(body.orderId) : "";

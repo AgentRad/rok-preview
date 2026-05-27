@@ -76,6 +76,10 @@ const BUCKETS: Record<string, Bucket> = {
   // for a real buyer iterating on queries; abusive clients fall back to
   // the heuristic path and the page still renders.
   "ai-search": { capacity: 20, windowMs: 60 * 60_000 },
+  // PLH-3b F7: POST /api/messages per-user cap so a stuck client (or a
+  // mis-wired retry loop) cannot fan out the thread fan-out email loop
+  // dozens of times a minute. 20/min/user is well above any human pace.
+  messages: { capacity: 20, windowMs: 60_000 },
   generic: { capacity: 60, windowMs: 60_000 },
 };
 
