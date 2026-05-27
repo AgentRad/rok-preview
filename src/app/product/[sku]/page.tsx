@@ -14,7 +14,7 @@ import FreightEstimateWidget from "@/components/FreightEstimateWidget";
 import RequestQuote from "@/components/RequestQuote";
 import Stars from "@/components/Stars";
 import WriteReview from "@/components/WriteReview";
-import { formatCents, FEE_RATE_LABEL } from "@/lib/money";
+import { formatCents } from "@/lib/money";
 import { displayBuyerName, supplierRatingSummary } from "@/lib/reviews";
 
 export const dynamic = "force-dynamic";
@@ -340,10 +340,8 @@ export default async function ProductPage({
                   />
                 )}
 
-                <div className="fee-note">
-                  {product.quoteOnly
-                    ? `Configured equipment is priced by a vetted supplier. The order, payment, and delivery all run through PartsPort, with a ${FEE_RATE_LABEL} marketplace fee included.`
-                    : `PartsPort verifies the supplier, handles payment, and delivers the part. A ${FEE_RATE_LABEL} marketplace fee is added at checkout. You are not charged until you pay.`}
+                <div className="muted-text" style={{ marginTop: 10, fontSize: 12 }}>
+                  ✓ Verified seller · freight handled by PartsPort
                 </div>
                 {!product.quoteOnly &&
                   product.weightLbs != null &&
