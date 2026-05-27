@@ -8,7 +8,10 @@ import { computeOrderTotals } from "@/lib/order-totals";
 import { sendOrderConfirmation } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { captureError } from "@/lib/observability";
+import { writeAuditLog } from "@/lib/audit";
+import { feeFor } from "@/lib/money";
 import {
+  calculateFreight,
   surchargeCents,
   type FreightShipment,
   type FreightSurcharges,
@@ -162,29 +165,24 @@ export async function POST(req: Request) {
     );
   }
 
-  // PLH-3g Phase 2: multi-supplier carts are allowed in the UI, but the
-  // Order model is still single-supplier in this phase. Phase 3 will
-  // partition placement into per-supplier OrderSupplierSlot rows; until
-  // then, freight/fee math assumes a single supplier and would misprice
-  // a multi-supplier cart. To keep the platform safe between phases, the
-  // server-side placement gate stays: a multi-supplier cart returns 503
-  // and cannot be placed in production until Phase 3 lands. Phase 4 will
-  // wire per-supplier freight + payment-intent splits via Stripe Connect
-  // destination charges.
-  const supplierIds = new Set(products.map((p) => p.supplierId));
-  if (supplierIds.size > 1) {
-    return NextResponse.json(
-      {
-        error:
-          "Multi-supplier checkout coming soon. For now, please place one order per supplier.",
-        code: "MULTI_SUPPLIER_CHECKOUT_PENDING",
-      },
-      { status: 503 }
-    );
-  }
+  // PLH-3g Phase 3: multi-supplier carts are now placeable. Each Order
+  // gets one OrderSupplierSlot per distinct supplier, carrying that
+  // supplier's slice of subtotal, freight, and fee. The Order row's
+  // totals are the sum across slots. Phase 4 will wire per-supplier
+  // payment-intent splits via Stripe Connect destination charges; until
+  // then the order settles as a single charge but the slot rows let
+  // refund + payout code iterate per supplier uniformly.
 
-  const orderItems = [];
-  const lines = [];
+  type OrderItemInput = {
+    productId: string;
+    nameSnapshot: string;
+    skuSnapshot: string;
+    supplierName: string;
+    unitPriceCents: number;
+    qty: number;
+  };
+  const orderItems: OrderItemInput[] = [];
+  const lines: { unitPriceCents: number; qty: number; quoteOnly: boolean }[] = [];
   for (const it of items) {
     const p = bySku.get(String(it.sku));
     const qty = Math.max(1, Math.floor(Number(it.qty) || 0));
@@ -254,6 +252,14 @@ export async function POST(req: Request) {
         .filter((s: { supplierId: string }) => !!s.supplierId)
     : [];
 
+  // Map supplierId -> server-verified freight cents (from Shippo re-quote).
+  // Only populated for slots whose client-supplied rateId matches a live
+  // server-returned rate. Slots without a verified entry fall back to the
+  // deterministic per-supplier flat-rate calculator below.
+  const verifiedFreightBySupplier = new Map<
+    string,
+    { cents: number; carrier: string; service: string; etaDays: number | null; originZip: string; supplierName: string }
+  >();
   let freightOverrideCents: number | undefined;
   let freightOverrideLabel: string | undefined;
   let freightBreakdown: FreightShipment[] = [];
@@ -322,6 +328,14 @@ export async function POST(req: Request) {
           cents: serverCents,
           etaDays: serverEta,
         });
+        verifiedFreightBySupplier.set(slot.supplierId, {
+          cents: serverCents,
+          carrier: serverCarrier,
+          service: serverService,
+          etaDays: serverEta,
+          originZip: slot.originZip,
+          supplierName: slot.supplierName,
+        });
       }
       // Slots that didn't match a server rate are dropped from the
       // override and the flat-rate fallback supplies their freight.
@@ -388,48 +402,201 @@ export async function POST(req: Request) {
   // need for a second auth round-trip.
   const user = sessionUser;
 
-  const order = await prisma.order.create({
-    data: {
-      reference: generateReference(),
-      idempotencyKey,
-      status: "PENDING",
-      buyerId: user?.id ?? null,
-      buyerName,
-      buyerEmail,
-      // Snapshot the buyer's company branding onto the Order so future
-      // profile edits don't retroactively rewrite this invoice. Guest
-      // checkout has no user, so these stay null and the invoice falls
-      // back to no-logo rendering.
-      buyerCompanyName: user?.companyName ?? null,
-      buyerCompanyLogoUrl: user?.companyLogoUrl ?? null,
-      shipTo,
-      subtotalCents: totals.subtotalCents,
-      freightCents: totals.freightCents,
-      feeCents: totals.feeCents,
-      taxCents: totals.taxCents,
-      totalCents: totals.totalCents,
-      feeRateBps: totals.feeRateBps,
-      // P9 freight columns. carrier/service are top-level labels (the
-      // shipping-confirmation email reads these); breakdown is the per-
-      // shipment detail (used by the order-detail page when the cart
-      // spans multiple suppliers); surcharges is the persisted flag set.
-      freightCarrier,
-      freightService,
-      freightBreakdown:
-        freightBreakdown.length > 0
-          ? (freightBreakdown as unknown as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
-      freightSurcharges:
-        // CRIT 3: persist the surcharge flag set whenever ANY flag is
-        // true. Pre-P9.5 we only persisted when surchargeAdd > 0 AND a
-        // real-rate quote was selected, dropping the flags entirely on
-        // flat-rate orders even when the buyer ticked Liftgate.
-        surchargeAdd > 0
-          ? (surcharges as unknown as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
-      items: { create: orderItems },
+  // PLH-3g Phase 3: per-supplier slot math. Group order items by
+  // supplierId, compute slot subtotal + freight + fee, and verify they
+  // sum to the Order totals computed above. Slot freight uses the
+  // server-verified Shippo cents when a matched shipment exists, else
+  // the deterministic flat-rate calculator on JUST that supplier's
+  // lines. Slot fee is 6% of the slot's own subtotal.
+  type SlotInput = {
+    supplierId: string;
+    subtotalCents: number;
+    freightCents: number;
+    feeCents: number;
+  };
+  const itemsBySupplier = new Map<string, typeof orderItems>();
+  for (const it of orderItems) {
+    const p = bySku.get(it.skuSnapshot);
+    if (!p) continue;
+    const list = itemsBySupplier.get(p.supplierId) || [];
+    list.push(it);
+    itemsBySupplier.set(p.supplierId, list);
+  }
+  const slots: SlotInput[] = [];
+  for (const [supplierId, supplierItems] of itemsBySupplier) {
+    const slotSubtotal = supplierItems.reduce(
+      (sum, it) => sum + it.unitPriceCents * it.qty,
+      0
+    );
+    let slotFreight: number;
+    const verified = verifiedFreightBySupplier.get(supplierId);
+    if (verified) {
+      slotFreight = verified.cents;
+    } else {
+      const slotLines = supplierItems.map((it) => {
+        const p = bySku.get(it.skuSnapshot)!;
+        return { qty: it.qty, unitPriceCents: it.unitPriceCents, quoteOnly: p.quoteOnly };
+      });
+      slotFreight = calculateFreight({
+        items: slotLines,
+        subtotalCents: slotSubtotal,
+      }).freightCents;
+    }
+    slots.push({
+      supplierId,
+      subtotalCents: slotSubtotal,
+      freightCents: slotFreight,
+      feeCents: feeFor(slotSubtotal),
+    });
+  }
+
+  // Distribute surcharges across slots proportionally to slot freight so
+  // slot freight cents continue to sum to the Order's overall freight
+  // total. When the buyer's selected freight rates are verified per
+  // supplier, the per-slot sum already equals freightOverrideCents (sans
+  // surcharges); the order-level freightOverrideCents includes
+  // surcharges, so we attribute that delta back to the slots here.
+  const slotFreightSum = slots.reduce((s, x) => s + x.freightCents, 0);
+  const freightSurchargeDelta = Math.max(0, totals.freightCents - slotFreightSum);
+  if (freightSurchargeDelta > 0 && slots.length > 0) {
+    let remaining = freightSurchargeDelta;
+    for (let i = 0; i < slots.length; i++) {
+      const isLast = i === slots.length - 1;
+      const share = isLast
+        ? remaining
+        : slotFreightSum > 0
+        ? Math.round((freightSurchargeDelta * slots[i].freightCents) / slotFreightSum)
+        : Math.floor(freightSurchargeDelta / slots.length);
+      slots[i].freightCents += share;
+      remaining -= share;
+    }
+  }
+
+  // Server-trust check. If the client posted claimed totals, verify them
+  // against the server compute. Mismatch returns 400 so a tampered cart
+  // cannot pay less than the real total.
+  const claimedSubtotal = Number(body.claimedSubtotalCents);
+  const claimedFreight = Number(body.claimedFreightCents);
+  const claimedFee = Number(body.claimedFeeCents);
+  if (Number.isFinite(claimedSubtotal) && claimedSubtotal !== totals.subtotalCents) {
+    return NextResponse.json(
+      { error: "Cart subtotal mismatch. Refresh your cart and try again.", code: "SUBTOTAL_MISMATCH" },
+      { status: 400 }
+    );
+  }
+  if (Number.isFinite(claimedFreight) && claimedFreight !== totals.freightCents) {
+    return NextResponse.json(
+      { error: "Freight total mismatch. Refresh your cart and try again.", code: "FREIGHT_MISMATCH" },
+      { status: 400 }
+    );
+  }
+  if (Number.isFinite(claimedFee) && claimedFee !== totals.feeCents) {
+    return NextResponse.json(
+      { error: "Fee mismatch. Refresh your cart and try again.", code: "FEE_MISMATCH" },
+      { status: 400 }
+    );
+  }
+
+  // Sanity belt: every slot dollar must be present in the Order row.
+  // Subtotal + freight must match exactly (rounding on the slot fee
+  // distribution can drift by a cent vs the order-level feeFor of the
+  // grand subtotal, so we adopt the sum-of-slot fees as the order fee
+  // to keep both surfaces consistent).
+  const slotSubtotalSum = slots.reduce((s, x) => s + x.subtotalCents, 0);
+  const slotFreightFinalSum = slots.reduce((s, x) => s + x.freightCents, 0);
+  const slotFeeSum = slots.reduce((s, x) => s + x.feeCents, 0);
+  if (slotSubtotalSum !== totals.subtotalCents || slotFreightFinalSum !== totals.freightCents) {
+    captureError(new Error("PLH-3g slot math drift"), {
+      subsystem: "orders",
+      slotSubtotalSum,
+      slotFreightFinalSum,
+      orderSubtotal: totals.subtotalCents,
+      orderFreight: totals.freightCents,
+    });
+    return NextResponse.json(
+      { error: "Cart totals could not be reconciled. Please refresh and try again." },
+      { status: 500 }
+    );
+  }
+  const orderFeeCents = slotFeeSum;
+  const orderTotalCents =
+    totals.subtotalCents + totals.freightCents + orderFeeCents + totals.taxCents;
+
+  const order = await prisma.$transaction(async (tx) => {
+    const created = await tx.order.create({
+      data: {
+        reference: generateReference(),
+        idempotencyKey,
+        status: "PENDING",
+        buyerId: user?.id ?? null,
+        buyerName,
+        buyerEmail,
+        // Snapshot the buyer's company branding onto the Order so future
+        // profile edits don't retroactively rewrite this invoice. Guest
+        // checkout has no user, so these stay null and the invoice falls
+        // back to no-logo rendering.
+        buyerCompanyName: user?.companyName ?? null,
+        buyerCompanyLogoUrl: user?.companyLogoUrl ?? null,
+        shipTo,
+        subtotalCents: totals.subtotalCents,
+        freightCents: totals.freightCents,
+        feeCents: orderFeeCents,
+        taxCents: totals.taxCents,
+        totalCents: orderTotalCents,
+        feeRateBps: totals.feeRateBps,
+        // P9 freight columns. carrier/service are top-level labels (the
+        // shipping-confirmation email reads these); breakdown is the per-
+        // shipment detail (used by the order-detail page when the cart
+        // spans multiple suppliers); surcharges is the persisted flag set.
+        freightCarrier,
+        freightService,
+        freightBreakdown:
+          freightBreakdown.length > 0
+            ? (freightBreakdown as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+        freightSurcharges:
+          // CRIT 3: persist the surcharge flag set whenever ANY flag is
+          // true. Pre-P9.5 we only persisted when surchargeAdd > 0 AND a
+          // real-rate quote was selected, dropping the flags entirely on
+          // flat-rate orders even when the buyer ticked Liftgate.
+          surchargeAdd > 0
+            ? (surcharges as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+        items: { create: orderItems },
+      },
+      include: { items: true },
+    });
+    for (const slot of slots) {
+      await tx.orderSupplierSlot.create({
+        data: {
+          orderId: created.id,
+          supplierId: slot.supplierId,
+          subtotalCents: slot.subtotalCents,
+          freightCents: slot.freightCents,
+          feeCents: slot.feeCents,
+        },
+      });
+    }
+    return created;
+  });
+
+  // Audit trail. Best-effort; writeAuditLog swallows its own errors so a
+  // logging hiccup can't fail a placed order.
+  const createdSlots = await prisma.orderSupplierSlot.findMany({
+    where: { orderId: order.id },
+    select: { id: true, supplierId: true },
+  });
+  await writeAuditLog({
+    actor: { id: user?.id ?? "guest", email: buyerEmail },
+    action: "ORDER_CREATED",
+    targetType: "Order",
+    targetId: order.id,
+    summary: `Order ${order.reference} placed across ${slots.length} supplier${slots.length === 1 ? "" : "s"}`,
+    metadata: {
+      orderId: order.id,
+      supplierCount: slots.length,
+      slotIds: createdSlots.map((s) => s.id),
     },
-    include: { items: true },
   });
 
   // Next 15 `after()` keeps the serverless function alive until the email
@@ -449,8 +616,9 @@ export async function POST(req: Request) {
     reference: order.reference,
     subtotalCents: totals.subtotalCents,
     freightCents: totals.freightCents,
-    feeCents: totals.feeCents,
+    feeCents: orderFeeCents,
     taxCents: totals.taxCents,
-    totalCents: totals.totalCents,
+    totalCents: orderTotalCents,
+    supplierCount: slots.length,
   });
 }

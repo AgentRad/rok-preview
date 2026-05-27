@@ -228,6 +228,18 @@ export async function POST(
             },
           },
         });
+        // PLH-3g Phase 3: emit a single OrderSupplierSlot for the
+        // quote-derived order so downstream payout + refund code can
+        // iterate slots uniformly across cart and quote orders.
+        await tx.orderSupplierSlot.create({
+          data: {
+            orderId: created.id,
+            supplierId: product.supplierId,
+            subtotalCents,
+            freightCents,
+            feeCents,
+          },
+        });
         await tx.quoteRequest.update({
           where: { id: quote.id },
           data: { orderId: created.id },
