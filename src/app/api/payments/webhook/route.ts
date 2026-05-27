@@ -180,11 +180,25 @@ export async function POST(req: Request) {
               // double-claw a supplier's reserve.
               if (isNew) {
                 try {
-                  await applySupplierClawback(
-                    order.id,
-                    r.amountCents,
-                    `order ${order.reference} (Stripe refund ${r.id})`
-                  );
+                  // PLH-3g P6: prefer the slot routing metadata stamped
+                  // by refundOrder() so a partial scoped refund hits the
+                  // correct supplier. Out-of-band Stripe dashboard
+                  // refunds carry no partsportSlotId; fall back to the
+                  // legacy pro-rata clawback across the order's slots.
+                  const slotId = r.metadata?.partsportSlotId || "";
+                  if (slotId) {
+                    await applySupplierClawback(
+                      { kind: "slot", slotId },
+                      r.amountCents,
+                      `order ${order.reference} (Stripe refund ${r.id})`
+                    );
+                  } else {
+                    await applySupplierClawback(
+                      { kind: "order", orderId: order.id },
+                      r.amountCents,
+                      `order ${order.reference} (Stripe refund ${r.id})`
+                    );
+                  }
                 } catch (err) {
                   captureError(err, {
                     subsystem: "payments",

@@ -36,7 +36,26 @@ export async function POST(
   const returnRequestId = body.returnRequestId
     ? String(body.returnRequestId)
     : undefined;
-  if (!amountCents || amountCents <= 0) {
+  // PLH-3g P6: optional scope. Body may carry { scope: "item",
+  // orderItemId } or { scope: "slot", slotId } to route the refund (and
+  // its supplier clawback) at a single OrderItem or OrderSupplierSlot.
+  // Default = whole-order refund (pro-rata across slots).
+  let scope:
+    | { kind: "order" }
+    | { kind: "slot"; slotId: string }
+    | { kind: "item"; orderItemId: string }
+    | undefined;
+  if (body.scope === "slot" && typeof body.slotId === "string") {
+    scope = { kind: "slot", slotId: body.slotId };
+  } else if (body.scope === "item" && typeof body.orderItemId === "string") {
+    scope = { kind: "item", orderItemId: body.orderItemId };
+  } else {
+    scope = { kind: "order" };
+  }
+
+  // Whole-order refunds still require a positive amount. Scoped refunds
+  // (item / slot) can auto-derive from the scope target.
+  if (scope.kind === "order" && (!amountCents || amountCents <= 0)) {
     return NextResponse.json(
       { error: "amountCents must be a positive integer." },
       { status: 400 }
@@ -51,11 +70,12 @@ export async function POST(
 
   const result = await refundOrder({
     orderId: id,
-    amountCents,
+    amountCents: amountCents || undefined,
     reason,
     returnRequestId,
     refundedByUserId: user.id,
     refundedByEmail: user.email,
+    scope,
     manualOverride: body.manualOverride === true,
   });
 
@@ -66,6 +86,7 @@ export async function POST(
   // P9.5 HIGH 14: dedicated refund email instead of reusing the
   // "Thanks for your order" confirmation template. The buyer was
   // getting the wrong email pre-fix; the verify chat caught this.
+  const refundedCents = result.amountCents;
   after(async () => {
     try {
       const order = await prisma.order.findUnique({
@@ -73,7 +94,7 @@ export async function POST(
         include: { items: true },
       });
       if (order) {
-        await sendOrderRefunded(order, amountCents, reason);
+        await sendOrderRefunded(order, refundedCents, reason);
       }
     } catch (err) {
       captureError(err, {

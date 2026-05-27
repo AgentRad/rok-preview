@@ -10,8 +10,16 @@ import { captureError } from "./observability";
  * Refund row, bumps Order.refundedCents, and draws from the supplier
  * reserve when the chargeback hits a Connect-active supplier.
  *
- * Returns the canonical result + the Refund row id so the caller can
- * include it in the response and the audit summary.
+ * PLH-3g P6: refunds now route per-slot. An order can have N
+ * OrderSupplierSlot rows (one per participating supplier). A refund can
+ * be scoped to:
+ *   - a single OrderItem (auto-derives amount + targets that item's slot)
+ *   - a single slot (clawback that one supplier)
+ *   - the whole order (pro-rata across slots, legacy behavior)
+ *
+ * The Stripe refund metadata carries the scope so the charge.refunded
+ * webhook can route an out-of-band refund to the right slot. Legacy
+ * refunds without slot metadata fall back to pro-rata clawback.
  */
 
 let _client: Stripe | null = null;
@@ -25,62 +33,206 @@ function client(): Stripe | null {
 }
 
 /**
- * PLH-1 commit 5: per-supplier refund clawback. Computes each supplier's
- * pro-rata share of the refund (by line subtotal), draws what's available
- * from their reserveBalanceCents, and accumulates any shortfall on
- * Supplier.owedToPlatformCents (netted against the next Stripe transfer
- * in lib/payouts.ts).
+ * Internal primitive. Clawback a single slot for a specific cents amount.
+ *
+ *   - Draws from Supplier.reserveBalanceCents (DRAW_DOWN).
+ *   - Any shortfall lands on Supplier.owedToPlatformCents (OWED_INCURRED).
+ *   - Bumps OrderSupplierSlot.refundedCents by the requested amount so
+ *     the slot's per-supplier accounting stays consistent.
  *
  * Wrapped in $transaction with fresh re-reads INSIDE the tx so a
- * concurrent payout-success owed-recovery can't push the values past the
- * supplier_*_nonneg CHECK constraints (P12 H8 atomicity guarantee).
- *
- * Called from:
- *   - refundOrder() in this file (admin-initiated refund path)
- *   - charge.refunded webhook handler (out-of-band Stripe refund path)
- *
- * Pre-PLH-1 the webhook path only upserted the Refund row + bumped
- * Order.refundedCents, so reserve/owed never moved for refunds that
- * originated in the Stripe dashboard. This function closes that gap.
+ * concurrent payout-success owed-recovery can't push the values past
+ * the supplier_*_nonneg CHECK constraints (P12 H8 atomicity guarantee).
  */
-export async function applySupplierClawback(
-  orderId: string,
+async function clawbackSlot(
+  slotId: string,
   refundAmountCents: number,
   refundRef: string,
   audit?: { actorId: string; actorEmail: string }
 ): Promise<void> {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { items: { include: { product: true } } },
-  });
-  if (!order) return;
   const amount = Math.max(0, Math.floor(refundAmountCents));
   if (amount <= 0) return;
 
-  const supplierShares = new Map<string, number>();
+  const slot = await prisma.orderSupplierSlot.findUnique({
+    where: { id: slotId },
+    include: { order: true, supplier: true },
+  });
+  if (!slot) return;
+
+  const { supplierName, shortfallCents } = await prisma.$transaction(
+    async (tx) => {
+      // Re-read fresh inside the tx so a racing payout-success can't push
+      // reserve below 0 vs the CHECK constraint.
+      const supplier = await tx.supplier.findUnique({
+        where: { id: slot.supplierId },
+      });
+      if (!supplier) {
+        return { supplierName: "", shortfallCents: 0 };
+      }
+      const fresh = Math.max(0, supplier.reserveBalanceCents);
+      const drawC = Math.min(amount, fresh);
+      const shortC = amount - drawC;
+      if (drawC > 0) {
+        await tx.supplier.update({
+          where: { id: slot.supplierId },
+          data: { reserveBalanceCents: { decrement: drawC } },
+        });
+        await tx.supplierReserveTransaction.create({
+          data: {
+            supplierId: slot.supplierId,
+            type: "DRAW_DOWN",
+            amountCents: drawC,
+            orderId: slot.orderId,
+            reason: `Refund of ${amount} cents on ${refundRef}`,
+          },
+        });
+      }
+      if (shortC > 0) {
+        await tx.supplier.update({
+          where: { id: slot.supplierId },
+          data: { owedToPlatformCents: { increment: shortC } },
+        });
+        await tx.supplierReserveTransaction.create({
+          data: {
+            supplierId: slot.supplierId,
+            type: "OWED_INCURRED",
+            amountCents: shortC,
+            orderId: slot.orderId,
+            reason: `Owed to platform: ${shortC} cents shortfall on refund for ${refundRef}`,
+          },
+        });
+      }
+      // Bump slot refundedCents so per-slot accounting reflects the
+      // claw. Slot caps are enforced upstream in refundOrder (validate
+      // amount <= slot.subtotal+freight - slot.refundedCents).
+      await tx.orderSupplierSlot.update({
+        where: { id: slot.id },
+        data: { refundedCents: { increment: amount } },
+      });
+      return {
+        supplierName: supplier.name,
+        shortfallCents: shortC,
+      };
+    }
+  );
+
+  if (shortfallCents > 0) {
+    const updated = await prisma.supplier.findUnique({
+      where: { id: slot.supplierId },
+      select: { owedToPlatformCents: true },
+    });
+    await writeAuditLog({
+      actor: audit
+        ? { id: audit.actorId, email: audit.actorEmail }
+        : { id: "system", email: "system@partsport" },
+      action: "OWED_INCURRED",
+      targetType: "Supplier",
+      targetId: slot.supplierId,
+      summary: `Supplier ${supplierName} owes ${shortfallCents} more cents to platform (refund shortfall on ${refundRef})`,
+      metadata: {
+        supplierId: slot.supplierId,
+        supplierName,
+        orderId: slot.orderId,
+        orderReference: slot.order.reference,
+        slotId: slot.id,
+        amountCents: shortfallCents,
+        owedBalanceCents: updated?.owedToPlatformCents ?? 0,
+        cause: "REFUND_SHORTFALL",
+      },
+    });
+  }
+}
+
+/**
+ * Public clawback primitive used by the charge.refunded webhook.
+ *
+ * PLH-3g P6: when the Stripe refund metadata carries a slotId, pass it
+ * here and the clawback hits only that supplier. When slotId is absent
+ * (legacy refunds, out-of-band Stripe dashboard refunds with no
+ * partsport metadata, refunds created before P6 shipped), fall through
+ * to the pro-rata branch which distributes across all slots on the
+ * order by (subtotal + freight). Either way the math nets to the same
+ * total amount drawn / owed.
+ */
+export async function applySupplierClawback(
+  arg:
+    | { kind: "slot"; slotId: string }
+    | { kind: "order"; orderId: string }
+    | string,
+  refundAmountCents: number,
+  refundRef: string,
+  audit?: { actorId: string; actorEmail: string }
+): Promise<void> {
+  const amount = Math.max(0, Math.floor(refundAmountCents));
+  if (amount <= 0) return;
+
+  // Back-compat: an old caller passing the orderId string directly is
+  // treated as the legacy pro-rata branch. New callers pass the
+  // discriminated object.
+  const target =
+    typeof arg === "string" ? { kind: "order" as const, orderId: arg } : arg;
+
+  if (target.kind === "slot") {
+    await clawbackSlot(target.slotId, amount, refundRef, audit);
+    return;
+  }
+
+  // kind === "order": legacy pro-rata. Prefer slots when they exist
+  // (every order created after PLH-3g P3 has at least one slot, and
+  // P1's backfill migration ensured every pre-existing order does too).
+  // Fall back to the item-supplier-share path only if no slots exist
+  // (defensive; should not happen post-P1).
+  const slots = await prisma.orderSupplierSlot.findMany({
+    where: { orderId: target.orderId },
+  });
+  if (slots.length > 0) {
+    const totalBase = slots.reduce(
+      (sum, s) => sum + s.subtotalCents + s.freightCents,
+      0
+    );
+    if (totalBase <= 0) return;
+    let distributed = 0;
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      const isLast = i === slots.length - 1;
+      const share = isLast
+        ? amount - distributed
+        : Math.round((amount * (s.subtotalCents + s.freightCents)) / totalBase);
+      if (share > 0) {
+        await clawbackSlot(s.id, share, refundRef, audit);
+        distributed += share;
+      }
+    }
+    return;
+  }
+
+  // Pre-P1 / no-slots safety net (should be unreachable on production
+  // data given the P1 backfill, retained so any orphan order doesn't
+  // bypass clawback entirely).
+  const order = await prisma.order.findUnique({
+    where: { id: target.orderId },
+    include: { items: { include: { product: true } } },
+  });
+  if (!order) return;
+  const shares = new Map<string, number>();
   for (const item of order.items) {
     const id = item.product.supplierId;
-    supplierShares.set(
-      id,
-      (supplierShares.get(id) ?? 0) + item.unitPriceCents * item.qty
-    );
+    shares.set(id, (shares.get(id) ?? 0) + item.unitPriceCents * item.qty);
   }
-  const totalShare = Array.from(supplierShares.values()).reduce(
-    (sum, n) => sum + n,
-    0
-  );
+  const totalShare = Array.from(shares.values()).reduce((a, b) => a + b, 0);
   if (totalShare <= 0) return;
-
-  for (const [supplierId, share] of supplierShares) {
+  for (const [supplierId, share] of shares) {
     const supplierRefundCents = Math.round((amount * share) / totalShare);
     if (supplierRefundCents <= 0) continue;
-    const { supplierName, drawCents, shortfallCents } =
-      await prisma.$transaction(async (tx) => {
+    // No slot row exists, so run the inline clawback against the
+    // supplier directly (mirrors the old behavior, sans slot update).
+    const { supplierName, shortfallCents } = await prisma.$transaction(
+      async (tx) => {
         const supplier = await tx.supplier.findUnique({
           where: { id: supplierId },
         });
         if (!supplier) {
-          return { supplierName: "", drawCents: 0, shortfallCents: 0 };
+          return { supplierName: "", shortfallCents: 0 };
         }
         const fresh = Math.max(0, supplier.reserveBalanceCents);
         const drawC = Math.min(supplierRefundCents, fresh);
@@ -115,13 +267,9 @@ export async function applySupplierClawback(
             },
           });
         }
-        return {
-          supplierName: supplier.name,
-          drawCents: drawC,
-          shortfallCents: shortC,
-        };
-      });
-    void drawCents;
+        return { supplierName: supplier.name, shortfallCents: shortC };
+      }
+    );
     if (shortfallCents > 0) {
       const updated = await prisma.supplier.findUnique({
         where: { id: supplierId },
@@ -149,17 +297,40 @@ export async function applySupplierClawback(
   }
 }
 
+export type RefundScope =
+  | { kind: "order" }
+  | { kind: "slot"; slotId: string }
+  | { kind: "item"; orderItemId: string };
+
 export type RefundResult =
-  | { ok: true; refundId: string; stripeRefundId: string | null }
+  | {
+      ok: true;
+      refundId: string;
+      stripeRefundId: string | null;
+      amountCents: number;
+    }
   | { ok: false; error: string; status: number };
 
 export async function refundOrder(args: {
   orderId: string;
-  amountCents: number;
+  /**
+   * Optional. When omitted on a scoped refund (item / slot), the amount
+   * auto-derives from the scope target (item: qty * unitPrice; slot:
+   * subtotal + freight - already refunded). When scope is "order" the
+   * amount is required.
+   */
+  amountCents?: number;
   reason: string;
   returnRequestId?: string;
   refundedByUserId: string;
   refundedByEmail: string;
+  /**
+   * PLH-3g P6: per-supplier refund routing. Default = whole-order
+   * refund (legacy pro-rata). Item / slot scopes route the clawback
+   * to one supplier and tag the Stripe refund metadata so the
+   * charge.refunded webhook follows the same path.
+   */
+  scope?: RefundScope;
   /**
    * P9.5 HIGH 12: when true, allow a DB-only refund for orders that
    * weren't paid via Stripe (demo / PayPal). Without this flag, the
@@ -171,7 +342,10 @@ export async function refundOrder(args: {
 }): Promise<RefundResult> {
   const order = await prisma.order.findUnique({
     where: { id: args.orderId },
-    include: { items: { include: { product: true } } },
+    include: {
+      items: { include: { product: true } },
+      supplierSlots: true,
+    },
   });
   if (!order) {
     return { ok: false, error: "Order not found.", status: 404 };
@@ -183,7 +357,76 @@ export async function refundOrder(args: {
       status: 400,
     };
   }
-  const amount = Math.max(0, Math.floor(args.amountCents));
+
+  const scope: RefundScope = args.scope ?? { kind: "order" };
+
+  // Resolve amount + target slot per scope.
+  let amount = Math.max(0, Math.floor(args.amountCents ?? 0));
+  let targetSlotId: string | null = null;
+  let targetOrderItemId: string | null = null;
+
+  if (scope.kind === "item") {
+    const item = order.items.find((i) => i.id === scope.orderItemId);
+    if (!item) {
+      return { ok: false, error: "Order item not found.", status: 404 };
+    }
+    const slot = order.supplierSlots.find(
+      (s) => s.supplierId === item.product.supplierId
+    );
+    if (!slot) {
+      return {
+        ok: false,
+        error: "No supplier slot for this item (legacy order without slots).",
+        status: 400,
+      };
+    }
+    const itemLineCents = item.unitPriceCents * item.qty;
+    if (amount <= 0) amount = itemLineCents;
+    if (amount > itemLineCents) {
+      return {
+        ok: false,
+        error: `Refund exceeds item line total ${itemLineCents} cents.`,
+        status: 400,
+      };
+    }
+    const slotRemaining =
+      slot.subtotalCents + slot.freightCents - slot.refundedCents;
+    if (amount > slotRemaining) {
+      return {
+        ok: false,
+        error: `Refund exceeds remaining ${slotRemaining} cents on the supplier slot.`,
+        status: 400,
+      };
+    }
+    targetSlotId = slot.id;
+    targetOrderItemId = item.id;
+  } else if (scope.kind === "slot") {
+    const slot = order.supplierSlots.find((s) => s.id === scope.slotId);
+    if (!slot) {
+      return { ok: false, error: "Supplier slot not found.", status: 404 };
+    }
+    const slotRemaining =
+      slot.subtotalCents + slot.freightCents - slot.refundedCents;
+    if (amount <= 0) amount = slotRemaining;
+    if (amount > slotRemaining) {
+      return {
+        ok: false,
+        error: `Refund exceeds remaining ${slotRemaining} cents on the supplier slot.`,
+        status: 400,
+      };
+    }
+    targetSlotId = slot.id;
+  } else {
+    // order scope: amount required.
+    if (amount <= 0) {
+      return {
+        ok: false,
+        error: "Refund amount must be positive.",
+        status: 400,
+      };
+    }
+  }
+
   if (amount <= 0) {
     return { ok: false, error: "Refund amount must be positive.", status: 400 };
   }
@@ -199,12 +442,7 @@ export async function refundOrder(args: {
   const s = client();
   let stripeRefundId: string | null = null;
 
-  // P9.5 HIGH 12: gate DB-only refunds. Stripe IS configured but this
-  // order has no stripePaymentIntentId (demo checkout, PayPal, or a
-  // pre-P8 order that didn't capture the PI). Without manualOverride
-  // the route refuses, so admin has to intentionally pick the manual
-  // path. Pre-fix the route silently recorded a "succeeded" refund in
-  // the DB even though no money moved, leaving the buyer charged.
+  // P9.5 HIGH 12: gate DB-only refunds (see comment at top of refundOrder).
   if (s && !order.stripePaymentIntentId && !args.manualOverride) {
     return {
       ok: false,
@@ -228,6 +466,11 @@ export async function refundOrder(args: {
           partsportOrderId: order.id,
           partsportReturnRequestId: args.returnRequestId || "",
           refundedBy: args.refundedByEmail,
+          // PLH-3g P6: route the webhook clawback to the right slot.
+          // The webhook reads slotId out of metadata when present.
+          partsportScope: scope.kind,
+          partsportSlotId: targetSlotId || "",
+          partsportOrderItemId: targetOrderItemId || "",
         },
       });
       stripeRefundId = refund.id;
@@ -237,8 +480,6 @@ export async function refundOrder(args: {
         op: "refund-create",
         orderId: order.id,
       });
-      // P9.5 HIGH 13: write a failed-refund audit row so the admin trail
-      // shows the attempt and the error, not just successful refunds.
       await writeAuditLog({
         actor: { id: args.refundedByUserId, email: args.refundedByEmail },
         action: "ORDER_REFUND_FAILED",
@@ -249,6 +490,8 @@ export async function refundOrder(args: {
           orderReference: order.reference,
           amountCents: amount,
           paymentIntent: order.stripePaymentIntentId,
+          scope: scope.kind,
+          slotId: targetSlotId,
         },
       });
       return {
@@ -261,23 +504,30 @@ export async function refundOrder(args: {
       };
     }
   }
-  // When Stripe is not configured OR the order was paid via the demo
-  // fallback (no stored payment_intent), we still record the refund in
-  // PartsPort's DB so the order math stays honest. Owner reconciles
-  // manually with the gateway in that case.
 
-  // P9.5 CRIT 5 / PLH-1 commit 5: refund clawback with shortfall netting.
-  // Extracted into applySupplierClawback so the charge.refunded webhook
-  // can call the same primitive when an out-of-band Stripe refund lands.
-  await applySupplierClawback(
-    order.id,
-    amount,
-    `order ${order.reference}`,
-    {
-      actorId: args.refundedByUserId,
-      actorEmail: args.refundedByEmail,
-    }
-  );
+  // P9.5 CRIT 5 / PLH-1 commit 5 / PLH-3g P6: per-supplier clawback.
+  // Scoped refunds hit one slot; order-scoped refunds split pro-rata.
+  if (targetSlotId) {
+    await applySupplierClawback(
+      { kind: "slot", slotId: targetSlotId },
+      amount,
+      `order ${order.reference}`,
+      {
+        actorId: args.refundedByUserId,
+        actorEmail: args.refundedByEmail,
+      }
+    );
+  } else {
+    await applySupplierClawback(
+      { kind: "order", orderId: order.id },
+      amount,
+      `order ${order.reference}`,
+      {
+        actorId: args.refundedByUserId,
+        actorEmail: args.refundedByEmail,
+      }
+    );
+  }
 
   // Record the Refund row and update Order totals atomically.
   const refund = await prisma.$transaction(async (tx) => {
@@ -315,8 +565,11 @@ export async function refundOrder(args: {
       amountCents: amount,
       stripeRefundId,
       returnRequestId: args.returnRequestId,
+      scope: scope.kind,
+      slotId: targetSlotId,
+      orderItemId: targetOrderItemId,
     },
   });
 
-  return { ok: true, refundId: refund.id, stripeRefundId };
+  return { ok: true, refundId: refund.id, stripeRefundId, amountCents: amount };
 }

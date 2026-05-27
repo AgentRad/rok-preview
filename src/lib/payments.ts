@@ -110,6 +110,11 @@ export type WebhookEvent =
         id: string;
         amountCents: number;
         reason: string | null;
+        // PLH-3g P6: per-slot routing metadata stamped by refundOrder()
+        // when it called stripe.refunds.create. Absent on out-of-band
+        // dashboard refunds; the webhook falls back to pro-rata
+        // clawback in that case.
+        metadata: Record<string, string>;
       }>;
     }
   | { type: "ignored" };
@@ -289,6 +294,7 @@ const stripeProvider: PaymentProvider = {
         id: r.id,
         amountCents: r.amount ?? 0,
         reason: r.reason ?? null,
+        metadata: (r.metadata ?? {}) as Record<string, string>,
       }));
       return {
         type: "charge.refunded",
