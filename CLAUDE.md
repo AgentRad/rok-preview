@@ -761,6 +761,37 @@ sync shipped by PLH-3i, the PLH-2 deferred-polish backlog closed by
 PLH-3j, the buyer-UX strip-back shipped by PLH-3k, and the supplier
 dashboard IA split shipped by PLH-3l.**
 
+**PLH-3m (2026-05-27).** Tiny OEM + admin polish tail surfaced by the
+POV-audit pass against the OEM dashboard and admin console. 3 fixes,
+one commit each, sequential push. Pure UI strip-back. No schema
+changes, no new dependencies, no new crons.
+- F1 (LOW): OEM dashboard subtitle trimmed from the three-clause
+  "Manufacturer dashboard: your demand, distributors, and sales on
+  PartsPort. Every order routes to an authorized distributor, with
+  zero channel conflict." down to a one-line muted "Your demand,
+  distributors, and storefront on PartsPort." in
+  `src/app/oem/page.tsx`.
+- F2 (LOW): admin console header tightened in
+  `src/app/admin/page.tsx`. Dropped the "Marketplace operations:
+  suppliers, applications, and orders." preamble; the quick-links row
+  (Fulfillment ops, Audit log, Profit dashboard, Tax registrations)
+  stays as the page-sub.
+- F3 (LOW): OEM logo upload caption normalized to "PNG / JPG / WEBP,
+  square, under 2 MB." in `src/components/OemProfileEditor.tsx`.
+  Single combined caption beneath the Upload logo / Replace button.
+
+`npx next build` clean across all three commits. Zero em dashes.
+
+**Cumulative across all rounds including PLH-3m: 28 CRITICAL + 62 HIGH
+closed, plus the single-supplier-cart constraint lifted by PLH-3g,
+multi-image galleries shipped by PLH-3h, QuickBooks Online full OAuth
+sync shipped by PLH-3i, the PLH-2 deferred-polish backlog closed by
+PLH-3j, the buyer-UX strip-back shipped by PLH-3k, the supplier
+dashboard IA split shipped by PLH-3l, and the OEM + admin polish tail
+shipped by PLH-3m. Buyer + supplier + OEM + admin surfaces all
+stripped to launch-ready via the POV-audit-driven PLH-3k / 3l / 3m
+rounds.**
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no

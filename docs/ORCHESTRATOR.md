@@ -503,6 +503,28 @@ need to do today?" question.
   `c531c07`, P5 `57c895a`, P6 `c548141`, P7 `79bb139`, P8 lands with
   this docs change.
 
+**PLH-3m (2026-05-27).** Tiny OEM + admin polish tail. 3 fixes, one
+commit each, sequential push. Closes the POV-audit pass against the
+OEM dashboard and admin console. F1 trims the OEM dashboard subtitle
+to a single muted line ("Your demand, distributors, and storefront on
+PartsPort.") in `src/app/oem/page.tsx`. F2 drops the admin console
+"Marketplace operations" preamble, keeping the quick-links row as the
+page-sub. F3 normalizes the OEM logo upload caption to
+"PNG / JPG / WEBP, square, under 2 MB." in
+`src/components/OemProfileEditor.tsx`. Per-commit hashes: F1
+`4e6db7d`, F2 `1345b93`, F3 `222953e`. F4 docs commit lands with this
+update. Every commit `npx next build` clean. Zero em dashes. No
+schema changes, no new deps, no new crons.
+
+With PLH-3m landed, all POV-audit-driven rounds are done: PLH-3k
+stripped the buyer surface, PLH-3l carved the supplier dashboard into
+the 5-tab IA, and PLH-3m trimmed the OEM + admin surfaces. Buyer +
+supplier + OEM + admin surfaces are all stripped to launch-ready. No
+further code-side polish rounds queued. Next step is the real-world
+verification + production cutover sequence in `LAUNCH_PLAN.md`
+(Stripe live keys flip, demo data wipe, first real supplier
+onboarding, attorney legal review).
+
 ## Inbound email feature: LIVE + smoke-proven on prod (2026-05-26)
 
 The Resend webhook is configured and pointing at
