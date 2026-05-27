@@ -651,6 +651,7 @@ model Message {
   senderRole  String
   body        String
   createdAt   DateTime      @default(now())
+  inboundFingerprint String? @unique
 
   @@index([orderId])
   @@index([quoteId])

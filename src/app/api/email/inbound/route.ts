@@ -318,16 +318,29 @@ async function handleInbound(req: Request) {
     if (!isBuyer && !isAdmin && !isOrderSupplier) {
       return NextResponse.json({ ok: true, ignored: "not on thread" });
     }
-    await prisma.message.create({
-      data: {
-        orderId: order.id,
-        senderId: user.id,
-        senderName: user.name,
-        senderEmail: user.email,
-        senderRole: user.role,
-        body: cleaned,
-      },
-    });
+    const orderFingerprint = crypto
+      .createHash("sha256")
+      .update(`${user.id}|${order.id}||${cleaned.trim()}`)
+      .digest("hex");
+    try {
+      await prisma.message.create({
+        data: {
+          orderId: order.id,
+          senderId: user.id,
+          senderName: user.name,
+          senderEmail: user.email,
+          senderRole: user.role,
+          body: cleaned,
+          inboundFingerprint: orderFingerprint,
+        },
+      });
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code;
+      if (code === "P2002") {
+        return NextResponse.json({ ok: true, ignored: "duplicate" });
+      }
+      throw err;
+    }
     // Fan out to the other people on the thread (mirrors POST /api/messages).
     const recipients = new Set<string>();
     const recipientUserIds = new Map<string, string | null>();
@@ -392,16 +405,29 @@ async function handleInbound(req: Request) {
   if (!isBuyer && !isAdmin && !isQuoteSupplier) {
     return NextResponse.json({ ok: true, ignored: "not on thread" });
   }
-  await prisma.message.create({
-    data: {
-      quoteId: quote.id,
-      senderId: user.id,
-      senderName: user.name,
-      senderEmail: user.email,
-      senderRole: user.role,
-      body: cleaned,
-    },
-  });
+  const quoteFingerprint = crypto
+    .createHash("sha256")
+    .update(`${user.id}||${quote.id}|${cleaned.trim()}`)
+    .digest("hex");
+  try {
+    await prisma.message.create({
+      data: {
+        quoteId: quote.id,
+        senderId: user.id,
+        senderName: user.name,
+        senderEmail: user.email,
+        senderRole: user.role,
+        body: cleaned,
+        inboundFingerprint: quoteFingerprint,
+      },
+    });
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "P2002") {
+      return NextResponse.json({ ok: true, ignored: "duplicate" });
+    }
+    throw err;
+  }
   const recipients = new Set<string>();
   const recipientUserIds = new Map<string, string | null>();
   if (!isBuyer) {
