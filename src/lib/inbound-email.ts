@@ -14,11 +14,12 @@ import crypto from "node:crypto";
  * where:
  *   kind = "o" for an Order thread, "q" for a Quote thread
  *   id   = the cuid of the Order or QuoteRequest
- *   sig  = the first 32 hex chars (128 bits) of HMAC-SHA256(secret, `${kind}.${id}`)
+ *   sig  = the first 16 hex chars (64 bits) of HMAC-SHA256(secret, `${kind}.${id}`)
  *
- * The full token (`<kind>.<id>.<sig>`) is short enough to fit in standard
- * email locals and is opaque enough that nobody can forge a reply address
- * for a different thread without the secret.
+ * The full token (`<kind>.<id>.<sig>`) keeps the local-part under RFC 5321's
+ * 64-char limit (8 + 25-char cuid + 1 + 16 = 50) so providers like Resend
+ * don't reject the Reply-To with a 422. 64 bits of HMAC is still strong
+ * against forgery for a short-lived per-thread token.
  */
 
 export type ThreadKind = "order" | "quote";
@@ -54,7 +55,7 @@ function sign(kind: ThreadKind, id: string): string {
     .createHmac("sha256", s)
     .update(`${KIND_CODE[kind]}.${id}`)
     .digest("hex")
-    .slice(0, 32);
+    .slice(0, 16);
 }
 
 /**
@@ -64,7 +65,16 @@ function sign(kind: ThreadKind, id: string): string {
 export function replyAddress(kind: ThreadKind, id: string): string | null {
   if (!isInboundConfigured()) return null;
   const sig = sign(kind, id);
-  return `reply+${KIND_CODE[kind]}.${id}.${sig}@${inboundDomain()}`;
+  const local = `reply+${KIND_CODE[kind]}.${id}.${sig}`;
+  // RFC 5321 caps the local-part at 64 octets. Resend rejects longer
+  // Reply-To values with a 422. Bail loudly rather than ship a Reply-To
+  // the provider will silently drop.
+  if (local.length > 64) {
+    throw new Error(
+      `reply address local-part exceeds RFC 5321 64-char limit (${local.length})`
+    );
+  }
+  return `${local}@${inboundDomain()}`;
 }
 
 export type ParsedReplyTarget = {
