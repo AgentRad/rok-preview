@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { sendOrderDelivered } from "@/lib/email";
 import { captureError } from "@/lib/observability";
+import { markOrderDelivered } from "@/lib/shipping";
 
 export const runtime = "nodejs";
 
@@ -39,23 +40,27 @@ export async function POST(
       { status: 400 }
     );
   }
-  const updated = await prisma.order.update({
-    where: { id },
-    // PLH-3c F5: stamp deliveredAt on buyer self-confirmation. Idempotent
-    // (the status guard above prevents a double-flip in normal flow).
-    data: {
-      shipmentStage: "Delivered",
-      status: "FULFILLED",
-      ...(order.deliveredAt ? {} : { deliveredAt: new Date() }),
-    },
-    include: { items: true },
-  });
-  after(async () => {
-    try {
-      await sendOrderDelivered(updated);
-    } catch (err) {
-      captureError(err, { subsystem: "email", op: "delivered-notify", orderId: id });
+  // PLH-3g P5: per-supplier delivery. Flip every slot to Delivered.
+  // markOrderDelivered handles aggregate Order.shipmentStage +
+  // deliveredAt + status="FULFILLED" when ALL slots are Delivered.
+  const r = await markOrderDelivered(id);
+  if (!r.ok) {
+    return NextResponse.json({ error: r.error }, { status: r.status });
+  }
+  if (r.orderFullyDeliveredNow) {
+    const updated = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+    if (updated) {
+      after(async () => {
+        try {
+          await sendOrderDelivered(updated);
+        } catch (err) {
+          captureError(err, { subsystem: "email", op: "delivered-notify", orderId: id });
+        }
+      });
     }
-  });
+  }
   return NextResponse.json({ ok: true });
 }

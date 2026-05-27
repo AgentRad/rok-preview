@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { sendOrderDelivered } from "@/lib/email";
-import { markOrderShipped } from "@/lib/shipping";
+import { markOrderShipped, markOrderDelivered } from "@/lib/shipping";
 import { captureError } from "@/lib/observability";
 
 const STAGES = ["Processing", "Shipped", "Delivered"] as const;
@@ -65,25 +65,28 @@ export async function POST(
         { status: 400 }
       );
     }
-    const updated = await prisma.order.update({
-      where: { id },
-      // PLH-3c F5: stamp deliveredAt idempotently (keep an existing
-      // value if admin already marked Delivered earlier and is just
-      // re-saving the order).
-      data: {
-        shipmentStage: "Delivered",
-        status: "FULFILLED",
-        ...(order.deliveredAt ? {} : { deliveredAt: new Date() }),
-      },
-      include: { items: true },
-    });
-    after(async () => {
-      try {
-        await sendOrderDelivered(updated);
-      } catch (err) {
-        captureError(err, { subsystem: "email", op: "order-delivered", orderId: id });
+    // PLH-3g P5: per-supplier delivery flip. Marks every slot Delivered
+    // and recomputes aggregate Order state. Fires the delivered email
+    // only on the first transition to fully Delivered.
+    const r = await markOrderDelivered(id);
+    if (!r.ok) {
+      return NextResponse.json({ error: r.error }, { status: r.status });
+    }
+    if (r.orderFullyDeliveredNow) {
+      const updated = await prisma.order.findUnique({
+        where: { id },
+        include: { items: true },
+      });
+      if (updated) {
+        after(async () => {
+          try {
+            await sendOrderDelivered(updated);
+          } catch (err) {
+            captureError(err, { subsystem: "email", op: "order-delivered", orderId: id });
+          }
+        });
       }
-    });
+    }
   } else {
     await prisma.order.update({
       where: { id },

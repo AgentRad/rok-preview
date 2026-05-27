@@ -34,18 +34,32 @@ export default async function SupplierHealthPage() {
     },
   });
 
-  // PLH-3a B2: bound the orderItems query to the YTD window. All in-process
-  // buckets (D30 / D90 / YTD) live inside YTD anyway, so pulling rows older
-  // than Jan 1 of the current year was pure waste. As marketplace volume
-  // grows this stops the page from scanning the full lifetime of every
-  // historical line item on each load.
+  // PLH-3a B2: bound the orderItems query to the YTD window.
+  // PLH-3g P5: still iterate items for the per-supplier order-volume +
+  // refund-rate buckets (they're product-supplier scoped), but pull
+  // OrderSupplierSlot rows separately for the per-supplier days-to-ship
+  // metric. Per-slot shippedAt is the accurate per-supplier ship moment.
   const items = await prisma.orderItem.findMany({
     where: { order: { createdAt: { gte: new Date(YTD_START) } } },
     include: {
       order: { select: { id: true, status: true, createdAt: true,
-        refundedCents: true, totalCents: true, paidAt: true,
-        shippedAt: true, shipmentStage: true } },
+        refundedCents: true, totalCents: true, paidAt: true } },
       product: { select: { supplierId: true } },
+    },
+  });
+
+  // PLH-3g P5: pull recent shipped slots for the days-to-ship metric.
+  // Bound by the parent Order's paidAt to keep the scan small.
+  const recentSlots = await prisma.orderSupplierSlot.findMany({
+    where: {
+      shippedAt: { gte: new Date(D30) },
+      shipmentStage: { in: ["Shipped", "Delivered"] },
+      order: { paidAt: { not: null } },
+    },
+    select: {
+      supplierId: true,
+      shippedAt: true,
+      order: { select: { paidAt: true } },
     },
   });
 
@@ -118,25 +132,23 @@ export default async function SupplierHealthPage() {
         m.grossTotal += o.totalCents;
         m.refundedTotal += o.refundedCents;
       }
-      // PLH-3a B1: real days-to-ship using Order.shippedAt (stamped inside
-      // markOrderShipped on the actual transition). D30 window now bounds
-      // the ship date, not createdAt, so the rolling 30-day metric tracks
-      // recent fulfilment behaviour rather than recent order placement.
-      if (
-        o.paidAt &&
-        o.shippedAt &&
-        (o.shipmentStage === "Shipped" || o.shipmentStage === "Delivered") &&
-        o.shippedAt.getTime() >= D30
-      ) {
-        const days = Math.max(
-          0,
-          Math.round((o.shippedAt.getTime() - o.paidAt.getTime()) / 86400_000)
-        );
-        const arr = shipDaysBySupplier.get(supId) || [];
-        arr.push(days);
-        shipDaysBySupplier.set(supId, arr);
-      }
     }
+  }
+
+  // PLH-3g P5: per-supplier days-to-ship from OrderSupplierSlot.shippedAt
+  // minus Order.paidAt. More accurate than Order.shippedAt (which is the
+  // FIRST slot's ship moment, not this supplier's ship moment).
+  for (const s of recentSlots) {
+    if (!s.shippedAt || !s.order.paidAt) continue;
+    const m = metricsBySupplier.get(s.supplierId);
+    if (!m) continue;
+    const days = Math.max(
+      0,
+      Math.round((s.shippedAt.getTime() - s.order.paidAt.getTime()) / 86400_000)
+    );
+    const arr = shipDaysBySupplier.get(s.supplierId) || [];
+    arr.push(days);
+    shipDaysBySupplier.set(s.supplierId, arr);
   }
 
   for (const m of metricsBySupplier.values()) {

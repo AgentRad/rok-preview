@@ -766,6 +766,16 @@ model OrderSupplierSlot {
   refundedCents  Int      @default(0)
   payoutId       String?
   payout         Payout?  @relation(fields: [payoutId], references: [id])
+  // PLH-3g P5: per-supplier shipment dispatch. Each slot tracks its own
+  // ship state so a multi-supplier order can have one supplier shipped
+  // while another is still Pending. The parent Order.shipmentStage is
+  // recomputed as the aggregate (see markSlotShipped in lib/shipping.ts).
+  carrier        String?
+  trackingCode   String?
+  trackingUrl    String?
+  shipmentStage  String   @default("Pending")
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

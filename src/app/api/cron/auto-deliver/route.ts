@@ -4,6 +4,7 @@ import { sendOrderDelivered } from "@/lib/email";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { writeAuditLog } from "@/lib/audit";
 import { captureError } from "@/lib/observability";
+import { markOrderDelivered } from "@/lib/shipping";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,18 +65,22 @@ export async function GET(req: Request) {
 
   for (const c of batch) {
     try {
-      const updated = await prisma.order.update({
+      // PLH-3g P5: route through markOrderDelivered which flips every
+      // slot to Delivered and recomputes the aggregate Order state +
+      // stamps Order.deliveredAt when all slots are Delivered.
+      const r = await markOrderDelivered(c.id);
+      if (!r.ok) {
+        errors.push(`${c.reference}: ${r.error}`);
+        continue;
+      }
+      const updated = await prisma.order.findUnique({
         where: { id: c.id },
-        // PLH-3c F5: stamp deliveredAt on the auto-deliver transition.
-        // Candidates are filtered to shipmentStage = "Shipped" so the
-        // current row has no real deliveredAt yet.
-        data: {
-          shipmentStage: "Delivered",
-          status: "FULFILLED",
-          deliveredAt: new Date(),
-        },
         include: { items: true },
       });
+      if (!updated) {
+        errors.push(`${c.reference}: order vanished mid-flip`);
+        continue;
+      }
 
       // PLH-2 Phase 4e (E2): pre-fix this `catch` swallowed email failures
       // silently. The order would flip to FULFILLED, the buyer would
