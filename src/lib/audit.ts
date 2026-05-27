@@ -67,6 +67,12 @@ export const AUDIT_ACTIONS = [
   // FULFILLED but sendOrderDelivered threw. The status change stands;
   // this row is the trail so admin can manually re-notify the buyer.
   "AUTO_DELIVER_EMAIL_FAILED",
+  // PLH-3b F3: inbound reply rejected because the thread is in a terminal
+  // state (order REFUNDED/CANCELLED, quote DECLINED/EXPIRED/ACCEPTED).
+  "INBOUND_REPLY_REJECTED",
+  // PLH-3b F4: an inbound fan-out email failed for a specific recipient;
+  // the rest of the loop continues, this row preserves the trail.
+  "INBOUND_FAN_OUT_FAILED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

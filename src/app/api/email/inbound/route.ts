@@ -9,6 +9,8 @@ import {
 } from "@/lib/inbound-email";
 import { sendThreadMessage } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
+import { writeAuditLog } from "@/lib/audit";
+import { captureError } from "@/lib/observability";
 import {
   canSendMessages,
   userHasAccessToSupplier,
@@ -303,6 +305,22 @@ async function handleInbound(req: Request) {
     if (!order) {
       return NextResponse.json({ ok: true, ignored: "order missing" });
     }
+    if (order.status === "REFUNDED" || order.status === "CANCELLED") {
+      await writeAuditLog({
+        actor: { id: user.id, email: user.email },
+        action: "INBOUND_REPLY_REJECTED",
+        targetType: "Order",
+        targetId: order.id,
+        summary: `Inbound reply rejected, order status ${order.status}`,
+        metadata: {
+          kind: "order",
+          id: order.id,
+          status: order.status,
+          senderEmail,
+        },
+      });
+      return NextResponse.json({ ok: true, ignored: "thread closed" });
+    }
     const supplierIds = Array.from(
       new Set(order.items.map((i) => i.product.supplierId))
     );
@@ -391,6 +409,30 @@ async function handleInbound(req: Request) {
   });
   if (!quote) {
     return NextResponse.json({ ok: true, ignored: "quote missing" });
+  }
+  const quoteExpired =
+    !!quote.quoteExpiresAt && quote.quoteExpiresAt.getTime() < Date.now();
+  const reportedStatus =
+    quote.status === "DECLINED" || quote.status === "ACCEPTED"
+      ? quote.status
+      : quoteExpired
+        ? "EXPIRED"
+        : null;
+  if (reportedStatus) {
+    await writeAuditLog({
+      actor: { id: user.id, email: user.email },
+      action: "INBOUND_REPLY_REJECTED",
+      targetType: "QuoteRequest",
+      targetId: quote.id,
+      summary: `Inbound reply rejected, quote status ${reportedStatus}`,
+      metadata: {
+        kind: "quote",
+        id: quote.id,
+        status: reportedStatus,
+        senderEmail,
+      },
+    });
+    return NextResponse.json({ ok: true, ignored: "thread closed" });
   }
   const isBuyer = !!quote.buyerId && quote.buyerId === user.id;
   const isAdmin = user.role === "ADMIN";
