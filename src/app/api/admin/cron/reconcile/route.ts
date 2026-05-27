@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
-import { writeAuditLog } from "@/lib/audit";
 import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
@@ -195,15 +194,34 @@ export async function GET(req: Request) {
     );
   }
 
+  // PLH-3j P7: dedupe across capped runs that replay the same window.
+  // The partial unique index AuditLog_reconcile_mismatch_dedup_uniq
+  // covers (action, targetId, metadata->>'kind', metadata->>'windowStart')
+  // for action='RECONCILIATION_MISMATCH'. Use raw ON CONFLICT DO NOTHING
+  // so a duplicate write returns silently instead of raising P2002.
+  const windowStartIso = new Date(startMs).toISOString();
+  const windowEndIso = new Date(endMs).toISOString();
   for (const m of mismatches) {
-    await writeAuditLog({
-      actor: { id: "system", email: "system@partsport" },
-      action: "RECONCILIATION_MISMATCH",
-      targetType: "Order",
-      targetId: m.reference,
-      summary: `${m.kind}: ${m.detail}`,
-      metadata: { kind: m.kind, windowStart: new Date(startMs).toISOString(), windowEnd: new Date(endMs).toISOString() },
-    });
+    const metadata = {
+      kind: m.kind,
+      windowStart: windowStartIso,
+      windowEnd: windowEndIso,
+    };
+    await prisma.$executeRaw`
+      INSERT INTO "AuditLog" ("id", "actorId", "actorEmail", "action", "targetType", "targetId", "summary", "metadata", "createdAt")
+      VALUES (
+        gen_random_uuid()::text,
+        'system',
+        'system@partsport',
+        'RECONCILIATION_MISMATCH',
+        'Order',
+        ${m.reference},
+        ${`${m.kind}: ${m.detail}`.slice(0, 500)},
+        ${JSON.stringify(metadata)}::jsonb,
+        NOW()
+      )
+      ON CONFLICT DO NOTHING
+    `;
   }
 
   const capped = chargesCapped || transfersCapped;
