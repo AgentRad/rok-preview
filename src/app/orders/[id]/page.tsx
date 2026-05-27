@@ -518,7 +518,10 @@ export default async function OrderPage({
                   </p>
                 )}
                 <div style={{ marginTop: 12 }}>
-                  <ReturnRequestForm orderId={order.id} />
+                  <ReturnRequestForm
+                    orderId={order.id}
+                    deliveredAt={order.deliveredAt ? order.deliveredAt.toISOString() : null}
+                  />
                 </div>
               </div>
             </div>

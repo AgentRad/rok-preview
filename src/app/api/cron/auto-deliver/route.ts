@@ -66,7 +66,14 @@ export async function GET(req: Request) {
     try {
       const updated = await prisma.order.update({
         where: { id: c.id },
-        data: { shipmentStage: "Delivered", status: "FULFILLED" },
+        // PLH-3c F5: stamp deliveredAt on the auto-deliver transition.
+        // Candidates are filtered to shipmentStage = "Shipped" so the
+        // current row has no real deliveredAt yet.
+        data: {
+          shipmentStage: "Delivered",
+          status: "FULFILLED",
+          deliveredAt: new Date(),
+        },
         include: { items: true },
       });
 

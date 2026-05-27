@@ -573,6 +573,10 @@ model Order {
   // when null). Supplier-health uses this for accurate avg days-to-ship
   // instead of approximating with createdAt.
   shippedAt           DateTime?
+  // PLH-3c F5: set when an order transitions to Delivered (auto-deliver
+  // cron, ops-page mark-delivered, buyer self-confirm). Idempotent (only
+  // set when null). Drives the 30-day post-delivery return window.
+  deliveredAt         DateTime?
   // PLH-2 Phase 4e (E2): set when sendOrderDelivered fires successfully
   // after the auto-deliver cron flips the order. If the email throws, this
   // stays null and the AUTO_DELIVER_EMAIL_FAILED audit row is the trail.

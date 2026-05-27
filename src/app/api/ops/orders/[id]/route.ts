@@ -67,7 +67,14 @@ export async function POST(
     }
     const updated = await prisma.order.update({
       where: { id },
-      data: { shipmentStage: "Delivered", status: "FULFILLED" },
+      // PLH-3c F5: stamp deliveredAt idempotently (keep an existing
+      // value if admin already marked Delivered earlier and is just
+      // re-saving the order).
+      data: {
+        shipmentStage: "Delivered",
+        status: "FULFILLED",
+        ...(order.deliveredAt ? {} : { deliveredAt: new Date() }),
+      },
       include: { items: true },
     });
     after(async () => {

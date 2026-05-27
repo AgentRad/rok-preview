@@ -41,9 +41,12 @@ export async function POST(
   }
   const updated = await prisma.order.update({
     where: { id },
+    // PLH-3c F5: stamp deliveredAt on buyer self-confirmation. Idempotent
+    // (the status guard above prevents a double-flip in normal flow).
     data: {
       shipmentStage: "Delivered",
       status: "FULFILLED",
+      ...(order.deliveredAt ? {} : { deliveredAt: new Date() }),
     },
     include: { items: true },
   });

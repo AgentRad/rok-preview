@@ -59,6 +59,28 @@ export async function POST(req: Request) {
     );
   }
 
+  // PLH-3c F5: 30-day post-delivery return window. Admin can still open
+  // returns past the window (warranty / out-of-policy exceptions).
+  const deliveredAt = order.deliveredAt;
+  if (!isAdmin) {
+    if (!deliveredAt) {
+      return NextResponse.json(
+        { error: "Return window starts at delivery." },
+        { status: 400 }
+      );
+    }
+    const RETURN_WINDOW_MS = 30 * 86400_000;
+    if (Date.now() - deliveredAt.getTime() > RETURN_WINDOW_MS) {
+      return NextResponse.json(
+        {
+          error:
+            "The 30-day return window has closed. Contact support if this is a warranty claim.",
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   // Polish 12 H7: refuse a second OPEN return for the same order. The
   // pre-fix path let a buyer file unlimited duplicates, which junked
   // up admin triage. Existing closed states (APPROVED/REJECTED/

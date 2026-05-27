@@ -11,7 +11,27 @@ const REASONS = [
   "Other",
 ];
 
-export default function ReturnRequestForm({ orderId }: { orderId: string }) {
+export default function ReturnRequestForm({
+  orderId,
+  deliveredAt,
+}: {
+  orderId: string;
+  deliveredAt?: string | null;
+}) {
+  // PLH-3c F5: surface the 30-day post-delivery return window so buyers
+  // know how long they have left.
+  let windowNote: string | null = null;
+  if (deliveredAt) {
+    const delivered = new Date(deliveredAt).getTime();
+    const closes = delivered + 30 * 86400_000;
+    const msLeft = closes - Date.now();
+    if (msLeft <= 0) {
+      windowNote = "The 30-day return window has closed. Contact support for warranty claims.";
+    } else {
+      const daysLeft = Math.max(1, Math.ceil(msLeft / 86400_000));
+      windowNote = `${daysLeft} day${daysLeft === 1 ? "" : "s"} left to open a return.`;
+    }
+  }
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState(REASONS[0]);
@@ -53,13 +73,20 @@ export default function ReturnRequestForm({ orderId }: { orderId: string }) {
 
   if (!open) {
     return (
-      <button
-        type="button"
-        className="btn btn-ghost btn-sm"
-        onClick={() => setOpen(true)}
-      >
-        Report an issue with this order
-      </button>
+      <div>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => setOpen(true)}
+        >
+          Report an issue with this order
+        </button>
+        {windowNote && (
+          <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+            {windowNote}
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -72,6 +99,11 @@ export default function ReturnRequestForm({ orderId }: { orderId: string }) {
       <h3 style={{ fontSize: 17, fontWeight: 600, marginBottom: 10 }}>
         Report an issue
       </h3>
+      {windowNote && (
+        <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
+          {windowNote}
+        </div>
+      )}
       {error && <div className="alert alert-error">{error}</div>}
       <div className="form-row">
         <label htmlFor="rr-reason">What happened?</label>
