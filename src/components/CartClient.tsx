@@ -138,12 +138,11 @@ export default function CartClient() {
                     <ProductImage imageUrl={primaryImageUrl(p)} icon={p.icon} name={p.name} />
                   </div>
                   <div className="cl-main">
-                    <div className="cl-mfr">{p.manufacturer}</div>
                     <div className="cl-name">
                       <Link href={`/product/${p.sku}`}>{p.name}</Link>
                     </div>
                     <div className="muted-text" style={{ fontSize: 12.5 }}>
-                      {formatCents(p.priceCents)} / {p.unit} ·{" "}
+                      {p.manufacturer} · {formatCents(p.priceCents)} / {p.unit} ·{" "}
                       {p.stock > 0
                         ? `delivery in ${p.etaDays} day${p.etaDays > 1 ? "s" : ""}`
                         : "backorder"}
