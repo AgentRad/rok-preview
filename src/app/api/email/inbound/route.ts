@@ -23,7 +23,11 @@ export const runtime = "nodejs";
  * `replyAddress(kind, id)` in `src/lib/inbound-email.ts`.
  *
  * Supports three provider payload shapes (switched by INBOUND_EMAIL_PROVIDER):
- *   - resend:   { from, to, subject, text, html }
+ *   - resend:   { type, data: { from, to, subject, email_id, message_id,
+ *                attachments, ... } } — the webhook payload is METADATA ONLY.
+ *               text/html are NOT in the webhook; we fetch them via
+ *               GET https://api.resend.com/emails/receiving/{email_id} with
+ *               Authorization: Bearer ${RESEND_API_KEY} when missing.
  *   - postmark: { From, ToFull[], Subject, TextBody, HtmlBody }
  *   - sendgrid: multipart form with from/to/subject/text/html fields
  *
@@ -333,6 +337,49 @@ async function handleInbound(req: Request) {
   const parsed = parseBodyFromRaw(rawBody, provider, req);
   if (!parsed) {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
+  }
+  // Resend's email.received webhook ships METADATA ONLY: no text/html in the
+  // payload. Fetch the full body via the receiving API when missing.
+  if (provider === "resend" && !parsed.text && !parsed.html) {
+    let emailId = "";
+    try {
+      const rawJson = JSON.parse(rawBody) as { data?: { email_id?: unknown } };
+      emailId = String(rawJson?.data?.email_id || "");
+    } catch {
+      emailId = "";
+    }
+    if (emailId) {
+      const apiKey = process.env.RESEND_API_KEY;
+      if (!apiKey) {
+        console.error(
+          `[email][inbound] body fetch skipped, RESEND_API_KEY unset email_id=${emailId}`
+        );
+        return NextResponse.json({ ok: true, ignored: "body fetch failed" });
+      }
+      try {
+        const r = await fetch(
+          `https://api.resend.com/emails/receiving/${emailId}`,
+          { headers: { Authorization: `Bearer ${apiKey}` } }
+        );
+        if (!r.ok) {
+          captureError(new Error(`resend body fetch HTTP ${r.status}`), {
+            subsystem: "email",
+            op: "inbound-body-fetch",
+            emailId,
+          });
+          return NextResponse.json({ ok: true, ignored: "body fetch failed" });
+        }
+        const full = (await r.json()) as { text?: unknown; html?: unknown };
+        parsed.text = typeof full.text === "string" ? full.text : "";
+        parsed.html = typeof full.html === "string" ? full.html : "";
+        console.log(
+          `[email][inbound] resend body fetched email_id=${emailId} text.length=${parsed.text.length} html.length=${parsed.html.length}`
+        );
+      } catch (err) {
+        captureError(err, { subsystem: "email", op: "inbound-body-fetch", emailId });
+        return NextResponse.json({ ok: true, ignored: "body fetch failed" });
+      }
+    }
   }
   const senderEmail = extractEmail(parsed.from);
   if (!senderEmail) {
