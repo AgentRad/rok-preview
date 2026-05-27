@@ -14,6 +14,7 @@ import { formatCents } from "@/lib/money";
 import { SURCHARGE_CENTS } from "@/lib/freight";
 import { trackingLink } from "@/lib/tracking";
 import { isPaymentsConfigured, reconcileOrderFromStripe } from "@/lib/payments";
+import { verifyOrderViewToken } from "@/lib/order-link";
 import WriteReview from "@/components/WriteReview";
 
 function rateLabelForOrder(order: { feeRateBps: number }): string {
@@ -86,6 +87,13 @@ export default async function OrderPage({
       supplierIds.map((id) => userHasAccessToSupplier(viewer.id, id))
     );
     isOrderSupplier = checks.some((c) => c.ok);
+  }
+  const guestToken = typeof sp.t === "string" ? sp.t : "";
+  const isGuestViaToken = guestToken
+    ? verifyOrderViewToken(order.id, order.buyerEmail, guestToken)
+    : false;
+  if (!isBuyer && !isAdmin && !isOrderSupplier && !isGuestViaToken) {
+    notFound();
   }
   const canMessage = !!viewer && (isBuyer || isAdmin || isOrderSupplier);
 

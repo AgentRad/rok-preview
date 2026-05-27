@@ -3,10 +3,27 @@ import crypto from "node:crypto";
 import { Resend } from "resend";
 import { prisma } from "./db";
 import { siteUrl } from "./site-url";
+import { signOrderViewToken } from "./order-link";
 import { trackingLink } from "./tracking";
 import { formatCents } from "./money";
 import { replyAddress, type ThreadKind } from "./inbound-email";
 import { captureError } from "./observability";
+
+/**
+ * PLH-3c F0: for guest orders (buyerId == null) the outbound email
+ * deep-link must carry a signed token so the recipient can view the
+ * order without a session. Logged-in buyer flows keep the bare URL.
+ */
+function orderViewUrl(
+  order: { id: string; buyerId?: string | null; buyerEmail: string },
+  suffix = ""
+): string {
+  const base = `/orders/${order.id}${suffix}`;
+  if (order.buyerId) return siteUrl(base);
+  const token = signOrderViewToken(order.id, order.buyerEmail);
+  const sep = base.includes("?") ? "&" : "?";
+  return siteUrl(`${base}${sep}t=${token}`);
+}
 
 /**
  * PLH-2 Phase 4d (D1): email categorization.
@@ -238,6 +255,7 @@ function btn(href: string, label: string): string {
 type OrderLite = {
   id: string;
   reference: string;
+  buyerId?: string | null;
   buyerName: string;
   buyerEmail: string;
   buyerCompanyName?: string | null;
@@ -326,7 +344,7 @@ function totals(order: OrderLite): string {
 }
 
 export async function sendOrderConfirmation(order: OrderLite): Promise<void> {
-  const url = siteUrl(`/orders/${order.id}`);
+  const url = orderViewUrl(order);
   const body = `
     <p>Hi ${esc(order.buyerName)},</p>
     <p>We have received your order <strong>${esc(order.reference)}</strong>. Payment is the next step. Once received, the supplier will begin preparing your parts.</p>
@@ -342,8 +360,8 @@ export async function sendOrderConfirmation(order: OrderLite): Promise<void> {
 }
 
 export async function sendPaymentReceived(order: OrderLite): Promise<void> {
-  const url = siteUrl(`/orders/${order.id}`);
-  const invoiceUrl = siteUrl(`/orders/${order.id}/invoice`);
+  const url = orderViewUrl(order);
+  const invoiceUrl = orderViewUrl(order, "/invoice");
   const body = `
     <p>Hi ${esc(order.buyerName)},</p>
     <p>Thank you. Payment for order <strong>${esc(order.reference)}</strong> has been received and the supplier has been notified. We will keep you posted as it moves through fulfillment.</p>
@@ -358,7 +376,7 @@ export async function sendPaymentReceived(order: OrderLite): Promise<void> {
 }
 
 export async function sendOrderShipped(order: OrderLite): Promise<void> {
-  const url = siteUrl(`/orders/${order.id}`);
+  const url = orderViewUrl(order);
   const link = trackingLink(order.carrier, order.trackingCode);
   const trackBlock = order.carrier
     ? `<div style="margin:14px 0;padding:14px 16px;background:#f3f2ef;border-left:3px solid #1a1916;">
@@ -394,7 +412,7 @@ export async function sendOrderRefunded(
   refundedCents: number,
   reason: string
 ): Promise<void> {
-  const url = siteUrl(`/orders/${order.id}`);
+  const url = orderViewUrl(order);
   const isFull = refundedCents >= order.totalCents;
   const body = `
     <p>Hi ${esc(order.buyerName)},</p>
@@ -411,7 +429,7 @@ export async function sendOrderRefunded(
 }
 
 export async function sendOrderDelivered(order: OrderLite): Promise<void> {
-  const url = siteUrl(`/orders/${order.id}`);
+  const url = orderViewUrl(order);
   const body = `
     <p>Hi ${esc(order.buyerName)},</p>
     <p>Order <strong>${esc(order.reference)}</strong> has been marked delivered. If anything is missing or damaged, please report it within the claim window in the supplier agreement.</p>
