@@ -1,3 +1,5 @@
+import { parsePhoneNumberFromString } from "libphonenumber-js";
+
 export type AddressInput = {
   label?: string;
   recipient: string;
@@ -114,6 +116,22 @@ export function validateAddress(
       field: "postalCode",
       error: "Postal code must be 2-20 alphanumeric characters.",
     };
+  }
+
+  // PLH-3j P3: phone format validation via libphonenumber-js. Phone is
+  // optional, so blank / missing passes. When provided, the number must
+  // parse and validate against its country (defaults to the address
+  // country). Obvious typos (too short, non-digits, wrong-length for
+  // the country) reject with structured { field, error }.
+  const phoneRaw = a.phone?.trim();
+  if (phoneRaw) {
+    const parsed = parsePhoneNumberFromString(phoneRaw, country as never);
+    if (!parsed || !parsed.isValid()) {
+      return {
+        field: "phone",
+        error: "Phone number does not look valid for the selected country.",
+      };
+    }
   }
   return null;
 }
