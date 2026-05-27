@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "node:crypto";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
@@ -72,8 +73,12 @@ export async function POST(req: Request) {
     );
   }
   const ext = safeExt(file.name, "png");
+  // PLH-3c F8: random per-upload suffix in the blob path so the public
+  // logo URL doesn't leak the OEM's User id. Previous path was
+  // `oems/${user.id}/logo.${ext}`.
+  const pathSuffix = crypto.randomBytes(8).toString("hex");
   const blob = await put(
-    `oems/${user.id}/logo.${ext}`,
+    `oems/${user.id}_${pathSuffix}/logo.${ext}`,
     file,
     { access: "public", addRandomSuffix: true, contentType: detected }
   );
