@@ -161,9 +161,7 @@ export default async function OemDashboard() {
         <div className="page-pad">
           <h1 className="page-title">{brand}</h1>
           <p className="page-sub">
-            Manufacturer dashboard: your demand, distributors, and sales on
-            PartsPort. Every order routes to an authorized distributor, with
-            zero channel conflict.
+            Your demand, distributors, and storefront on PartsPort.
           </p>
 
           <AttentionFeed
