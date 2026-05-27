@@ -65,18 +65,28 @@ export async function PATCH(
     );
   }
 
-  await prisma.$transaction(
-    orderIds.map((imageId, position) =>
+  // PLH-3h: (productId, ordinal) is unique, so writing sequential ordinals
+  // in one pass would collide mid-transaction. Two-step shuffle: move
+  // everyone to negative ordinals first (offset by -1000 to clear the
+  // positive band the unique key lives in), then write the final values.
+  await prisma.$transaction([
+    ...orderIds.map((imageId, idx) =>
       prisma.productImage.update({
         where: { id: imageId },
-        data: { position },
+        data: { ordinal: -1000 - idx },
       })
-    )
-  );
+    ),
+    ...orderIds.map((imageId, ordinal) =>
+      prisma.productImage.update({
+        where: { id: imageId },
+        data: { ordinal },
+      })
+    ),
+  ]);
 
   const first = await prisma.productImage.findFirst({
     where: { productId: id },
-    orderBy: { position: "asc" },
+    orderBy: { ordinal: "asc" },
   });
   await prisma.product.update({
     where: { id },

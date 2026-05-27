@@ -121,7 +121,7 @@ export async function POST(req: Request) {
   });
   if (imageUrl) {
     await prisma.productImage.create({
-      data: { productId: product.id, url: imageUrl, position: 0 },
+      data: { productId: product.id, url: imageUrl, ordinal: 0 },
     });
   }
   return NextResponse.json({ ok: true });

@@ -67,12 +67,12 @@ export async function POST(
     ((
       await prisma.productImage.findFirst({
         where: { productId: id },
-        orderBy: { position: "desc" },
-        select: { position: true },
+        orderBy: { ordinal: "desc" },
+        select: { ordinal: true },
       })
-    )?.position ?? -1) + 1;
+    )?.ordinal ?? -1) + 1;
 
-  const created: { id: string; url: string; position: number }[] = [];
+  const created: { id: string; url: string; ordinal: number }[] = [];
   const errors: string[] = [];
 
   for (let i = 0; i < files.length; i++) {
@@ -94,9 +94,9 @@ export async function POST(
         contentType: file.type,
       });
       const image = await prisma.productImage.create({
-        data: { productId: id, url: blob.url, position: startPos + created.length },
+        data: { productId: id, url: blob.url, ordinal: startPos + created.length },
       });
-      created.push({ id: image.id, url: image.url, position: image.position });
+      created.push({ id: image.id, url: image.url, ordinal: image.ordinal });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Upload failed.";
       errors.push(`${file.name}: ${msg}`);
@@ -106,7 +106,7 @@ export async function POST(
   if (created.length > 0) {
     const first = await prisma.productImage.findFirst({
       where: { productId: id },
-      orderBy: { position: "asc" },
+      orderBy: { ordinal: "asc" },
     });
     if (first) {
       await prisma.product.update({

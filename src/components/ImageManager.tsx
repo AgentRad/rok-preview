@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Image = { id: string; url: string; position: number };
+type Image = { id: string; url: string; ordinal: number };
 
 function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {

@@ -73,19 +73,19 @@ enum SupplierMemberRole {
 }
 
 model User {
-  id                         String               @id @default(cuid())
-  email                      String               @unique
+  id                         String                    @id @default(cuid())
+  email                      String                    @unique
   passwordHash               String
   name                       String
-  role                       Role                 @default(BUYER)
+  role                       Role                      @default(BUYER)
   manufacturerName           String?
   // Partial unique index on (manufacturerName) where role='MANUFACTURER'
   // is enforced by migration 20260607000000_unique_oem_manufacturer_name.
   // Prisma doesn't model partial uniques natively.
-  manufacturerTagline        String               @default("")
-  manufacturerBio            String               @default("")
+  manufacturerTagline        String                    @default("")
+  manufacturerBio            String                    @default("")
   manufacturerLogoUrl        String?
-  manufacturerWebsite        String               @default("")
+  manufacturerWebsite        String                    @default("")
   // Buyer company profile (B2B). Shown on checkout, order detail, invoice,
   // and in the shipped/paid emails when set. Optional; guest checkout
   // doesn't get this.
@@ -102,13 +102,13 @@ model User {
   // PLH-1: verify token is hashed at rest (SHA-256, hex). The raw token only
   // appears in the URL we email and in memory between generation and send.
   // Mirrors PasswordResetToken / AccountToken.
-  emailVerificationTokenHash String?              @unique
+  emailVerificationTokenHash String?                   @unique
   emailVerificationExpiresAt DateTime?
   emailVerificationSentAt    DateTime?
   // PLH-1: bumped on password change, password reset, 2FA disable, email
   // change confirmation, and account self-delete. Every existing session
   // cookie issued before this timestamp is rejected on the next request.
-  sessionsValidFrom          DateTime             @default(now())
+  sessionsValidFrom          DateTime                  @default(now())
   // Soft delete for GDPR/CCPA. When set, PII is anonymized but order
   // history is retained for tax/accounting. Hard-delete happens after
   // 30 days unless the user recovers.
@@ -129,10 +129,10 @@ model User {
   // confirmation, payment receipt, refund, return, payout failure,
   // 2FA, security alerts) always send and bypass these flags. These
   // three only gate marketing-ish broadcasts.
-  notifyOrderEmails          Boolean              @default(true)
-  notifyMarketingEmails      Boolean              @default(true)
-  notifyProductUpdates       Boolean              @default(true)
-  createdAt                  DateTime             @default(now())
+  notifyOrderEmails          Boolean                   @default(true)
+  notifyMarketingEmails      Boolean                   @default(true)
+  notifyProductUpdates       Boolean                   @default(true)
+  createdAt                  DateTime                  @default(now())
   accountTokens              AccountToken[]
   // PLH-3c F3: OEM approval gate. A MANUFACTURER user submits a
   // ManufacturerApplication when they pick a brand name; admin must
@@ -234,61 +234,61 @@ model SearchEvent {
 }
 
 model Supplier {
-  id                String             @id @default(cuid())
-  name              String
-  contactEmail      String
-  status            SupplierStatus     @default(APPROVED)
-  rating            Float              @default(4.7)
-  reviews           Int                @default(0)
-  onTimeRate        Float              @default(97.5)
-  certifications    String             @default("")
-  logoUrl           String?
-  website           String             @default("")
-  description       String             @default("")
+  id                          String              @id @default(cuid())
+  name                        String
+  contactEmail                String
+  status                      SupplierStatus      @default(APPROVED)
+  rating                      Float               @default(4.7)
+  reviews                     Int                 @default(0)
+  onTimeRate                  Float               @default(97.5)
+  certifications              String              @default("")
+  logoUrl                     String?
+  website                     String              @default("")
+  description                 String              @default("")
   // Go-live gate. Defaults to false. The supplier's products are filtered
   // out of the public catalog, the home page, brand storefronts, search,
   // and the sitemap until an admin flips this to true (typically after the
   // 10-item onboarding checklist passes: legal docs approved, bank info
   // on file, at least one product). See lib/supplier-access.ts.
-  publicVisible     Boolean            @default(false)
+  publicVisible               Boolean             @default(false)
   // LEGACY payout method summary (Polish 6). Superseded by Stripe Connect
   // in P8. Kept on existing rows for audit history but the supplier UI
   // surfaces the stripeConnect* fields below as the source of truth.
-  bankInfoStatus    String             @default("MISSING") // MISSING | PENDING | ON_FILE | REJECTED
-  bankInfoLast4     String?
-  bankInfoType      String? // CHECKING | SAVINGS
-  bankInfoBankName  String?
-  bankInfoNote      String             @default("")
-  bankInfoUpdatedAt DateTime?
+  bankInfoStatus              String              @default("MISSING") // MISSING | PENDING | ON_FILE | REJECTED
+  bankInfoLast4               String?
+  bankInfoType                String? // CHECKING | SAVINGS
+  bankInfoBankName            String?
+  bankInfoNote                String              @default("")
+  bankInfoUpdatedAt           DateTime?
   // Stripe Connect Express. Supplier onboards via Stripe-hosted flow; the
   // PartsPort UI just renders an "Active / Pending / Disabled" status.
   // PartsPort never touches the account or routing numbers.
-  stripeAccountId              String?   @unique
-  stripeChargesEnabled         Boolean   @default(false)
-  stripePayoutsEnabled         Boolean   @default(false)
-  stripeOnboardingCompletedAt  DateTime?
+  stripeAccountId             String?             @unique
+  stripeChargesEnabled        Boolean             @default(false)
+  stripePayoutsEnabled        Boolean             @default(false)
+  stripeOnboardingCompletedAt DateTime?
   // Reserve / chargeback holdback. Each Payout subtracts this percent of
   // the supplier subtotal before transferring; held funds accumulate in
   // reserveBalanceCents and release after 60 days via cron (P8 S6) when
   // no chargeback or refund has hit the order.
-  reservePercent       Int     @default(500)   // basis points (500 = 5%)
-  reserveBalanceCents  Int     @default(0)
+  reservePercent              Int                 @default(500) // basis points (500 = 5%)
+  reserveBalanceCents         Int                 @default(0)
   // P9.5: refund shortfall accounting. When a refund clears more than the
   // available reserveBalanceCents (typical for 60+ day-old orders where
   // the supplier was already paid out), the difference is added here and
   // netted against future Payouts via lib/payouts.ts. Always >= 0.
-  owedToPlatformCents  Int     @default(0)
-  user              User?              @relation(fields: [userId], references: [id])
-  userId            String?            @unique
-  products          Product[]
-  productReviews    Review[]
-  payouts           Payout[]
-  members           SupplierMember[]
-  invites           SupplierInvite[]
-  documents         SupplierDocument[]
-  warehouses        SupplierWarehouse[]
-  orderSlots        OrderSupplierSlot[]
-  createdAt         DateTime           @default(now())
+  owedToPlatformCents         Int                 @default(0)
+  user                        User?               @relation(fields: [userId], references: [id])
+  userId                      String?             @unique
+  products                    Product[]
+  productReviews              Review[]
+  payouts                     Payout[]
+  members                     SupplierMember[]
+  invites                     SupplierInvite[]
+  documents                   SupplierDocument[]
+  warehouses                  SupplierWarehouse[]
+  orderSlots                  OrderSupplierSlot[]
+  createdAt                   DateTime            @default(now())
 }
 
 model SupplierDocument {
@@ -325,7 +325,7 @@ model SupplierWarehouse {
   label      String   @default("")
   zip        String
   city       String
-  state      String   // two-letter US state code
+  state      String // two-letter US state code
   isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
 
@@ -400,40 +400,42 @@ model Product {
 
 model ProductImage {
   id        String   @id @default(cuid())
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   url       String
-  position  Int      @default(0)
+  alt       String   @default("")
+  ordinal   Int
   createdAt DateTime @default(now())
 
-  @@index([productId])
+  @@unique([productId, ordinal])
+  @@index([productId, ordinal])
 }
 
 model Payout {
-  id              String       @id @default(cuid())
-  reference       String       @unique
-  supplier        Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  supplierId      String
-  order           Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId         String
+  id               String              @id @default(cuid())
+  reference        String              @unique
+  supplier         Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId       String
+  order            Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId          String
   // amountCents is what the supplier actually receives: subtotal share
   // minus reserve. reservedCents records what was held back, mirrored
   // onto Order.reservedCents for the buyer-facing order view.
-  amountCents     Int
-  reservedCents   Int          @default(0)
-  status          PayoutStatus @default(DUE)
+  amountCents      Int
+  reservedCents    Int                 @default(0)
+  status           PayoutStatus        @default(DUE)
   // Stripe transfer id for the supplier portion. Null on legacy manual
   // payouts (pre-P8) and on payouts where Connect onboarding wasn't done.
-  stripeTransferId String?     @unique
+  stripeTransferId String?             @unique
   // Number of retry attempts the payout-retry cron has burned; gives the
   // cron an exponential backoff and a stopping point.
-  retryAttempts   Int          @default(0)
-  lastRetryAt     DateTime?
-  failureReason   String       @default("")
-  note            String       @default("")
-  createdAt       DateTime     @default(now())
-  paidAt          DateTime?
-  orderSlots      OrderSupplierSlot[]
+  retryAttempts    Int                 @default(0)
+  lastRetryAt      DateTime?
+  failureReason    String              @default("")
+  note             String              @default("")
+  createdAt        DateTime            @default(now())
+  paidAt           DateTime?
+  orderSlots       OrderSupplierSlot[]
 
   @@unique([supplierId, orderId])
   @@index([status])
@@ -441,19 +443,18 @@ model Payout {
 
 /**
  * Audit trail for reserve holdback. Type values:
- *   HOLD       - amount held when a payout was created
- *   RELEASE    - amount released back to the supplier after the 60-day
- *                quiet window or admin manual release
- *   DRAW_DOWN  - amount pulled from the reserve to cover a refund or
- *                chargeback
- *
+ * HOLD       - amount held when a payout was created
+ * RELEASE    - amount released back to the supplier after the 60-day
+ * quiet window or admin manual release
+ * DRAW_DOWN  - amount pulled from the reserve to cover a refund or
+ * chargeback
  * The running supplier balance is in Supplier.reserveBalanceCents; this
  * table is the per-transaction history.
  */
 model SupplierReserveTransaction {
   id          String   @id @default(cuid())
   supplierId  String
-  type        String   // HOLD | RELEASE | DRAW_DOWN | OWED_INCURRED
+  type        String // HOLD | RELEASE | DRAW_DOWN | OWED_INCURRED
   amountCents Int
   orderId     String?
   reason      String   @default("")
@@ -490,7 +491,7 @@ model Refund {
   amountCents     Int
   reason          String   @default("")
   returnRequestId String?
-  refundedBy      String?  // User.id of the admin who triggered it
+  refundedBy      String? // User.id of the admin who triggered it
   status          String   @default("succeeded") // succeeded | pending | failed
   createdAt       DateTime @default(now())
 
@@ -516,84 +517,84 @@ model ReturnRequest {
 }
 
 model Order {
-  id                  String          @id @default(cuid())
-  reference           String          @unique
-  status              OrderStatus     @default(PENDING)
-  buyer               User?           @relation(fields: [buyerId], references: [id])
-  buyerId             String?
-  buyerEmail          String
-  buyerName           String
+  id                    String              @id @default(cuid())
+  reference             String              @unique
+  status                OrderStatus         @default(PENDING)
+  buyer                 User?               @relation(fields: [buyerId], references: [id])
+  buyerId               String?
+  buyerEmail            String
+  buyerName             String
   // Snapshotted from User.companyName / User.companyLogoUrl at order
   // creation time so later profile edits never retroactively rewrite a
   // past invoice's branding.
-  buyerCompanyName    String?
-  buyerCompanyLogoUrl String?
-  shipTo              String
+  buyerCompanyName      String?
+  buyerCompanyLogoUrl   String?
+  shipTo                String
   // P9.5: server-side idempotency. Hash of (Idempotency-Key header or
   // body.idempotencyKey) + buyer (userId or email). Two identical POSTs
   // collide on this unique index; the second POST returns the existing
   // order id instead of creating a duplicate. Pre-P9.5 the route had no
   // dedupe and the verify chat confirmed duplicates were being created.
-  idempotencyKey      String?         @unique
-  subtotalCents       Int
-  freightCents        Int             @default(0)
-  feeCents            Int
-  taxCents            Int             @default(0)
-  totalCents          Int
-  feeRateBps          Int             @default(600)
-  paymentMethod       String          @default("paypal")
-  paypalOrderId       String?
+  idempotencyKey        String?             @unique
+  subtotalCents         Int
+  freightCents          Int                 @default(0)
+  feeCents              Int
+  taxCents              Int                 @default(0)
+  totalCents            Int
+  feeRateBps            Int                 @default(600)
+  paymentMethod         String              @default("paypal")
+  paypalOrderId         String?
   // Stripe payment_intent id captured from the checkout session webhook.
   // Required for the Stripe refund flow (P8 S4).
   stripePaymentIntentId String?
   // Running totals updated transactionally:
   //   refundedCents: sum of Refund rows; flips Order to REFUNDED at full.
   //   reservedCents: mirror of sum(Payout.reservedCents) for this order.
-  refundedCents       Int             @default(0)
-  reservedCents       Int             @default(0)
+  refundedCents         Int                 @default(0)
+  reservedCents         Int                 @default(0)
   // P9 freight. freightCarrier/Service: label for the chosen rate.
   // freightBreakdown: when the cart spans multiple suppliers, this is
   // the per-supplier-shipment array (carrier, service, cents, originZip).
   // freightSurcharges: { liftgate, residential, insideDelivery } booleans
   // (P9 S4). Stored as JSON to avoid a migration per new surcharge type.
-  freightCarrier      String?
-  freightService      String?
-  freightBreakdown    Json?
-  freightSurcharges   Json?
+  freightCarrier        String?
+  freightService        String?
+  freightBreakdown      Json?
+  freightSurcharges     Json?
   // P9.5: Shippo labels. shippoLabels is an array of { supplierId,
   // labelUrl, trackingNumber, carrier, service, transactionId } - one
   // per shipment, mirrors freightBreakdown. P9 S5 only stored a single
   // carrier+tracking on top-level fields; multi-supplier orders need
   // per-shipment labels. Existing single-supplier orders keep using the
   // top-level carrier + trackingCode fields.
-  shippoLabels        Json?
-  shipmentStage       String          @default("")
-  carrier             String?
-  trackingCode        String?
+  shippoLabels          Json?
+  shipmentStage         String              @default("")
+  carrier               String?
+  trackingCode          String?
   // PLH-3a B1: real ship timestamp set inside markOrderShipped() when an
   // order transitions to shipmentStage = "Shipped". Idempotent (only set
   // when null). Supplier-health uses this for accurate avg days-to-ship
   // instead of approximating with createdAt.
-  shippedAt           DateTime?
+  shippedAt             DateTime?
   // PLH-3c F5: set when an order transitions to Delivered (auto-deliver
   // cron, ops-page mark-delivered, buyer self-confirm). Idempotent (only
   // set when null). Drives the 30-day post-delivery return window.
-  deliveredAt         DateTime?
+  deliveredAt           DateTime?
   // PLH-2 Phase 4e (E2): set when sendOrderDelivered fires successfully
   // after the auto-deliver cron flips the order. If the email throws, this
   // stays null and the AUTO_DELIVER_EMAIL_FAILED audit row is the trail.
-  deliveryEmailSentAt DateTime?
-  items               OrderItem[]
-  invoice             Invoice?
-  returns             ReturnRequest[]
-  payouts             Payout[]
-  refunds             Refund[]
-  messages            Message[]
-  reviews             Review[]
-  supplierSlots       OrderSupplierSlot[]
-  createdAt           DateTime        @default(now())
-  paidAt              DateTime?
-  cancelledAt         DateTime?
+  deliveryEmailSentAt   DateTime?
+  items                 OrderItem[]
+  invoice               Invoice?
+  returns               ReturnRequest[]
+  payouts               Payout[]
+  refunds               Refund[]
+  messages              Message[]
+  reviews               Review[]
+  supplierSlots         OrderSupplierSlot[]
+  createdAt             DateTime            @default(now())
+  paidAt                DateTime?
+  cancelledAt           DateTime?
 }
 
 model Invoice {
@@ -655,19 +656,19 @@ model QuoteRequest {
 }
 
 model Message {
-  id          String        @id @default(cuid())
-  order       Order?        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId     String?
-  quote       QuoteRequest? @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  quoteId     String?
-  sender      User?         @relation(fields: [senderId], references: [id], onDelete: SetNull)
-  senderId    String?
-  senderName  String
-  senderEmail String
-  senderRole  String
-  body        String
-  createdAt   DateTime      @default(now())
-  inboundFingerprint String? @unique
+  id                 String        @id @default(cuid())
+  order              Order?        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId            String?
+  quote              QuoteRequest? @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId            String?
+  sender             User?         @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  senderId           String?
+  senderName         String
+  senderEmail        String
+  senderRole         String
+  body               String
+  createdAt          DateTime      @default(now())
+  inboundFingerprint String?       @unique
 
   @@index([orderId])
   @@index([quoteId])
@@ -699,8 +700,8 @@ model AuditLog {
  */
 model TaxRegistration {
   id                 String    @id @default(cuid())
-  state              String    @unique  // "TX" | "CA" | etc.
-  registrationStatus String    // NOT_REQUIRED | REQUIRED | REGISTERED | FILING
+  state              String    @unique // "TX" | "CA" | etc.
+  registrationStatus String // NOT_REQUIRED | REQUIRED | REGISTERED | FILING
   registeredAt       DateTime?
   nextFilingDue      DateTime?
   notes              String    @default("")
@@ -717,9 +718,9 @@ model TaxRegistration {
  * Singleton: one row with id = "singleton".
  */
 model ReconciliationState {
-  id        String   @id @default("singleton")
+  id        String    @id @default("singleton")
   cursor    DateTime?
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime  @updatedAt
 }
 
 /// PLH-3c F3: OEM approval gate. Anyone signing up as MANUFACTURER must
@@ -755,29 +756,29 @@ enum MfgAppStatus {
 /// payout linkage. Payout still carries a single orderId/supplierId pair
 /// for backward compat; orderSlots is the forward path.
 model OrderSupplierSlot {
-  id             String   @id @default(cuid())
-  orderId        String
-  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  supplierId     String
-  supplier       Supplier @relation(fields: [supplierId], references: [id])
-  subtotalCents  Int
-  freightCents   Int
-  feeCents       Int
-  refundedCents  Int      @default(0)
-  payoutId       String?
-  payout         Payout?  @relation(fields: [payoutId], references: [id])
+  id            String    @id @default(cuid())
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  supplierId    String
+  supplier      Supplier  @relation(fields: [supplierId], references: [id])
+  subtotalCents Int
+  freightCents  Int
+  feeCents      Int
+  refundedCents Int       @default(0)
+  payoutId      String?
+  payout        Payout?   @relation(fields: [payoutId], references: [id])
   // PLH-3g P5: per-supplier shipment dispatch. Each slot tracks its own
   // ship state so a multi-supplier order can have one supplier shipped
   // while another is still Pending. The parent Order.shipmentStage is
   // recomputed as the aggregate (see markSlotShipped in lib/shipping.ts).
-  carrier        String?
-  trackingCode   String?
-  trackingUrl    String?
-  shipmentStage  String   @default("Pending")
-  shippedAt      DateTime?
-  deliveredAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  carrier       String?
+  trackingCode  String?
+  trackingUrl   String?
+  shipmentStage String    @default("Pending")
+  shippedAt     DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@unique([orderId, supplierId])
   @@index([supplierId])

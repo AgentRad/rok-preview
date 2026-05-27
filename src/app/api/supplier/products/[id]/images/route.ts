@@ -45,7 +45,7 @@ export async function GET(
   const { id } = await params;
   const images = await prisma.productImage.findMany({
     where: { productId: id },
-    orderBy: { position: "asc" },
+    orderBy: { ordinal: "asc" },
   });
   return NextResponse.json({ images });
 }
@@ -72,12 +72,12 @@ export async function POST(
 
   const last = await prisma.productImage.findFirst({
     where: { productId: id },
-    orderBy: { position: "desc" },
-    select: { position: true },
+    orderBy: { ordinal: "desc" },
+    select: { ordinal: true },
   });
-  const next = (last?.position ?? -1) + 1;
+  const next = (last?.ordinal ?? -1) + 1;
   const image = await prisma.productImage.create({
-    data: { productId: id, url, position: next },
+    data: { productId: id, url, ordinal: next },
   });
 
   // Keep the legacy Product.imageUrl in sync with the first image so the
@@ -116,13 +116,13 @@ export async function DELETE(
   // Repack positions and refresh Product.imageUrl from the remaining images.
   const remaining = await prisma.productImage.findMany({
     where: { productId: id },
-    orderBy: { position: "asc" },
+    orderBy: { ordinal: "asc" },
   });
   for (let i = 0; i < remaining.length; i++) {
-    if (remaining[i].position !== i) {
+    if (remaining[i].ordinal !== i) {
       await prisma.productImage.update({
         where: { id: remaining[i].id },
-        data: { position: i },
+        data: { ordinal: i },
       });
     }
   }

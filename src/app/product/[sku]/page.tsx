@@ -87,7 +87,7 @@ export default async function ProductPage({
           },
         },
       },
-      images: { orderBy: { position: "asc" } },
+      images: { orderBy: { ordinal: "asc" } },
     },
   });
   if (!product || !product.active) notFound();

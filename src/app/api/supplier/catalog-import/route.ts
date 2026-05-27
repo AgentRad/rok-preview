@@ -19,7 +19,11 @@ import {
   detectDelimiter,
   validateRow,
 } from "@/lib/import-mapping";
-// import-ai wires in at PLH-3f S2; chat action returns 503 until then.
+import {
+  isImportAIEnabled,
+  streamMappingHelp,
+  MAX_IMPORT_USER_MESSAGE_CHARS,
+} from "@/lib/import-ai";
 
 // PLH-2 Phase 4a (A4): 2 MB cap on raw catalog text.
 const MAX_RAW_BYTES = 2 * 1024 * 1024;
@@ -352,7 +356,7 @@ async function commitRows(
                   data: {
                     productId: product.id,
                     url: r.imageUrl,
-                    position: 0,
+                    ordinal: 0,
                   },
                 });
               }
@@ -475,18 +479,95 @@ async function parseAction(body: {
 // chatAction. Streams the AI reply as plain text. The client extracts the
 // final ```json``` block to swap the proposed mapping in.
 // ---------------------------------------------------------------------------
-async function chatAction(_body: {
+async function chatAction(body: {
   mapping?: ImportMapping;
   filters?: ImportFilters;
   headers?: string[];
   sampleRows?: Record<string, string>[];
   userMessage?: string;
 }) {
-  // Wired up in PLH-3f S2 alongside src/lib/import-ai.ts.
-  return NextResponse.json(
-    { error: "AI chat is not yet enabled. Coming in PLH-3f S2." },
-    { status: 503 }
-  );
+  if (!isImportAIEnabled()) {
+    return NextResponse.json(
+      { error: "AI assistant is not configured" },
+      { status: 503 }
+    );
+  }
+  const auth = await authorize("chat");
+  if ("err" in auth) return auth.err;
+  const { ctx, user } = auth;
+
+  const userMessage = String(body.userMessage || "").trim();
+  if (!userMessage) {
+    return NextResponse.json(
+      { error: "userMessage is required." },
+      { status: 400 }
+    );
+  }
+  if (userMessage.length > MAX_IMPORT_USER_MESSAGE_CHARS) {
+    return NextResponse.json(
+      {
+        error: `Message is too long, keep it under ${MAX_IMPORT_USER_MESSAGE_CHARS} characters.`,
+      },
+      { status: 400 }
+    );
+  }
+
+  const encoder = new TextEncoder();
+  const supplierId = ctx.supplier.id;
+  const supplierName = ctx.supplier.name;
+  const userId = user.id;
+  const userEmail = user.email;
+  const questionHash = crypto
+    .createHash("sha256")
+    .update(userMessage)
+    .digest("hex");
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        const iter = streamMappingHelp({
+          supplierContext: { id: supplierId, name: supplierName },
+          currentMapping: body.mapping || [],
+          currentFilters: body.filters || {},
+          headers: body.headers || [],
+          sampleRows: body.sampleRows || [],
+          userMessage,
+        });
+        for await (const chunk of iter) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+        await writeAuditLog({
+          actor: { id: userId, email: userEmail },
+          action: "IMPORT_AI_ASKED",
+          targetType: "Supplier",
+          targetId: supplierId,
+          summary: `Import-assistant question (${userMessage.length} chars)`,
+          metadata: { questionHash },
+        });
+      } catch (err) {
+        captureError(err, { subsystem: "import-ai" });
+        try {
+          controller.enqueue(
+            encoder.encode(
+              "\n\n[Sorry, the assistant hit an error. Try again in a moment.]"
+            )
+          );
+        } catch {
+          /* stream already closed */
+        }
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -824,7 +905,7 @@ async function legacyImportHandler(body: { csv?: string; commit?: boolean }) {
                   data: {
                     productId: product.id,
                     url: r.imageUrl,
-                    position: 0,
+                    ordinal: 0,
                   },
                 });
               }
