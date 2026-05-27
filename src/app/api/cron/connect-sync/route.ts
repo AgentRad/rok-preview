@@ -29,7 +29,11 @@ export const runtime = "nodejs";
  * accruing pending transfers in the same business day.
  */
 
-const MAX_PER_RUN = 500;
+// PLH-3e B9: bounded to mirror PLH-2 Phase 4e auto-deliver / reserve-release.
+// ASC by id so an oldest-first walk; hasMore in the response payload signals
+// the cron should be re-fired (Vercel cron retries on hasMore, or a future
+// run picks up the rest).
+const MAX_PER_RUN = 200;
 
 async function adminActor() {
   // Best-effort admin "actor" stand-in. The cron runs without a user
@@ -46,7 +50,8 @@ export async function GET(req: Request) {
 
   const suppliers = await prisma.supplier.findMany({
     where: { stripeAccountId: { not: null } },
-    take: MAX_PER_RUN,
+    take: MAX_PER_RUN + 1,
+    orderBy: { id: "asc" },
     select: {
       id: true,
       name: true,
@@ -54,13 +59,15 @@ export async function GET(req: Request) {
       publicVisible: true,
     },
   });
+  const hasMore = suppliers.length > MAX_PER_RUN;
+  const batch = hasMore ? suppliers.slice(0, MAX_PER_RUN) : suppliers;
 
   let scanned = 0;
   let disabled = 0;
   const errors: string[] = [];
   const actor = await adminActor();
 
-  for (const s of suppliers) {
+  for (const s of batch) {
     scanned++;
     try {
       const updated = await syncSupplierConnectStatus(s.id);
@@ -101,5 +108,5 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, scanned, disabled, errors });
+  return NextResponse.json({ ok: true, processed: scanned, disabled, errors, hasMore });
 }
