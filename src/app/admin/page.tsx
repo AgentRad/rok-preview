@@ -85,7 +85,7 @@ export default async function AdminConsole() {
         take: 12,
       }),
       prisma.address.findMany({
-        where: { taxExemptCertificateUrl: { not: null } },
+        where: { taxExemptCertificateUrl: { not: null }, deletedAt: null },
         include: { user: { select: { name: true, email: true } } },
         orderBy: [
           // PENDING float to the top; APPROVED / REJECTED below.

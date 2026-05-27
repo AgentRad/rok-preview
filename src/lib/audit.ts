@@ -106,6 +106,12 @@ export const AUDIT_ACTIONS = [
   // PLH-3i P5: admin "Run reconcile now" button at
   // /admin/integrations/quickbooks invoked the reconcile helper.
   "QBO_RECONCILE_RAN",
+  // PLH-3j P2: buyer soft-deleted an address. The row remains in the
+  // table so historical Order ship-to denorm survives, but the buyer's
+  // address-book reads filter it out.
+  "ADDRESS_SOFT_DELETED",
+  // PLH-3j P4: tax-exempt cert expiry reminder cron sent an email.
+  "TAX_EXEMPT_EXPIRY_NOTICE",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

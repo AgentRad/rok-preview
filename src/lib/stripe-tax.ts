@@ -58,7 +58,7 @@ export async function lookupTaxExemption(
 ): Promise<TaxExemptionState> {
   if (!buyerId) return { isExempt: false, certificateUrl: null };
   const approved = await prisma.address.findFirst({
-    where: { userId: buyerId, taxExemptStatus: "APPROVED" },
+    where: { userId: buyerId, taxExemptStatus: "APPROVED", deletedAt: null },
     orderBy: { createdAt: "desc" },
   });
   return {

@@ -42,7 +42,7 @@ export default async function AccountPage({
     getBuyerAttention(user.id),
     user.role === "BUYER"
       ? prisma.address.findMany({
-          where: { userId: user.id },
+          where: { userId: user.id, deletedAt: null },
           orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
         })
       : Promise.resolve([]),

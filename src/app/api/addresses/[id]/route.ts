@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
 async function ownedAddress(userId: string, id: string) {
-  return prisma.address.findFirst({ where: { id, userId } });
+  // PLH-3j P2: filter soft-deleted rows so a deleted address cannot be
+  // re-edited or re-deleted from any address-book mutation route.
+  return prisma.address.findFirst({ where: { id, userId, deletedAt: null } });
 }
 
 export async function PATCH(
@@ -64,18 +67,34 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "Address not found." }, { status: 404 });
   }
-  await prisma.address.delete({ where: { id } });
-  if (existing.isDefault) {
-    const next = await prisma.address.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
+  // PLH-3j P2: soft-delete. Historical Orders that snapshotted the
+  // ship-to from this Address keep their reference (no FK breakage,
+  // no denorm loss). Reads filter deletedAt = null so the row no
+  // longer shows up in the buyer's address book.
+  await prisma.$transaction(async (tx) => {
+    await tx.address.update({
+      where: { id },
+      data: { deletedAt: new Date(), isDefault: false },
     });
-    if (next) {
-      await prisma.address.update({
-        where: { id: next.id },
-        data: { isDefault: true },
+    if (existing.isDefault) {
+      const next = await tx.address.findFirst({
+        where: { userId: user.id, deletedAt: null },
+        orderBy: { createdAt: "desc" },
       });
+      if (next) {
+        await tx.address.update({
+          where: { id: next.id },
+          data: { isDefault: true },
+        });
+      }
     }
-  }
+  });
+  await writeAuditLog({
+    actor: { id: user.id, email: user.email },
+    action: "ADDRESS_SOFT_DELETED",
+    targetType: "Address",
+    targetId: id,
+    summary: `User soft-deleted address ${id}`,
+  });
   return NextResponse.json({ ok: true });
 }

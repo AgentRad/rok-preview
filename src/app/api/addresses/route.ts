@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   }
   const addresses = await prisma.address.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, deletedAt: null },
     orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
   });
   return NextResponse.json({ addresses });
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     // sneak past 25.
     created = await prisma.$transaction(async (tx) => {
       const liveCount = await tx.address.count({
-        where: { userId: user.id },
+        where: { userId: user.id, deletedAt: null },
       });
       if (liveCount >= 25) {
         throw new Error("ADDRESS_BOOK_FULL");

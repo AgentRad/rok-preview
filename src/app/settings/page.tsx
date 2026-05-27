@@ -30,7 +30,7 @@ export default async function SettingsPage({
 
   const addresses = isBuyer
     ? await prisma.address.findMany({
-        where: { userId: user.id },
+        where: { userId: user.id, deletedAt: null },
         orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
       })
     : [];

@@ -47,7 +47,7 @@ export async function POST(
   }
   const { id } = await params;
   const address = await prisma.address.findFirst({
-    where: { id, userId: user.id },
+    where: { id, userId: user.id, deletedAt: null },
   });
   if (!address) {
     return NextResponse.json({ error: "Address not found." }, { status: 404 });
@@ -182,7 +182,7 @@ export async function DELETE(
   }
   const { id } = await params;
   const address = await prisma.address.findFirst({
-    where: { id, userId: user.id },
+    where: { id, userId: user.id, deletedAt: null },
   });
   if (!address) {
     return NextResponse.json({ error: "Address not found." }, { status: 404 });

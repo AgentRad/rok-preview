@@ -226,8 +226,13 @@ model Address {
   taxExemptCertificateUrl String?
   taxExemptStatus         String? // "PENDING" | "APPROVED" | "REJECTED" | null
   createdAt               DateTime @default(now())
+  // PLH-3j P2: soft-delete so historical Order ship-to denorm is not
+  // lost when the buyer removes the row from their address book.
+  // Read paths filter deletedAt IS NULL; DELETE flips this instead.
+  deletedAt               DateTime?
 
   @@index([userId])
+  @@index([userId, deletedAt])
 }
 
 model SearchEvent {
