@@ -111,9 +111,8 @@ export default async function AdminConsole() {
       <div className="page-pad">
         <h1 className="page-title">Admin console</h1>
           <p className="page-sub">
-            Marketplace operations: suppliers, applications, and orders.{" "}
             <Link href="/ops" style={{ color: "var(--blue)", fontWeight: 600 }}>
-              Open fulfillment ops →
+              Fulfillment ops →
             </Link>{" "}
             ·{" "}
             <Link
