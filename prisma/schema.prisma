@@ -559,6 +559,11 @@ model Order {
   shipmentStage       String          @default("")
   carrier             String?
   trackingCode        String?
+  // PLH-3a B1: real ship timestamp set inside markOrderShipped() when an
+  // order transitions to shipmentStage = "Shipped". Idempotent (only set
+  // when null). Supplier-health uses this for accurate avg days-to-ship
+  // instead of approximating with createdAt.
+  shippedAt           DateTime?
   // PLH-2 Phase 4e (E2): set when sendOrderDelivered fires successfully
   // after the auto-deliver cron flips the order. If the email throws, this
   // stays null and the AUTO_DELIVER_EMAIL_FAILED audit row is the trail.

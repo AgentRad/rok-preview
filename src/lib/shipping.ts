@@ -72,6 +72,11 @@ export async function markOrderShipped(
       shipmentStage: "Shipped",
       carrier: carrierClean,
       trackingCode: trackingClean,
+      // PLH-3a B1: stamp the real ship time on the transition. Idempotent
+      // guard above already returns early when already Shipped, so this
+      // only fires on a true PAID -> Shipped flip. The order.shippedAt
+      // null-check below keeps a backfilled or hand-set value intact.
+      ...(order.shippedAt ? {} : { shippedAt: new Date() }),
     },
     include: { items: true },
   });

@@ -39,7 +39,7 @@ export default async function SupplierHealthPage() {
   // this is fine; tighten with a CTE later when volume warrants.
   const items = await prisma.orderItem.findMany({
     include: {
-      order: { select: { id: true, status: true, createdAt: true, refundedCents: true, totalCents: true, paidAt: true, shipmentStage: true } },
+      order: { select: { id: true, status: true, createdAt: true, refundedCents: true, totalCents: true, paidAt: true, shippedAt: true, shipmentStage: true } },
       product: { select: { supplierId: true } },
     },
   });
@@ -113,17 +113,19 @@ export default async function SupplierHealthPage() {
         m.grossTotal += o.totalCents;
         m.refundedTotal += o.refundedCents;
       }
-      // Days-to-ship: from paidAt to "Shipped" or "Delivered" stage. We
-      // don't store the ship timestamp directly, so we approximate
-      // using paidAt against the order's createdAt when shipped.
+      // PLH-3a B1: real days-to-ship using Order.shippedAt (stamped inside
+      // markOrderShipped on the actual transition). D30 window now bounds
+      // the ship date, not createdAt, so the rolling 30-day metric tracks
+      // recent fulfilment behaviour rather than recent order placement.
       if (
         o.paidAt &&
+        o.shippedAt &&
         (o.shipmentStage === "Shipped" || o.shipmentStage === "Delivered") &&
-        created >= D30
+        o.shippedAt.getTime() >= D30
       ) {
         const days = Math.max(
           0,
-          Math.round((o.createdAt.getTime() - o.paidAt.getTime()) / 86400_000)
+          Math.round((o.shippedAt.getTime() - o.paidAt.getTime()) / 86400_000)
         );
         const arr = shipDaysBySupplier.get(supId) || [];
         arr.push(days);
