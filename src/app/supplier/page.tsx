@@ -2,10 +2,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import {
   ROLE_LABEL,
-  canEditCatalog,
-  canFulfillOrders,
-  canRespondToQuotes,
-  canRunExports,
   canViewOrders,
   canViewPayouts,
   canViewQuotes,
@@ -16,45 +12,28 @@ import SiteFooter from "@/components/SiteFooter";
 import SupplierNav from "@/components/SupplierNav";
 import ActingAsBanner from "@/components/ActingAsBanner";
 import SupplierAIAssistant from "@/components/SupplierAIAssistant";
-import { isBlobConfigured } from "@/lib/blob-config";
-import { listClaimedManufacturers } from "@/lib/manufacturers";
 import { getSupplierAttention } from "@/lib/attention";
 
 import {
   loadSupplierWithProducts,
   loadSupplierDocuments,
-  loadSupplierWarehouses,
   loadSupplierOrders,
   loadSupplierQuotes,
   loadSupplierPayouts,
-  loadSupplierReserveTxns,
   computeSupplierReadiness,
-  getConnectSnap,
 } from "@/components/supplier/data";
 import StatsRow from "@/components/supplier/StatsRow";
 import AttentionPanel from "@/components/supplier/AttentionPanel";
 import GoLiveReadiness from "@/components/supplier/GoLiveReadiness";
-import CompanyLogoEditor from "@/components/supplier/CompanyLogoEditor";
-import LegalDocsEditor from "@/components/supplier/LegalDocsEditor";
-import WarehousesEditor from "@/components/supplier/WarehousesEditor";
-import PayoutMethodEditor from "@/components/supplier/PayoutMethodEditor";
-import CatalogEditor from "@/components/supplier/CatalogEditor";
-import TeamManager from "@/components/supplier/TeamManager";
-import ReserveBalanceCard from "@/components/supplier/ReserveBalanceCard";
-import PayoutsTable from "@/components/supplier/PayoutsTable";
-import QuoteRequestsTable from "@/components/supplier/QuoteRequestsTable";
-import IncomingOrdersTable from "@/components/supplier/IncomingOrdersTable";
+import CompactTiles from "@/components/supplier/CompactTiles";
 
 export const dynamic = "force-dynamic";
 
-export default async function SupplierDashboard({
-  searchParams,
-}: {
-  searchParams: Promise<{ stripeOnboard?: string }>;
-}) {
-  const sp = await searchParams;
-  const stripeOnboardSuccess = sp.stripeOnboard === "done";
-  const stripeOnboardRefresh = sp.stripeOnboard === "refresh";
+// PLH-3l P4: dashboard trimmed to daily ops. Editor cards (logo, legal docs,
+// warehouses, payout method, catalog, team), the full reserve/payouts table
+// and the full quotes/orders tables now live under their sub-routes. The
+// dashboard shows status + attention + AI tile + compact tiles linking out.
+export default async function SupplierDashboard() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== "SUPPLIER" && user.role !== "ADMIN") redirect("/");
@@ -63,13 +42,9 @@ export default async function SupplierDashboard({
   const role = ctx?.role ?? null;
   const supplier = ctx ? await loadSupplierWithProducts(ctx.supplier.id) : null;
 
-  const showCatalog = canEditCatalog(role);
   const showQuotes = canViewQuotes(role);
-  const canRespond = canRespondToQuotes(role);
   const showOrders = canViewOrders(role);
-  const canFulfill = canFulfillOrders(role);
   const showPayouts = canViewPayouts(role);
-  const showExports = canRunExports(role);
 
   if (!supplier) {
     return (
@@ -91,21 +66,15 @@ export default async function SupplierDashboard({
     );
   }
 
-  const [orders, quotes, payouts, attention, documents, warehouses, reserveTxns] =
-    await Promise.all([
-      loadSupplierOrders(supplier.id),
-      loadSupplierQuotes(supplier.id),
-      loadSupplierPayouts(supplier.id),
-      getSupplierAttention(supplier.id),
-      loadSupplierDocuments(supplier.id),
-      loadSupplierWarehouses(supplier.id),
-      loadSupplierReserveTxns(supplier.id),
-    ]);
-
-  const claimedManufacturers = showCatalog ? await listClaimedManufacturers() : [];
+  const [orders, quotes, payouts, attention, documents] = await Promise.all([
+    loadSupplierOrders(supplier.id),
+    loadSupplierQuotes(supplier.id),
+    loadSupplierPayouts(supplier.id),
+    getSupplierAttention(supplier.id),
+    loadSupplierDocuments(supplier.id),
+  ]);
 
   const readiness = computeSupplierReadiness(supplier, documents);
-  const connectSnap = getConnectSnap(supplier);
 
   // PLH-3g P8: revenue from supplier's slot subtotal when present.
   let revenue = 0;
@@ -122,7 +91,27 @@ export default async function SupplierDashboard({
   }
   const unitsInStock = supplier.products.reduce((s, p) => s + p.stock, 0);
   const activeListings = supplier.products.filter((p) => p.active).length;
-  const blobOk = isBlobConfigured();
+  const openQuotesList = quotes.filter((q) => q.status === "OPEN");
+  const openQuotes = openQuotesList.length;
+  const oldestQuoteDays =
+    openQuotesList.length === 0
+      ? null
+      : Math.floor(
+          (Date.now() -
+            openQuotesList
+              .map((q) => q.createdAt.getTime())
+              .reduce((a, b) => Math.min(a, b))) /
+            86400000
+        );
+  const shipQueueCount = orders.filter((o) => {
+    if (o.status !== "PAID") return false;
+    const slot = o.supplierSlots[0];
+    const stage = slot?.shipmentStage ?? "Pending";
+    return stage !== "Shipped" && stage !== "Delivered";
+  }).length;
+  const payoutsDueCents = payouts
+    .filter((p) => p.status === "DUE")
+    .reduce((s, p) => s + p.amountCents, 0);
 
   return (
     <>
@@ -159,83 +148,16 @@ export default async function SupplierDashboard({
             publicVisible={supplier.publicVisible}
           />
 
-          <CompanyLogoEditor
-            logoUrl={supplier.logoUrl}
-            supplierName={supplier.name}
-            blobConfigured={blobOk}
+          <CompactTiles
+            openQuotes={openQuotes}
+            oldestQuoteDays={oldestQuoteDays}
+            shipQueueCount={shipQueueCount}
+            payoutsDueCents={payoutsDueCents}
+            showQuotes={showQuotes}
+            showOrders={showOrders}
+            showPayouts={showPayouts}
+            ordersHref="/account#orders"
           />
-
-          <LegalDocsEditor documents={documents} blobConfigured={blobOk} />
-
-          <WarehousesEditor warehouses={warehouses} />
-
-          <PayoutMethodEditor
-            connectSnap={connectSnap}
-            successFlag={stripeOnboardSuccess}
-            refreshFlag={stripeOnboardRefresh}
-            legacyBank={{
-              show:
-                supplier.bankInfoStatus === "ON_FILE" && !connectSnap.active,
-              bankInfoStatus: supplier.bankInfoStatus,
-              bankInfoLast4: supplier.bankInfoLast4,
-              bankInfoType: supplier.bankInfoType,
-              bankInfoBankName: supplier.bankInfoBankName,
-              bankInfoNote: supplier.bankInfoNote,
-              bankInfoUpdatedAt: supplier.bankInfoUpdatedAt
-                ? supplier.bankInfoUpdatedAt.toISOString()
-                : null,
-            }}
-          />
-
-          {showCatalog && (
-            <CatalogEditor
-              products={supplier.products.map((p) => ({
-                id: p.id,
-                sku: p.sku,
-                name: p.name,
-                category: p.category,
-                manufacturer: p.manufacturer,
-                priceCents: p.priceCents,
-                unit: p.unit,
-                etaDays: p.etaDays,
-                stock: p.stock,
-                active: p.active,
-                imageUrl: p.imageUrl,
-                weightLbs: p.weightLbs,
-                freightClass: p.freightClass,
-                lengthIn: p.lengthIn,
-                widthIn: p.widthIn,
-                heightIn: p.heightIn,
-              }))}
-              manufacturers={claimedManufacturers}
-              showExports={showExports}
-            />
-          )}
-
-          <TeamManager />
-
-          {showPayouts && (
-            <ReserveBalanceCard
-              reserveBalanceCents={supplier.reserveBalanceCents}
-              owedToPlatformCents={supplier.owedToPlatformCents}
-              reservePercent={supplier.reservePercent}
-              reserveTxns={reserveTxns}
-            />
-          )}
-
-          {showPayouts && <PayoutsTable payouts={payouts} />}
-
-          {showQuotes && (
-            <QuoteRequestsTable quotes={quotes} canRespond={canRespond} />
-          )}
-
-          {showOrders && (
-            <IncomingOrdersTable
-              orders={orders}
-              supplierId={supplier.id}
-              canFulfill={canFulfill}
-            />
-          )}
         </div>
       </main>
       <SiteFooter />
