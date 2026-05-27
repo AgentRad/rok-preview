@@ -287,6 +287,7 @@ model Supplier {
   invites           SupplierInvite[]
   documents         SupplierDocument[]
   warehouses        SupplierWarehouse[]
+  orderSlots        OrderSupplierSlot[]
   createdAt         DateTime           @default(now())
 }
 
@@ -432,6 +433,7 @@ model Payout {
   note            String       @default("")
   createdAt       DateTime     @default(now())
   paidAt          DateTime?
+  orderSlots      OrderSupplierSlot[]
 
   @@unique([supplierId, orderId])
   @@index([status])
@@ -588,6 +590,7 @@ model Order {
   refunds             Refund[]
   messages            Message[]
   reviews             Review[]
+  supplierSlots       OrderSupplierSlot[]
   createdAt           DateTime        @default(now())
   paidAt              DateTime?
   cancelledAt         DateTime?
@@ -743,6 +746,32 @@ enum MfgAppStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+/// PLH-3g Phase 1: per-supplier slot inside an Order. Today every Order is
+/// single-supplier, so backfill creates exactly one slot per Order. The
+/// model exists so the upcoming multi-supplier cart refactor can attach N
+/// slots per Order with per-supplier subtotal, freight, fee, refund, and
+/// payout linkage. Payout still carries a single orderId/supplierId pair
+/// for backward compat; orderSlots is the forward path.
+model OrderSupplierSlot {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  supplierId     String
+  supplier       Supplier @relation(fields: [supplierId], references: [id])
+  subtotalCents  Int
+  freightCents   Int
+  feeCents       Int
+  refundedCents  Int      @default(0)
+  payoutId       String?
+  payout         Payout?  @relation(fields: [payoutId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([orderId, supplierId])
+  @@index([supplierId])
+  @@index([payoutId])
 }
 
 model SupplierApplication {
