@@ -140,6 +140,9 @@ model User {
   // storefront becomes live.
   manufacturerApplication    ManufacturerApplication?
   reviewedManufacturerApps   ManufacturerApplication[] @relation("ReviewedManufacturerApps")
+  // PLH-3i P1: QuickBooks Online Customer id, cached after the first
+  // ensureCustomer sync so subsequent invoices reuse the same QBO row.
+  qboCustomerId              String?
 }
 
 /**
@@ -612,6 +615,10 @@ model Invoice {
   buyerName     String
   buyerEmail    String
   shipTo        String
+  // PLH-3i P1: QuickBooks Online Invoice id, written by the sync helper
+  // after createInvoice succeeds. Null until P2 sync runs (or when QBO is
+  // not configured).
+  qboInvoiceId  String?
 }
 
 model OrderItem {
@@ -783,6 +790,23 @@ model OrderSupplierSlot {
   @@unique([orderId, supplierId])
   @@index([supplierId])
   @@index([payoutId])
+}
+
+/// PLH-3i P1: third-party integration credentials. One row per (provider,
+/// realmId) pair. accessToken + refreshToken stored raw in @db.Text
+/// (known gap; no ENCRYPTION_KEY infra in place at this round).
+model IntegrationCredential {
+  id                String    @id @default(cuid())
+  provider          String
+  realmId           String
+  accessToken       String    @db.Text
+  refreshToken      String    @db.Text
+  expiresAt         DateTime
+  connectedByUserId String
+  connectedAt       DateTime  @default(now())
+  lastUsedAt        DateTime?
+
+  @@unique([provider, realmId])
 }
 
 model SupplierApplication {

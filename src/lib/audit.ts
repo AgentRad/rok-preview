@@ -93,6 +93,16 @@ export const AUDIT_ACTIONS = [
   // products/ that no ProductImage row references and that are older than
   // the 7-day grace period.
   "ORPHAN_BLOB_DELETED",
+  // PLH-3i: QuickBooks Online integration lifecycle. CONNECTED/DISCONNECTED
+  // bracket the OAuth connect/disconnect flow. TOKEN_REFRESHED is written
+  // when the refresh-token grant rotates the access token. The remaining
+  // three are reserved for the P2..P4 sync phases that land later.
+  "QBO_CONNECTED",
+  "QBO_DISCONNECTED",
+  "QBO_TOKEN_REFRESHED",
+  "QBO_INVOICE_SYNCED",
+  "QBO_REFUND_SYNCED",
+  "QBO_SYNC_FAILED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -108,7 +118,8 @@ export type AuditTargetType =
   | "QuoteRequest"
   | "ManufacturerApplication"
   | "Product"
-  | "ProductImage";
+  | "ProductImage"
+  | "IntegrationCredential";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

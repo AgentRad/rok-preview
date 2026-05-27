@@ -90,6 +90,12 @@ const BUCKETS: Record<string, Bucket> = {
   // mis-wired retry loop) cannot fan out the thread fan-out email loop
   // dozens of times a minute. 20/min/user is well above any human pace.
   messages: { capacity: 20, windowMs: 60_000 },
+  // PLH-3i P1: outbound Intuit QuickBooks Online API. Intuit's published
+  // limit is 500 requests/minute/realm. We register the bucket now so the
+  // sync helpers in P2+ can call `rateLimit("intuit", realmId)` without a
+  // schema change later. In-memory pass at this round is fine; PartsPort
+  // won't approach this limit at launch.
+  intuit: { capacity: 500, windowMs: 60_000 },
   generic: { capacity: 60, windowMs: 60_000 },
 };
 
