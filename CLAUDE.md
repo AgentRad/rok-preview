@@ -841,6 +841,38 @@ text/html are NOT included; they must be fetched via
   Message row created with `inboundFingerprint` set, fan-out fired via
   `after()`. End-to-end Resend inbound round-trip is now proven.
 
+**PLH-3n bug #3 (2026-05-27).** Quoted-reply stripping polish. 1
+commit. The first real round-trip on RFQ-87K9UN stored a Message.body
+that included the Gmail attribution line ("On ... wrote:" wrapped onto
+two lines because Gmail soft-wraps the FROM address) plus the user's
+italic-wrapped signature block ("*Conrad Thompson*\nFounder & CEO\n
+agentgaming.gg") above it. `stripQuotedReply` only matched
+"On ... wrote:" on a single line, and didn't know about
+markdown-italic-name sig blocks.
+- Extended `stripQuotedReply` in `src/lib/strip-quoted-reply.ts`
+  (extracted from `inbound-email.ts` so the test harness can import
+  it without the `server-only` guard; the original module re-exports
+  it for backwards compatibility). New heuristics: join up to 3
+  consecutive lines when probing for "On ... wrote:" so Gmail iOS
+  soft-wraps get caught; recognize bare `--` and `__` delimiters in
+  addition to RFC 3676 `-- `; cut at a markdown-italic-name line
+  (`*Name*`) when the following block is <=4 non-empty lines, each
+  <=80 chars and without question marks (conservative — won't eat
+  a real sentence that happens to follow an italic phrase).
+- Added `scripts/test-strip-quoted-reply.mjs` running via Node 24's
+  `--test` + `--experimental-strip-types`. Covers the RFQ-87K9UN live
+  example, Gmail iOS wrap, Outlook From/Sent block, Apple Mail single
+  "On ... wrote:", no-quoted-history no-op, bare `--` / `--`/`__`
+  delimiters, italic-line-with-question negative case, and Gmail `>`
+  quote block. 10/10 pass. (Repo has no vitest/jest — PLH-3d block
+  flagged this; the Node built-in runner is the zero-dep substitute
+  that gets a real signal on the heuristic.)
+- `npx next build` clean. Re-triggering the Resend webhook replay
+  against `msg_3EKDSD3qDyfPLuguWYl2tQrbfB9` / email_id
+  `e95dafe3-b8a0-4a22-a94e-e43d92ac93be` against the live preview
+  pending Conrad (needs INBOUND_WEBHOOK_SECRET + RESEND_API_KEY in
+  the local shell, or run from Vercel preview shell).
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no

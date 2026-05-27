@@ -1,5 +1,8 @@
 import "server-only";
 import crypto from "node:crypto";
+import { stripQuotedReply } from "./strip-quoted-reply";
+
+export { stripQuotedReply };
 
 /**
  * Inbound email plumbing for reply-by-email.
@@ -119,52 +122,3 @@ export function parseReplyAddress(
   return { kind, id };
 }
 
-/**
- * Strip quoted-history, signatures, and common email cruft from a reply body.
- * Goal: keep just what the user actually typed at the top of the message.
- * This is best-effort, not perfect; we lean on conservative heuristics so we
- * never lose actual content even if we leave some quoted lines behind.
- */
-export function stripQuotedReply(raw: string): string {
-  if (!raw) return "";
-  // Normalize line endings.
-  const text = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const lines = text.split("\n");
-
-  // Find the first "On ... wrote:" header (Gmail / Apple Mail / Outlook).
-  const onWroteIdx = lines.findIndex((l) =>
-    /^\s*On\b.{0,200}\bwrote:\s*$/i.test(l)
-  );
-  // Find the first "From: ..." block (Outlook).
-  const fromHeaderIdx = lines.findIndex((l) =>
-    /^\s*From:\s.+<.+@.+>\s*$/i.test(l) || /^_{3,}$/.test(l)
-  );
-  // Find the first "-- " signature delimiter (RFC 3676).
-  const sigIdx = lines.findIndex((l) => /^-- ?$/.test(l));
-  // Find the first line that is purely a ">" quoted block (Gmail-style).
-  let quoteRunIdx = -1;
-  for (let i = 1; i < lines.length; i++) {
-    if (/^\s*>/.test(lines[i])) {
-      // Require two consecutive quoted lines so we don't eat a single ">"
-      // glyph used in plain text.
-      if (i + 1 < lines.length && /^\s*>/.test(lines[i + 1])) {
-        quoteRunIdx = i;
-        break;
-      }
-    }
-  }
-
-  const candidates = [onWroteIdx, fromHeaderIdx, sigIdx, quoteRunIdx].filter(
-    (i) => i > 0
-  );
-  const cutAt = candidates.length > 0 ? Math.min(...candidates) : lines.length;
-
-  let body = lines.slice(0, cutAt).join("\n");
-  // Trim "Sent from my iPhone" style sign-offs even when the "-- " delimiter
-  // is missing.
-  body = body.replace(
-    /\n+(Sent from my [^\n]+|Get Outlook for [^\n]+|Sent via [^\n]+|Get the [^\n]+)\s*$/i,
-    ""
-  );
-  return body.trim();
-}
