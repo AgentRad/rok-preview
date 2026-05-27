@@ -6,6 +6,7 @@ import { siteUrl } from "@/lib/site-url";
 import { captureError } from "@/lib/observability";
 import {
   canSendMessages,
+  resolveSupplierThreadRecipients,
   userHasAccessToSupplier,
 } from "@/lib/supplier-access";
 import { rateLimit } from "@/lib/rate-limit";
@@ -70,14 +71,25 @@ export async function POST(req: Request) {
     // Buyer message goes to each supplier email + admin (BCC bundled). Supplier
     // message goes to the buyer + admin. Admin message goes to both.
     if (!isBuyer) {
-      recipients.add(order.buyerEmail);
-      recipientUserIds.set(order.buyerEmail, order.buyerId || null);
+      const k = order.buyerEmail.toLowerCase();
+      recipients.add(k);
+      recipientUserIds.set(k, order.buyerId || null);
     }
     if (!isOrderSupplier) {
-      for (const it of order.items) {
-        recipients.add(it.product.supplier.contactEmail);
-        if (!recipientUserIds.has(it.product.supplier.contactEmail)) {
-          recipientUserIds.set(it.product.supplier.contactEmail, null);
+      // PLH-3p F1: fan out to every supplier teammate with send-message
+      // permission instead of only the supplier's single contactEmail.
+      const supplierIds = Array.from(
+        new Set(order.items.map((it) => it.product.supplierId))
+      );
+      for (const sid of supplierIds) {
+        const fans = await resolveSupplierThreadRecipients(sid);
+        for (const f of fans) {
+          const key = f.email.toLowerCase();
+          if (!key) continue;
+          recipients.add(key);
+          if (!recipientUserIds.has(key)) {
+            recipientUserIds.set(key, f.userId);
+          }
         }
       }
     }
@@ -105,13 +117,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }
     if (!isBuyer) {
-      recipients.add(quote.buyerEmail);
-      recipientUserIds.set(quote.buyerEmail, quote.buyerId || null);
+      const k = quote.buyerEmail.toLowerCase();
+      recipients.add(k);
+      recipientUserIds.set(k, quote.buyerId || null);
     }
     if (!isQuoteSupplier) {
-      recipients.add(quote.product.supplier.contactEmail);
-      if (!recipientUserIds.has(quote.product.supplier.contactEmail)) {
-        recipientUserIds.set(quote.product.supplier.contactEmail, null);
+      // PLH-3p F1: fan out to every supplier teammate with send-message
+      // permission instead of only the supplier's single contactEmail.
+      const fans = await resolveSupplierThreadRecipients(
+        quote.product.supplierId
+      );
+      for (const f of fans) {
+        const key = f.email.toLowerCase();
+        if (!key) continue;
+        recipients.add(key);
+        if (!recipientUserIds.has(key)) {
+          recipientUserIds.set(key, f.userId);
+        }
       }
     }
     subjectPrefix = `RFQ ${quote.reference}`;
@@ -129,6 +151,9 @@ export async function POST(req: Request) {
       body: text,
     },
   });
+
+  // PLH-3p F1: never email the posting user themselves.
+  recipients.delete(user.email.toLowerCase());
 
   const threadKind = orderId ? "order" : "quote";
   const threadId = orderId || quoteId;

@@ -13,6 +13,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { captureError } from "@/lib/observability";
 import {
   canSendMessages,
+  resolveSupplierThreadRecipients,
   userHasAccessToSupplier,
 } from "@/lib/supplier-access";
 
@@ -517,20 +518,42 @@ async function handleInbound(req: Request) {
     const recipients = new Set<string>();
     const recipientUserIds = new Map<string, string | null>();
     if (!isBuyer) {
-      recipients.add(order.buyerEmail);
-      recipientUserIds.set(order.buyerEmail, order.buyerId || null);
+      const k = order.buyerEmail.toLowerCase();
+      recipients.add(k);
+      recipientUserIds.set(k, order.buyerId || null);
     }
-    for (const it of order.items) {
-      if (!isOrderSupplier) {
-        const email = it.product.supplier?.contactEmail || "";
-        recipients.add(email);
-        if (email && !recipientUserIds.has(email)) {
-          recipientUserIds.set(email, null);
+    if (!isOrderSupplier) {
+      // PLH-3p F1: fan out to every supplier teammate with send-message
+      // permission instead of only the supplier's single contactEmail.
+      const supplierIds = Array.from(
+        new Set(order.items.map((i) => i.product.supplierId))
+      );
+      for (const sid of supplierIds) {
+        const fans = await resolveSupplierThreadRecipients(sid);
+        for (const f of fans) {
+          const key = f.email.toLowerCase();
+          if (!key) continue;
+          recipients.add(key);
+          if (!recipientUserIds.has(key)) {
+            recipientUserIds.set(key, f.userId);
+          }
         }
       }
     }
     recipients.delete("");
-    recipients.delete(user.email);
+    recipients.delete(user.email.toLowerCase());
+    await writeAuditLog({
+      actor: { id: user.id, email: user.email },
+      action: "INBOUND_FAN_OUT_OK",
+      targetType: "Order",
+      targetId: order.id,
+      summary: `Inbound fan-out queued to ${recipients.size} recipient(s)`,
+      metadata: {
+        threadKind: "order",
+        threadId: order.id,
+        recipientCount: recipients.size,
+      },
+    });
     // P9.5 HIGH 11: wrap in after() so the function stays alive past
     // the response on Vercel serverless. Pre-fix the fire-and-forget
     // .catch() pattern would drop the email on cold-start kill.
@@ -655,17 +678,39 @@ async function handleInbound(req: Request) {
   const recipients = new Set<string>();
   const recipientUserIds = new Map<string, string | null>();
   if (!isBuyer) {
-    recipients.add(quote.buyerEmail);
-    recipientUserIds.set(quote.buyerEmail, quote.buyerId || null);
+    const k = quote.buyerEmail.toLowerCase();
+    recipients.add(k);
+    recipientUserIds.set(k, quote.buyerId || null);
   }
   if (!isQuoteSupplier) {
-    recipients.add(quote.product.supplier.contactEmail);
-    if (!recipientUserIds.has(quote.product.supplier.contactEmail)) {
-      recipientUserIds.set(quote.product.supplier.contactEmail, null);
+    // PLH-3p F1: fan out to every supplier teammate with send-message
+    // permission instead of only the supplier's single contactEmail.
+    const fans = await resolveSupplierThreadRecipients(
+      quote.product.supplierId
+    );
+    for (const f of fans) {
+      const key = f.email.toLowerCase();
+      if (!key) continue;
+      recipients.add(key);
+      if (!recipientUserIds.has(key)) {
+        recipientUserIds.set(key, f.userId);
+      }
     }
   }
   recipients.delete("");
-  recipients.delete(user.email);
+  recipients.delete(user.email.toLowerCase());
+  await writeAuditLog({
+    actor: { id: user.id, email: user.email },
+    action: "INBOUND_FAN_OUT_OK",
+    targetType: "QuoteRequest",
+    targetId: quote.id,
+    summary: `Inbound fan-out queued to ${recipients.size} recipient(s)`,
+    metadata: {
+      threadKind: "quote",
+      threadId: quote.id,
+      recipientCount: recipients.size,
+    },
+  });
   // P9.5 HIGH 11: same after() wrap for the quote thread side.
   after(async () => {
     for (const to of recipients) {

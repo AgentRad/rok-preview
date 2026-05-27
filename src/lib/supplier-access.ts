@@ -315,6 +315,37 @@ export function publicSupplierFilter(): Prisma.SupplierWhereInput {
   return { publicVisible: true, status: "APPROVED" };
 }
 
+/**
+ * PLH-3p F1: resolve the list of supplier teammates who should receive a
+ * thread email (order/RFQ). Returns every SupplierMember on the supplier
+ * whose role satisfies canSendMessages, paired with their user id so the
+ * caller can honor per-user notification preferences. Falls back to a
+ * single anonymous entry built from `supplier.contactEmail` when zero
+ * eligible members exist (legacy / unattached suppliers). Caller is
+ * responsible for deduping against the posting user and across suppliers.
+ */
+export async function resolveSupplierThreadRecipients(
+  supplierId: string
+): Promise<{ email: string; userId: string | null }[]> {
+  const supplier = await prisma.supplier.findUnique({
+    where: { id: supplierId },
+    select: { contactEmail: true },
+  });
+  if (!supplier) return [];
+  const members = await prisma.supplierMember.findMany({
+    where: { supplierId },
+    select: { role: true, user: { select: { id: true, email: true } } },
+  });
+  const eligible = members
+    .filter((m) => canSendMessages(m.role))
+    .map((m) => ({ email: m.user.email, userId: m.user.id }));
+  if (eligible.length === 0) {
+    if (!supplier.contactEmail) return [];
+    return [{ email: supplier.contactEmail, userId: null }];
+  }
+  return eligible;
+}
+
 /** Short human-facing label for a role. */
 export const ROLE_LABEL: Record<SupplierMemberRole, string> = {
   OWNER: "Owner",
