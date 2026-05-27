@@ -420,6 +420,55 @@ PLH-3d + PLH-3e + PLH-3g: 28 CRITICAL + 62 HIGH closed, plus the
 launch-time single-supplier-cart constraint resolved by the PLH-3g
 multi-supplier refactor.**
 
+**PLH-3h (2026-05-26).** Multi-image product galleries (build plan
+Phase J). 5 phases shipped sequentially on the same branch. Replaces
+the single `Product.imageUrl` with a real ordered gallery model.
+- **P1 (model + backfill).** New `ProductImage` Prisma model
+  (productId, url, alt, ordinal, createdAt; unique `(productId,
+  ordinal)`). Migration backfills one ordinal-0 row per existing
+  Product from `Product.imageUrl`. `Product.imageUrl` retained as a
+  legacy fallback this round, kept in sync with the primary image on
+  every mutation, queued for removal in a future round once all
+  consumers migrate.
+- **P2 (supplier image manager).** New `/supplier/products/[id]/images`
+  page plus upload/reorder/delete/set-primary/alt API routes. 5 MB
+  per image, 12 images per product, magic-byte MIME check (PNG/JPEG/
+  WEBP only), random suffix in the blob path per the PLH-3c F8
+  pattern, rate-limited via the `supplier` bucket, every mutation
+  audit-logged (`IMAGE_UPLOADED`, `IMAGE_DELETED`, `IMAGES_REORDERED`,
+  `IMAGE_SET_PRIMARY`, `IMAGE_ALT_UPDATED`).
+- **P3 (buyer carousel).** Buyer-side carousel + lightbox on the
+  product detail page. Pure React + Tailwind, no library. Thumbnail
+  strip, keyboard navigation, lightbox on click. Single-image and
+  zero-image paths preserved.
+- **P4 (CSV multi-image).** Catalog CSV import recognizes `images` /
+  `image_urls` columns as pipe-separated URL lists and creates one
+  ProductImage per URL in ordinal order. Legacy single `imageUrl`
+  column still works.
+- **P5 (orphan blob sweep).** New cron at
+  `/api/cron/orphan-blob-sweep`. Lists every Vercel Blob under the
+  `products/` prefix with pagination, deletes any whose URL is not
+  referenced by a `ProductImage` row AND whose `uploadedAt` is older
+  than 7 days. The 7-day grace covers the rare race where the upload
+  route writes the blob but fails before inserting the DB row.
+  Bounded `MAX_PER_RUN=500`, mirrors the PLH-2 4e cap-and-resume
+  pattern (returns `{ processed, deleted, errors, hasMore }`).
+  Per-deletion audit row `ORPHAN_BLOB_DELETED`. Per-blob errors
+  caught via `captureError` rather than aborting the run.
+  `vercel.json` schedules it daily at 06:00 UTC, after the 03/04/05
+  housekeeping crons and before the 09:xx money crons.
+
+New audit action in PLH-3h: `ORPHAN_BLOB_DELETED` (P5). Other image
+actions landed in P2.
+
+`npx next build` clean across P1..P5. Zero em dashes throughout
+PLH-3h.
+
+**Cumulative across P12 + PLH-1 + PLH-2 + PLH-3a + PLH-3b + PLH-3c +
+PLH-3d + PLH-3e + PLH-3g + PLH-3h: 28 CRITICAL + 62 HIGH closed, plus
+the single-supplier-cart constraint lifted by PLH-3g and multi-image
+product galleries shipped by PLH-3h.**
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no

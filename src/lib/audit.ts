@@ -89,6 +89,10 @@ export const AUDIT_ACTIONS = [
   "IMAGES_REORDERED",
   "IMAGE_SET_PRIMARY",
   "IMAGE_ALT_UPDATED",
+  // PLH-3h P5: orphan blob sweep cron deletes Vercel Blob assets under
+  // products/ that no ProductImage row references and that are older than
+  // the 7-day grace period.
+  "ORPHAN_BLOB_DELETED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

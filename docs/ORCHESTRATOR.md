@@ -317,6 +317,47 @@ Zero em dashes throughout.
 **Cumulative across all rounds, including PLH-3g: 28 CRITICAL + 62
 HIGH closed, plus the single-supplier-cart constraint lifted.**
 
+**PLH-3h (2026-05-26).** Multi-image product galleries (build plan
+Phase J). 5 phases shipped sequentially on the same branch.
+- P1: `ProductImage` Prisma model (id, productId, url, alt, ordinal,
+  createdAt; `@@unique([productId, ordinal])`). Migration backfills
+  one ordinal-0 row per existing Product from `Product.imageUrl`.
+  `Product.imageUrl` retained as a legacy fallback this round (kept
+  in sync with the primary image on every mutation) and queued for
+  removal in a future round once all consumers migrate.
+- P2: supplier image manager UI at
+  `/supplier/products/[id]/images` plus upload/reorder/delete/set-
+  primary/alt API routes. 5 MB per image cap, 12 images per product
+  cap, magic-byte MIME check (PNG/JPEG/WEBP only), random suffix in
+  the blob path per the PLH-3c F8 pattern, rate-limited via the
+  `supplier` bucket, every mutation audit-logged.
+- P3: buyer-side carousel + lightbox on the product detail page.
+  Pure React + Tailwind, no library. Thumbnail strip, keyboard
+  navigation, lightbox on click. Single-image and zero-image paths
+  preserved.
+- P4: catalog CSV import recognizes `images` / `image_urls` columns
+  as pipe-separated URL lists and creates one ProductImage per URL
+  in ordinal order. Single `imageUrl` column still works (legacy
+  path).
+- P5 (this phase): orphan blob sweep cron at
+  `/api/cron/orphan-blob-sweep`. Lists every Vercel Blob under the
+  `products/` prefix, paginated. Deletes any blob whose URL is not
+  referenced by a `ProductImage` row AND whose `uploadedAt` is older
+  than 7 days. 7-day grace window covers the rare race where the
+  upload route writes the blob but fails before inserting the DB
+  row (supplier retries within minutes; the grace prevents the cron
+  from killing the in-flight upload's payload). Bounded
+  `MAX_PER_RUN=500`, mirrors the PLH-2 4e cap-and-resume pattern.
+  Per-deletion audit row `ORPHAN_BLOB_DELETED` with metadata
+  `{ url, pathname, uploadedAt, size }`. Per-blob errors caught and
+  logged via `captureError` rather than aborting the run.
+  `vercel.json` schedules it daily at 06:00 UTC, after the 03/04/05
+  housekeeping crons and before the 09:xx money crons.
+- New audit action: `ORPHAN_BLOB_DELETED`.
+- No new Prisma migrations in P5 (model + backfill landed in P1).
+- `npx next build` clean across P1..P5. Zero em dashes throughout
+  PLH-3h.
+
 **PLH-3f (2026-05-26).** Workspace-style conversational AI catalog
 import assistant at `/supplier/catalog-import`. Three commits.
 Supplier pastes CSV/TSV/Excel-clipboard or uploads `.csv`/`.xlsx`,
