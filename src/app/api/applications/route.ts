@@ -22,6 +22,23 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  // PLH-3e B8: block suspended suppliers from quietly re-applying under
+  // the same email. They need to reach out to support so admin can
+  // investigate whatever drove the suspension before reactivating.
+  const suspended = await prisma.user.findFirst({
+    where: {
+      email,
+      role: "SUPPLIER",
+      supplier: { is: { status: "SUSPENDED" } },
+    },
+    select: { id: true },
+  });
+  if (suspended) {
+    return NextResponse.json(
+      { error: "Contact support to reactivate." },
+      { status: 400 }
+    );
+  }
   // PLH-1 commit 4: soft idempotency. A double-submit (or a buyer who
   // already applied yesterday) returns the existing PENDING application
   // id with a 200 instead of creating a duplicate row the admin then has
