@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { detectMagic, safeExt } from "@/lib/upload-validation";
+import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 
@@ -82,9 +83,36 @@ export async function POST(req: Request) {
     file,
     { access: "public", addRandomSuffix: true, contentType: detected }
   );
+  // PLH-3j P16: capture the previous logo URL so we can delete the
+  // orphaned blob after the DB row points at the new one. PLH-3c F8
+  // randomized the path, which kills URL guessing but also means the
+  // old blob never gets overwritten by a same-path upload. Without a
+  // cleanup, every re-upload leaks the previous blob into storage.
+  const previousLogoUrl = (
+    await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { manufacturerLogoUrl: true },
+    })
+  )?.manufacturerLogoUrl ?? null;
+
   await prisma.user.update({
     where: { id: user.id },
     data: { manufacturerLogoUrl: blob.url },
   });
+
+  if (previousLogoUrl && previousLogoUrl !== blob.url) {
+    // Best-effort cleanup. del() may fail if the blob lives in a
+    // different store, was deleted out-of-band, or the URL points at a
+    // hosted-elsewhere URL (URL-paste fallback). Swallow + Sentry.
+    try {
+      await del(previousLogoUrl);
+    } catch (err) {
+      captureError(err, {
+        subsystem: "oem-logo",
+        op: "delete-previous",
+        userId: user.id,
+      });
+    }
+  }
   return NextResponse.json({ ok: true, logoUrl: blob.url });
 }
