@@ -634,6 +634,75 @@ PLH-3g, multi-image product galleries shipped by PLH-3h, QuickBooks
 Online full OAuth sync shipped by PLH-3i, and the post-PLH-2 deferred-
 polish backlog now closed by PLH-3j.**
 
+**PLH-3k (2026-05-27).** Buyer-UX strip-back round. 13 fixes, one
+commit each, sequential push. Pure UI strip-back; no schema changes.
+Surfaced by a THRADD-style first-pass read of the product detail and
+cart pages reading as "feature not ready" / "too many words."
+- F1 (`aed19ad`) CRITICAL: lifted the stale "Multi-supplier checkout
+  will go live shortly" callout in CartClient. PLH-3g shipped the
+  backend; the UI gate was vestigial. Multi-supplier carts proceed
+  to checkout unchanged.
+- F2 (`0f1451b`) HIGH: removed the "Buy now" button on the product
+  page. Replaced with a small muted "Or skip cart and check out now"
+  link below Add to Cart. Old `tryAdd("buy")` handler refactored.
+- F3 (`9d10aaa`) HIGH: stripped the beige fee-note callout from the
+  product page. Replaced with a tiny muted single-line badge
+  "Verified seller · freight handled by PartsPort". 6% fee
+  disclosure now lives in checkout only. Unused `FEE_RATE_LABEL`
+  import removed.
+- F4 (`c7b6ca8`) HIGH: dropped the "New supplier" tag next to
+  supplier name. Computed-rating block still renders when reviews
+  exist; nothing renders when zero. Verified badge from F3 covers
+  trust signaling.
+- F5 (`30f7486`) MEDIUM: dropped the "No reviews yet" prefix from
+  the rating line on the product page. Zero-review state renders
+  just "SKU <sku>".
+- F6 (`f9a2e2b`) MEDIUM: removed the inline ZIP freight estimator
+  from the product page. Deleted `FreightEstimateWidget.tsx` and
+  the `/api/freight/estimate` route (both dead code paths after
+  removal). Added a tiny "Freight estimated at cart" muted link
+  in its place.
+- F7 (`1bda8aa`) MEDIUM: collapsed the 3-row ETA/Availability/
+  Sold-by table in the product buybox into one muted line: "10
+  days · 24,000 in stock · <supplier name>". Computed-rating
+  block appended when present. Unused `next/image` import dropped.
+- F8 (`bcc8c2e`) HIGH: dropped the "Marketplace fee (6%)" line
+  from the cart breakdown. Fee folds silently into the order
+  total. Server-side fee compute in `/api/orders` POST and the
+  shared `computeOrderTotals` unchanged; this is UI-only.
+  Unused `FEE_RATE_LABEL` import removed from CartClient.
+- F9 (`cb34ee2`) MEDIUM: collapsed the per-supplier section
+  headers in the cart when only one supplier is present. The
+  multi-supplier header still renders when `groups.length >= 2`.
+- F10 (`fd286e8`) MEDIUM: demoted the manufacturer label in cart
+  line items from colored caps (`cl-mfr`) to small muted text on
+  the same line as price/unit/ETA. Product name stays prominent.
+- F11 (`dc79da8`) LOW: dropped the "Sales tax: $0.00" row and the
+  wordy multi-clause caveat from the cart summary. Replaced with a
+  single muted "Tax calculated at checkout." line directly above
+  the Order total row. Freight-quoted addendum preserved when the
+  cart includes large equipment.
+- F12 (`b275f24`) LOW: restricted the top utility marketing bar
+  to marketing routes only. New `src/components/TopBar.tsx`
+  client component uses `usePathname()` to render only on `/`,
+  `/how-it-works`, `/for-suppliers`, `/for-manufacturers`.
+  Buyer-context gate in `SiteHeader` preserved. Hidden on every
+  other route (product detail, catalog, cart, checkout, orders,
+  account, supplier, admin, etc.).
+- F13 (`aa0a527`) LOW: collapsed the Manufacturer filter behind a
+  native `<details>` expander on `/catalog`. Category filter
+  unchanged. Auto-opens when a manufacturer filter is active so
+  deep-linked `/catalog?mfr=X` keeps the selected state visible.
+
+No schema changes in PLH-3k. No new migrations. No new dependencies.
+Every `npx next build` between commits compiled clean. Zero em dashes.
+
+**Cumulative across all rounds including PLH-3k: 28 CRITICAL + 62 HIGH
+closed, plus the single-supplier-cart constraint lifted by PLH-3g,
+multi-image galleries shipped by PLH-3h, QuickBooks Online full OAuth
+sync shipped by PLH-3i, the post-PLH-2 deferred-polish backlog closed
+by PLH-3j, and the buyer-UX strip-back round shipped by PLH-3k.**
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no

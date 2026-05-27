@@ -446,6 +446,36 @@ backlog. 17 fixes, one commit each, sequential push per fix.
 - Every commit built clean. Zero em dashes. Zero drops.
 - Final HEAD: `89809bf`.
 
+**PLH-3k (2026-05-27).** Buyer-UX strip-back round driven by a
+THRADD-style first-pass read of the buyer surface. Goal: cut the
+"too many words / feature-not-ready" signals on the product detail
+and cart pages. 13 fixes, one commit each, sequential push. Pure UI
+strip-back, no schema changes, no new dependencies. F1 lifted the
+stale "multi-supplier checkout will go live shortly" callout in
+CartClient (PLH-3g shipped the backend, the callout was vestigial).
+F2 demoted the "Buy now" button to a small inline link below Add
+to Cart. F3 stripped the beige fee-disclosure callout from the
+product page and replaced it with a tiny verified-seller badge;
+the 6% fee disclosure now lives in checkout only. F4 dropped the
+"New supplier" tag. F5 dropped the "No reviews yet" prefix from
+the rating line. F6 deleted the inline ZIP freight estimator
+widget and its dead `/api/freight/estimate` route. F7 collapsed
+the 3-row ETA/Availability/Sold-by table into one muted line.
+F8 dropped the "Marketplace fee (6%)" line from the cart summary
+(fee folds silently into total; server-side compute unchanged).
+F9 collapsed the per-supplier section headers in the cart when
+only one supplier is present. F10 demoted the manufacturer label
+in cart line items from colored caps to small muted text on the
+same line as price/unit/ETA. F11 dropped the "$0.00 Sales tax"
+row and the wordy caveat in favour of a single muted "Tax
+calculated at checkout." line. F12 restricted the marketing top
+utility bar to marketing routes only via a new TopBar client
+component reading `usePathname()`. F13 collapsed the Manufacturer
+filter on `/catalog` behind a native `<details>` expander
+(auto-opens when a manufacturer filter is active so deep-linked
+URLs keep selected state visible). Every commit built clean. Zero
+em dashes. Final HEAD: `aa0a527` (before docs commit).
+
 ## Inbound email feature: LIVE + smoke-proven on prod (2026-05-26)
 
 The Resend webhook is configured and pointing at
