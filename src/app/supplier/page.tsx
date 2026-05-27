@@ -143,9 +143,13 @@ export default async function SupplierDashboard() {
 
           <AttentionPanel items={attention} />
 
+          {/* PLH-3l P5: hide the readiness checklist when 10/10 and live.
+              Full checklist still renders on /supplier/settings so veterans
+              can review every gate. */}
           <GoLiveReadiness
             readiness={readiness}
             publicVisible={supplier.publicVisible}
+            hideWhenComplete
           />
 
           <CompactTiles
