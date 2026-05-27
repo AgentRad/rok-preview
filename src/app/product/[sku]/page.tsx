@@ -10,7 +10,6 @@ import SiteFooter from "@/components/SiteFooter";
 import ProductImage from "@/components/ProductImage";
 import ProductGallery from "@/components/ProductGallery";
 import AddToCart from "@/components/AddToCart";
-import FreightEstimateWidget from "@/components/FreightEstimateWidget";
 import RequestQuote from "@/components/RequestQuote";
 import Stars from "@/components/Stars";
 import WriteReview from "@/components/WriteReview";
@@ -335,11 +334,13 @@ export default async function ProductPage({
                 <div className="muted-text" style={{ marginTop: 10, fontSize: 12 }}>
                   ✓ Verified seller · freight handled by PartsPort
                 </div>
-                {!product.quoteOnly &&
-                  product.weightLbs != null &&
-                  product.supplier.warehouses.length > 0 && (
-                    <FreightEstimateWidget sku={product.sku} />
-                  )}
+                {!product.quoteOnly && (
+                  <div style={{ marginTop: 6, fontSize: 12 }}>
+                    <Link href="/cart" className="muted-text" style={{ textDecoration: "none" }}>
+                      Freight estimated at cart →
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>
