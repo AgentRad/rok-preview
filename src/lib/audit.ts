@@ -103,6 +103,9 @@ export const AUDIT_ACTIONS = [
   "QBO_INVOICE_SYNCED",
   "QBO_REFUND_SYNCED",
   "QBO_SYNC_FAILED",
+  // PLH-3i P5: admin "Run reconcile now" button at
+  // /admin/integrations/quickbooks invoked the reconcile helper.
+  "QBO_RECONCILE_RAN",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

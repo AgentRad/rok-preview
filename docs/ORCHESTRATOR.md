@@ -378,6 +378,50 @@ New rate-limit buckets `import-ai` and `catalog-import`
 `isClaimedManufacturer` per PLH-3c F1. New `xlsx` dependency.
 No schema changes. Build clean.
 
+**PLH-3i (2026-05-26).** QuickBooks Online OAuth full sync. 5
+phases shipped sequentially on the same branch. Replaces the CSV
+substitute from P12 commit 5 with real Intuit API sync.
+- **P1.** Intuit OAuth connect flow + `IntegrationCredential` model.
+  `/admin/integrations/quickbooks` page with Connect button,
+  `/api/admin/integrations/quickbooks/start|callback|disconnect`
+  routes, signed-CSRF state, `src/lib/qbo-auth.ts` helper for
+  token refresh. 503 when `INTUIT_CLIENT_ID` /
+  `INTUIT_CLIENT_SECRET` unset.
+- **P2.** Invoice sync via `after()` from `markOrderPaid`.
+  `src/lib/qbo-sync.ts` `syncInvoice()` posts a QBO Invoice with
+  line items, freight, fee. Stores `qboInvoiceId` on the
+  PartsPort Invoice. Failure path writes `QBO_SYNC_FAILED`
+  audit row and `captureError`, never blocks buyer checkout.
+- **P3.** Refund sync via `after()` from `refundOrder`.
+  `syncRefund()` posts a QBO RefundReceipt against the
+  invoice's `qboInvoiceId`, stores `qboRefundReceiptId` on the
+  Refund row. Same fail-soft pattern as P2.
+- **P4.** Daily reconcile cron at `/api/cron/qbo-reconcile`.
+  Two-pass invoice + refund backfill over the last 30 days,
+  bounded `MAX_PER_RUN=200`, ASC ordering with `hasMore` flag.
+  Scheduled 07:00 UTC daily in `vercel.json`.
+- **P5.** Admin dashboard widget at
+  `/admin/integrations/quickbooks`. Status card (connected /
+  not connected, realmId, connectedAt, lastUsedAt, Disconnect),
+  sync-stats card (invoices synced, refunds synced, pending
+  invoices, pending refunds, failures in last 7 days),
+  recent-activity table (last 10 `QBO_*` audit rows), and a
+  "Run reconcile now" button that POSTs to
+  `/api/admin/integrations/quickbooks/reconcile`. The cron
+  body extracted into `src/lib/qbo-reconcile.ts`
+  `runQboReconcile()`; both the cron route and the new admin
+  route call it. New audit action `QBO_RECONCILE_RAN`.
+- Owner task before this works in prod: Conrad creates an
+  Intuit developer app, sets `INTUIT_CLIENT_ID` +
+  `INTUIT_CLIENT_SECRET` + `INTUIT_ENVIRONMENT` in Vercel,
+  then clicks Connect on `/admin/integrations/quickbooks`.
+- Known gap: tokens stored raw in `@db.Text` (no
+  `ENCRYPTION_KEY` infra in the repo). Queued post-launch
+  backlog item: encrypt access/refresh tokens at rest once
+  that infra lands.
+- `npx next build` clean across P1..P5. Zero em dashes
+  throughout PLH-3i.
+
 ## Inbound email feature: LIVE + smoke-proven on prod (2026-05-26)
 
 The Resend webhook is configured and pointing at

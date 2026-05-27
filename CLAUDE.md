@@ -469,6 +469,68 @@ PLH-3d + PLH-3e + PLH-3g + PLH-3h: 28 CRITICAL + 62 HIGH closed, plus
 the single-supplier-cart constraint lifted by PLH-3g and multi-image
 product galleries shipped by PLH-3h.**
 
+**PLH-3i (2026-05-26).** QuickBooks Online OAuth full sync (build
+plan Phase K endgame). 5 phases shipped sequentially. Replaces the
+CSV-import substitute from P12 commit 5 with real Intuit API sync.
+- **P1: OAuth + IntegrationCredential model + admin connect page.**
+  New `IntegrationCredential` table (provider + realmId unique,
+  accessToken / refreshToken / expiresAt, connectedByUserId,
+  connectedAt, lastUsedAt). `src/lib/qbo-auth.ts` helper for the
+  Intuit OAuth dance + token refresh. Routes
+  `/api/admin/integrations/quickbooks/{start,callback,disconnect}`.
+  Minimal `/admin/integrations/quickbooks` page. Signed-CSRF state
+  on the OAuth start. 503 when `INTUIT_CLIENT_ID` /
+  `INTUIT_CLIENT_SECRET` unset; defaults `INTUIT_ENVIRONMENT` to
+  sandbox.
+- **P2: invoice sync on markOrderPaid via after().**
+  `src/lib/qbo-sync.ts` `syncInvoice()` posts a QBO Invoice with
+  line items, freight, fee, references PartsPort order ref in
+  `DocNumber`. Caches `User.qboCustomerId`. Stores `qboInvoiceId`
+  on the PartsPort Invoice. `QBO_INVOICE_SYNCED` audit on success,
+  `QBO_SYNC_FAILED` + `captureError` on failure (never blocks
+  buyer checkout).
+- **P3: refund sync on refundOrder via after().** `syncRefund()`
+  posts a QBO RefundReceipt against the invoice's `qboInvoiceId`,
+  stores `qboRefundReceiptId` on the Refund row.
+  `QBO_REFUND_SYNCED` audit on success, same fail-soft pattern
+  as P2 on failure.
+- **P4: daily reconcile cron.** `/api/cron/qbo-reconcile`,
+  scheduled 07:00 UTC in `vercel.json`. Two-pass invoice + refund
+  backfill over the last 30 days, `MAX_PER_RUN=200` per pass, ASC
+  ordering, `hasMore` flag (PLH-2 4e + PLH-3e B9 pattern).
+- **P5: admin dashboard widget + manual reconcile.**
+  `/admin/integrations/quickbooks` expanded to a full dashboard:
+  status card (connected / not connected, realmId, connectedAt,
+  lastUsedAt, Disconnect button), sync-stats grid (invoices
+  synced, refunds synced, pending invoice syncs, pending refund
+  syncs, sync failures in last 7 days), recent-activity table
+  (last 10 `QBO_*` audit rows), and a "Run reconcile now" button
+  wired to a new admin route
+  `/api/admin/integrations/quickbooks/reconcile`. The cron body
+  extracted into `src/lib/qbo-reconcile.ts` `runQboReconcile()`;
+  both the cron route and the new admin route call it. New audit
+  action `QBO_RECONCILE_RAN`.
+
+Owner task before this works in prod: Conrad creates an Intuit
+developer app, sets `INTUIT_CLIENT_ID` + `INTUIT_CLIENT_SECRET` +
+`INTUIT_ENVIRONMENT` (`sandbox` or `production`) in Vercel, then
+clicks Connect on `/admin/integrations/quickbooks` and completes
+the Intuit OAuth consent screen.
+
+Known gap: access + refresh tokens are stored raw in `@db.Text`.
+The repo has no `ENCRYPTION_KEY` infra at this round. Queued
+post-launch backlog item in `docs/ORCHESTRATOR.md`: encrypt
+tokens at rest once that infra lands.
+
+`npx next build` clean across PLH-3i P1..P5. Zero em dashes
+throughout.
+
+**Cumulative across P12 + PLH-1 + PLH-2 + PLH-3a + PLH-3b + PLH-3c +
+PLH-3d + PLH-3e + PLH-3g + PLH-3h + PLH-3i: 28 CRITICAL + 62 HIGH
+closed, plus the single-supplier-cart constraint lifted by PLH-3g,
+multi-image product galleries shipped by PLH-3h, and QuickBooks
+Online full OAuth sync shipped by PLH-3i.**
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no
