@@ -160,7 +160,10 @@ async function parseBody(req: Request): Promise<ParsedInbound | null> {
 
 function verifyAuth(req: Request): boolean {
   const secret = process.env.INBOUND_WEBHOOK_SECRET;
-  if (!secret) return true; // Verification optional during early launch.
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") return false;
+    return true;
+  }
   // Postmark sends X-Postmark-Webhook-Token; everyone else uses bearer.
   const postmarkHdr = req.headers.get("x-postmark-webhook-token") || "";
   if (postmarkHdr) {
