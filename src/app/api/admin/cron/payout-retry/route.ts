@@ -20,19 +20,25 @@ export const dynamic = "force-dynamic";
  */
 const MAX_ATTEMPTS = 5;
 const BACKOFF_HOURS = [1, 6, 24, 72, 168];
+// PLH-3j P6: cap-and-resume so a first-run-after-outage backlog cannot
+// time out the Vercel function. ASC by createdAt = oldest first.
+const MAX_PER_RUN = 200;
 
 export async function GET(req: Request) {
   if (!isAuthorizedCronRequest(req)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
-  const failed = await prisma.payout.findMany({
+  const found = await prisma.payout.findMany({
     where: {
       status: "FAILED",
       retryAttempts: { lt: MAX_ATTEMPTS },
     },
     include: { supplier: true },
-    take: 200,
+    orderBy: { createdAt: "asc" },
+    take: MAX_PER_RUN + 1,
   });
+  const hasMore = found.length > MAX_PER_RUN;
+  const failed = hasMore ? found.slice(0, MAX_PER_RUN) : found;
   const retried: { payoutId: string; supplierId: string; outcome: string }[] = [];
 
   for (const payout of failed) {
@@ -112,5 +118,6 @@ export async function GET(req: Request) {
     scanned: failed.length,
     retried,
     maxAttempts: MAX_ATTEMPTS,
+    hasMore,
   });
 }

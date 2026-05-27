@@ -16,14 +16,21 @@ export async function GET(req: Request) {
   if (!isAuthorizedCronRequest(req)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+  // PLH-3j P6: bounded run, oldest-first walk, hasMore in the response.
+  // Mirrors PLH-2 4e auto-deliver / reserve-release pattern.
+  const MAX_PER_RUN = 200;
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const targets = await prisma.user.findMany({
+  const found = await prisma.user.findMany({
     where: {
       deletedAt: { lt: cutoff },
       anonymizedAt: null,
     },
     select: { id: true, email: true, name: true },
+    orderBy: { id: "asc" },
+    take: MAX_PER_RUN + 1,
   });
+  const hasMore = found.length > MAX_PER_RUN;
+  const targets = hasMore ? found.slice(0, MAX_PER_RUN) : found;
   let anonymized = 0;
   const errors: string[] = [];
   for (const u of targets) {
@@ -59,5 +66,6 @@ export async function GET(req: Request) {
     scanned: targets.length,
     anonymized,
     errors: errors.length,
+    hasMore,
   });
 }

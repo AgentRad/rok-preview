@@ -95,8 +95,13 @@ export async function GET(req: Request) {
     }
   }
 
+  // PLH-3j P6: this cron does not iterate per-row backlogs. The check
+  // list is bounded by the number of probes registered above (currently
+  // one: Stripe Tax). hasMore is always false so the response shape
+  // matches the other capped crons for downstream tooling consistency.
   return NextResponse.json({
     ok: failed.length === 0,
     checks,
+    hasMore: false,
   });
 }
