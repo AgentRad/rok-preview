@@ -21,7 +21,7 @@ export async function PATCH(
   const b = await req.json().catch(() => ({}));
   const quote = await prisma.quoteRequest.findUnique({
     where: { id },
-    include: { product: true },
+    include: { product: { include: { supplier: true } } },
   });
   if (!quote) {
     return NextResponse.json({ error: "Quote not found." }, { status: 404 });
@@ -101,6 +101,13 @@ export async function PATCH(
           {
             error: "Your role doesn't allow responding to RFQs.",
           },
+          { status: 403 }
+        );
+      }
+      const supplier = quote.product.supplier;
+      if (supplier.status !== "APPROVED" || !supplier.publicVisible) {
+        return NextResponse.json(
+          { error: "Your supplier account is not active. Contact support to reactivate." },
           { status: 403 }
         );
       }
