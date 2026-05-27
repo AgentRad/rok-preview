@@ -111,23 +111,25 @@ export default function CartClient() {
       <div>
         {groups.map((g) => (
           <div key={g.supplierName} style={{ marginBottom: 18 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                padding: "8px 0",
-                borderBottom: "1px solid var(--border)",
-                marginBottom: 8,
-              }}
-            >
-              <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>
-                {g.supplierName}
-              </h3>
-              <span className="muted-text" style={{ fontSize: 12.5 }}>
-                Subtotal {formatCents(g.subtotalCents)}
-              </span>
-            </div>
+            {multiSupplier && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  padding: "8px 0",
+                  borderBottom: "1px solid var(--border)",
+                  marginBottom: 8,
+                }}
+              >
+                <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                  {g.supplierName}
+                </h3>
+                <span className="muted-text" style={{ fontSize: 12.5 }}>
+                  Subtotal {formatCents(g.subtotalCents)}
+                </span>
+              </div>
+            )}
             {g.lines.map((l) => {
               const p = products[l.sku];
               return (
