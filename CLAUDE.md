@@ -187,9 +187,117 @@ Auth flows + RFQ + returns + multi-supplier + refund clawback are now
 all hardened across P12 + PLH-1 + PLH-2. Remaining items are MEDIUM/LOW
 polish queued post-launch in `docs/ORCHESTRATOR.md`.
 
-**Next up after PLH-2: real-world verification + production cutover.** No
-more code-side polish rounds planned. See ship-ready playbook in
-`LAUNCH_PLAN.md`.
+**PLH-3a (2026-05-26).** Supplier-health dashboard fixes from a
+post-PLH-2 admin daily-use audit. 2 commits.
+- B1: `Order.shippedAt DateTime?` column + idempotent stamp inside the
+  shared `markOrderShipped()` helper. Migration includes a `paidAt + 1
+  day` backfill estimate for historical Shipped/Delivered orders so the
+  metric has data on day one. Supplier-health page now subtracts
+  `shippedAt - paidAt` (was previously `createdAt - paidAt`, sign
+  inverted, clamped every result to 0). The "avg days-to-ship > 7" alert
+  can actually fire now.
+- B2: bounded the unbounded `orderItem.findMany` on the supplier-health
+  page with a `where: { order: { createdAt: { gte: YTD_START } } }`
+  filter. Page is no longer O(all order items in DB).
+Migration: `20260605000000_add_order_shipped_at`.
+
+**PLH-3b (2026-05-26).** Messaging + inbound email threading audit. 8
+commits, 6 HIGH + 1 MEDIUM closed.
+- F0: removed the duplicate `remotion/` folder from the rok-preview
+  tree (video work lives at `C:\Users\radfe\partsport-videos`) and
+  reverted the tsconfig exclude band-aid.
+- F1: `sendThreadMessage(recipientUserId)` now respects PLH-2 4d's
+  `notifyOrderEmails` opt-out via `shouldSendToUser`. Four callers
+  updated (UI POST, inbound order, inbound quote, bounce-back).
+- F2: `Message.inboundFingerprint` unique index. Inbound dedup via
+  Prisma P2002 short-circuit. UI posts keep fingerprint null so the
+  dedup is inbound-only.
+- F3: inbound now rejects replies to terminal-status orders
+  (REFUNDED/CANCELLED) and quotes (DECLINED/ACCEPTED/EXPIRED via
+  `quoteExpiresAt`). Rejects audit-logged as `INBOUND_REPLY_REJECTED`.
+- F4: inbound fan-out per-recipient errors now write `captureError` +
+  `INBOUND_FAN_OUT_FAILED` audit row instead of being swallowed.
+- F5: `verifyAuth` fails closed in production when
+  `INBOUND_WEBHOOK_SECRET` is unset.
+- F6: HMAC signature bumped from 16 to 32 hex chars (64 to 128 bits) in
+  `src/lib/inbound-email.ts`.
+- F7: `rateLimit("messages", user:<id>)` on POST `/api/messages` at
+  20/min/user.
+Migration: `20260606000000_add_message_inbound_fingerprint`.
+
+**PLH-3c (2026-05-26).** Buyer post-purchase + OEM dashboard audit. 9
+commits, 1 CRITICAL + 5 HIGH + 3 MEDIUM + 1 LOW closed.
+- F0 (CRITICAL): `/orders/[id]` page was previewable by anyone, auth
+  values computed but never enforced. Added `if (!isBuyer && !isAdmin
+  && !isOrderSupplier && !isGuestViaToken) notFound()` gate.
+  `orderViewUrl()` helper in `src/lib/order-link.ts` signs a per-order
+  HMAC token off `ORDER_LINK_SECRET` (falls back to `SESSION_SECRET`)
+  and all outbound order emails embed `?t=<token>` for guest access.
+- F1: soft brand model. `Product.manufacturer` must now match a User
+  with `role="MANUFACTURER"` and a claimed `manufacturerName`.
+  `src/lib/manufacturers.ts` exposes `listClaimedManufacturers()` and
+  `isClaimedManufacturer()`. Supplier product create/edit form renders
+  a dropdown instead of a free input. Existing products with unclaimed
+  manufacturers stay visible until edited.
+- F2: partial unique index on `User.manufacturerName WHERE
+  role='MANUFACTURER'` so race conditions in the
+  `/api/account/profile` PATCH conflict check can't double-claim a
+  brand.
+- F3: `ManufacturerApplication` model with PENDING/APPROVED/REJECTED
+  status. New OEMs no longer get an instant public storefront; admin
+  approves at `/admin/manufacturer-applications`. Migration includes
+  auto-approve backfill for existing OEMs. Three new emails:
+  `sendOemApplicationSubmitted` (admin), `sendOemApplicationApproved`
+  (OEM), `sendOemApplicationRejected` (OEM with reason).
+- F4: guest invoice access via the same `?t=` signed-token URL pattern
+  as F0.
+- F5: 30-day post-delivery return window. New `Order.deliveredAt`
+  column stamped at the three Delivered transition sites (cron, ops,
+  buyer confirm-receipt). Returns API rejects past the window with
+  admin-override exemption. Buyer UI shows "X days left to open a
+  return."
+- F6: `tagline.trim().slice(0, 140)` (was reversed, caused UI char
+  count drift).
+- F7: `sendOrderCancelled` email from the cancel endpoint via
+  `after()`.
+- F8 (LOW): OEM logo blob path now includes `crypto.randomBytes(8)`
+  suffix to break deterministic URL guessing.
+Migrations: `20260607000000_unique_oem_manufacturer_name`,
+`20260607010000_add_manufacturer_application`,
+`20260607020000_add_order_delivered_at`.
+
+**Cumulative across P12 + PLH-1 + PLH-2 + PLH-3a + PLH-3b + PLH-3c +
+PLH-3d: 27 CRITICAL + 58 HIGH closed.** Every `npx next build` since
+P12 has compiled clean. Zero em dashes throughout.
+
+**PLH-3d (2026-05-26).** Svix signature verification for Resend inbound
+webhooks. 1 commit. Code-side gap from PLH-3b F5 closed.
+- `verifyAuth(req, provider, rawBody)` now dispatches on provider.
+  Postmark keeps its X-Postmark-Webhook-Token timing-safe-equal check.
+  SendGrid keeps the `Authorization: Bearer` shared-secret check.
+  Resend uses Svix v1: reads `svix-id`, `svix-timestamp`,
+  `svix-signature`; rejects on > 5 min timestamp drift; strips the
+  `whsec_` prefix and base64-decodes INBOUND_WEBHOOK_SECRET into HMAC
+  key bytes; computes `HMAC-SHA256(key, ${id}.${ts}.${rawBody})` in
+  base64 and timing-safe-compares against each `v1,<sig>` entry in the
+  header.
+- `handleInbound` captures `req.text()` exactly once before verify and
+  parse (Svix needs the unparsed bytes; calling `req.text()` /
+  `req.formData()` twice consumes the body). The provider-specific
+  parsing logic moved into `parseBodyFromRaw(rawBody, provider, req)`.
+  Resend payload reader now also handles the `{ type, data: { ... } }`
+  envelope shape Resend ships.
+- PLH-3b F5 fail-closed rule preserved: production with no
+  INBOUND_WEBHOOK_SECRET returns 401; dev passes through.
+- No new migration. No new test infrastructure (no existing inbound
+  vitest file to extend).
+
+Code-side blocker for Resend inbound email is closed. Only remaining
+step is the Vercel env-var flip:
+`INBOUND_EMAIL_PROVIDER=resend`, `INBOUND_EMAIL_DOMAIN`,
+`INBOUND_REPLY_SECRET`, `INBOUND_WEBHOOK_SECRET` (the `whsec_*` secret
+saved locally in `.local-secrets.env`). Once those are set, inbound
+reply-by-email goes live.
 
 ## Launch-time constraints
 
