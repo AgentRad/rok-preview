@@ -626,6 +626,37 @@ endpoints, per-page SEO metadata.
 - `npx prisma migrate dev` for every schema change; commit the generated migration.
   `npx next build` must pass before every commit.
 
+## Auto-paste the next prompt (STANDING RULE, no exceptions)
+
+When Conrad pastes a build chat's report into the orchestrator chat,
+the orchestrator's single response MUST do all of these:
+
+1. Verify the build chat's claims against the repo
+2. Update CLAUDE.md status + docs/ORCHESTRATOR.md per the
+   doc-maintenance rule
+3. Auto-paste the NEXT round's prompt at the bottom of the same
+   response, as a copy-paste-ready code block
+
+Do NOT ask "do you want me to paste the next one?" Do NOT split it
+across multiple turns. Conrad's flow is paste-in → paste-out →
+paste-forward.
+
+**Queue order for PartsPort (post-PLH-3g):**
+
+1. **PLH-3f** — `docs/PLH-3f-AI-IMPORT-ASSISTANT.md` (conversational
+   AI catalog import)
+2. **PLH-3h** — `docs/PLH-3h-MULTI-IMAGE-GALLERIES.md`
+3. **PLH-3i** — `docs/PLH-3i-QUICKBOOKS-OAUTH.md`
+4. **PLH-3j** — `docs/PLH-3j-DEFERRED-POLISH.md`
+
+When a round above ships clean, paste the next one in this order. If
+the build chat finished partially (some fixes didn't land, build
+broken), the next prompt is a FIX-FORWARD prompt for that same round
+instead, with a clear surface of what broke.
+
+If the queue empties (all four shipped) and no new rounds are queued,
+only then ask Conrad what to work on next.
+
 ## Disk hygiene (STANDING RULE)
 
 After a polish round or migration, sweep the working tree for dead
