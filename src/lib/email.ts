@@ -1173,6 +1173,13 @@ export async function sendOrderCancelled(
   order: OrderLite,
   refundedCents: number
 ): Promise<void> {
+  // PLH-3j P15: respect the buyer's per-user notifyOrderEmails opt-out
+  // gate (PLH-3b F1 pattern). Guest orders (no buyerId) always send,
+  // since there's no logged-in user to opt out.
+  if (order.buyerId) {
+    const ok = await shouldSendToUser(order.buyerId, "order");
+    if (!ok) return;
+  }
   const url = orderViewUrl(order);
   const refundLine =
     refundedCents > 0
