@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/money";
 import { canEditCatalog, effectiveAccessToSupplier } from "@/lib/supplier-access";
+import { isClaimedManufacturer } from "@/lib/manufacturers";
 
 export async function PATCH(
   req: Request,
@@ -51,7 +52,29 @@ export async function PATCH(
     widthIn?: number | null;
     heightIn?: number | null;
     freightClass?: string | null;
+    manufacturer?: string;
   } = {};
+  // PLH-3j P13: manufacturer is editable but must be a claimed OEM brand
+  // (PLH-3c F1 soft-brand model). Free-form input rejects with 400.
+  if (b.manufacturer !== undefined) {
+    const next = String(b.manufacturer || "").trim();
+    if (next) {
+      const claimed = await isClaimedManufacturer(next);
+      if (!claimed) {
+        return NextResponse.json(
+          {
+            error:
+              "Manufacturer must match a claimed OEM brand on PartsPort. Pick one from the dropdown.",
+            field: "manufacturer",
+          },
+          { status: 400 }
+        );
+      }
+      data.manufacturer = next;
+    } else {
+      data.manufacturer = "";
+    }
+  }
   if (b.price !== undefined && Number(b.price) > 0) {
     data.priceCents = dollarsToCents(Number(b.price));
   }
