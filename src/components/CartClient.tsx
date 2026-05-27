@@ -109,16 +109,6 @@ export default function CartClient() {
   return (
     <div className="checkout-grid">
       <div>
-        {multiSupplier && (
-          <div
-            className="alert alert-info"
-            style={{ marginBottom: 14, fontSize: 13 }}
-          >
-            Your cart contains items from {groups.length} suppliers. Each
-            supplier ships separately. Multi-supplier checkout will go live
-            shortly; until then, please place one supplier per order.
-          </div>
-        )}
         {groups.map((g) => (
           <div key={g.supplierName} style={{ marginBottom: 18 }}>
             <div
