@@ -36,6 +36,7 @@ const DST_FIELDS = [
   "heightIn",
   "freightClass",
   "imageUrl",
+  "images",
   "description",
   "unit",
   "quoteOnly",
@@ -95,10 +96,22 @@ function applyMappingClient(
     if (skip) continue;
     const canonical: Record<string, unknown> = {};
     let priceSrc = "";
+    const imageAcc: string[] = [];
     for (const m of mapping) {
       if (!m.dstField) continue;
       const raw = row[m.srcColumn] ?? "";
       if (m.dstField === "priceCents") priceSrc = String(raw);
+      if (m.dstField === "images") {
+        const cell = String(raw).trim();
+        if (cell) {
+          const parts = cell
+            .split(/\||,/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+          for (const p of parts) imageAcc.push(p);
+        }
+        continue;
+      }
       let v: unknown = raw;
       if (m.transform?.kind === "literal") v = m.transform.literal;
       else if (
@@ -137,6 +150,20 @@ function applyMappingClient(
         /* ignore */
       }
     }
+    if (typeof canonical.imageUrl === "string" && canonical.imageUrl.trim()) {
+      imageAcc.unshift(canonical.imageUrl.trim());
+    }
+    const seenUrl = new Set<string>();
+    const imageUrls: string[] = [];
+    for (const u of imageAcc) {
+      if (seenUrl.has(u)) continue;
+      seenUrl.add(u);
+      imageUrls.push(u);
+    }
+    canonical.imageUrls = imageUrls;
+    if (!canonical.imageUrl && imageUrls.length > 0) {
+      canonical.imageUrl = imageUrls[0];
+    }
     out.push({ canonical, rowNumber: i + 2, src: row });
   }
   return out;
@@ -151,6 +178,22 @@ function validateCanonical(c: Record<string, unknown>): string[] {
   const price =
     typeof c.priceCents === "number" ? c.priceCents : Number(c.priceCents) || 0;
   if (!c.quoteOnly && !(price > 0)) errors.push("Price must be > 0");
+  const urls = Array.isArray(c.imageUrls) ? (c.imageUrls as string[]) : [];
+  if (urls.length > 12) {
+    errors.push(`Too many images (${urls.length}, cap is 12)`);
+  }
+  for (const u of urls) {
+    try {
+      const parsed = new URL(u);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        errors.push(`Image URL must be http or https`);
+        break;
+      }
+    } catch {
+      errors.push(`Invalid image URL`);
+      break;
+    }
+  }
   return errors;
 }
 
@@ -631,6 +674,7 @@ export default function AICatalogImport({
                     <th>Brand</th>
                     <th className="num">Price</th>
                     <th className="num">Stock</th>
+                    <th>Images</th>
                     <th>Notes</th>
                   </tr>
                 </thead>
@@ -660,6 +704,34 @@ export default function AICatalogImport({
                         </td>
                         <td className="num">
                           {typeof c.stock === "number" ? c.stock : "-"}
+                        </td>
+                        <td style={{ fontSize: 11.5, maxWidth: 200 }}>
+                          {(() => {
+                            const urls = Array.isArray(c.imageUrls)
+                              ? (c.imageUrls as string[])
+                              : [];
+                            if (urls.length === 0) return <span className="muted-text">none</span>;
+                            const first = urls[0];
+                            const truncated =
+                              first.length > 40 ? first.slice(0, 40) + "..." : first;
+                            return (
+                              <span
+                                title={urls.join("\n")}
+                                style={{
+                                  fontFamily: "var(--mono)",
+                                  fontSize: 11,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  display: "inline-block",
+                                  maxWidth: 200,
+                                }}
+                              >
+                                {urls.length} {urls.length === 1 ? "image" : "images"}: {truncated}
+                                {urls.length > 1 ? ` + ${urls.length - 1} more` : ""}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td style={{ fontSize: 11.5 }}>
                           {errs.length > 0 ? (

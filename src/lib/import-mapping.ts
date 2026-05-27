@@ -20,11 +20,16 @@ export const PARTSPORT_FIELDS = [
   "heightIn",
   "freightClass",
   "imageUrl",
+  "images",
   "description",
   "unit",
   "quoteOnly",
   "icon",
 ] as const;
+
+// PLH-3h P4: hard cap on number of image URLs per product row at import time.
+// Mirrors the per-product cap enforced by the supplier image manager UI.
+export const MAX_IMAGES_PER_ROW = 12;
 
 export type PartsPortField = (typeof PARTSPORT_FIELDS)[number];
 
@@ -66,6 +71,10 @@ export type CanonicalRow = {
   stock: number;
   description: string;
   imageUrl: string;
+  // PLH-3h P4: multi-image support. Accumulated from any column(s)
+  // mapped to `images`, plus the legacy single `imageUrl` if present.
+  // Deduped, order-preserving, capped at MAX_IMAGES_PER_ROW.
+  imageUrls: string[];
   quoteOnly: boolean;
   weightLbs: number | null;
   lengthIn: number | null;
@@ -91,7 +100,8 @@ const HEADER_HINTS: Record<PartsPortField, string[]> = {
   widthIn: ["width", "widthin", "widthinches", "w"],
   heightIn: ["height", "heightin", "heightinches", "h"],
   freightClass: ["freightclass", "nmfc", "class"],
-  imageUrl: ["image", "imageurl", "photo", "picture", "img"],
+  imageUrl: ["imageurl", "image", "photo", "picture", "img"],
+  images: ["images", "imageurls", "photos", "pictures", "imgs", "gallery", "image1", "image2", "image3", "image4", "image5", "image6", "image7", "image8", "image9", "image10", "image11", "image12", "photo1", "photo2", "photo3", "photo4", "photo5", "img1", "img2", "img3", "img4", "img5"],
   description: ["description", "longdescription", "notes", "details"],
   unit: ["unit", "uom", "units"],
   quoteOnly: ["quoteonly", "quote", "bo", "callforprice", "cfp"],
@@ -114,8 +124,17 @@ export function inferMapping(rawHeaders: string[]): ImportMapping {
     const norm = normHeader(h);
     let pick: PartsPortField | null = null;
     let pickScore = 0;
+    // PLH-3h P4: header that smells like an image column (contains
+    // image/photo/pic/img or "url") routes to `images` so multiple
+    // image* columns all roll up into one canonical array.
+    const looksImagey = /(image|photo|pic|img|gallery)/.test(norm);
+    if (looksImagey) {
+      pick = "images";
+      pickScore = 3;
+    }
     for (const field of PARTSPORT_FIELDS) {
-      if (used.has(field)) continue;
+      // `images` can be assigned to many source columns; don't gate on used.
+      if (field !== "images" && used.has(field)) continue;
       for (const hint of HEADER_HINTS[field]) {
         // Exact match wins.
         if (norm === hint && pickScore < 3) {
@@ -130,7 +149,7 @@ export function inferMapping(rawHeaders: string[]): ImportMapping {
         }
       }
     }
-    if (pick) used.add(pick);
+    if (pick && pick !== "images") used.add(pick);
     // priceCents default transform: dollars-to-cents (most spreadsheets
     // ship in dollars). The AI can flip this to identity (already cents)
     // or cents-to-dollars on user instruction.
@@ -237,13 +256,43 @@ export function applyMapping(
       srcRow: row,
     };
     let priceSrc = "";
+    // PLH-3h P4: accumulate URLs from any column mapped to `images`,
+    // plus the legacy single `imageUrl` column. Supports either
+    // pipe-separated or comma-separated URLs in a single cell.
+    const imageAcc: string[] = [];
     for (const m of mapping) {
       if (!m.dstField) continue;
       const raw = row[m.srcColumn] ?? "";
       if (m.dstField === "priceCents") priceSrc = String(raw);
+      if (m.dstField === "images") {
+        const cell = String(raw).trim();
+        if (cell) {
+          // Split on pipe first (canonical), then on comma. Whitespace
+          // around tokens is normalized.
+          const parts = cell
+            .split(/\||,/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+          for (const p of parts) imageAcc.push(p);
+        }
+        continue;
+      }
       const v = applyTransform(String(raw), m.dstField, m.transform);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (acc as any)[m.dstField] = v;
+    }
+    // Legacy single imageUrl also seeds the array so consumers only need
+    // to read imageUrls.
+    if (typeof acc.imageUrl === "string" && acc.imageUrl.trim()) {
+      imageAcc.unshift(acc.imageUrl.trim());
+    }
+    // Dedup, order-preserving.
+    const seenUrl = new Set<string>();
+    const imageUrls: string[] = [];
+    for (const u of imageAcc) {
+      if (seenUrl.has(u)) continue;
+      seenUrl.add(u);
+      imageUrls.push(u);
     }
 
     // quoteOnly heuristic from price-source regex.
@@ -285,7 +334,8 @@ export function applyMapping(
       etaDays,
       stock,
       description: String(acc.description || "").trim(),
-      imageUrl: String(acc.imageUrl || "").trim(),
+      imageUrl: String(acc.imageUrl || imageUrls[0] || "").trim(),
+      imageUrls,
       quoteOnly,
       weightLbs:
         typeof acc.weightLbs === "number" && Number.isFinite(acc.weightLbs)
@@ -318,14 +368,40 @@ export function applyMapping(
 export function validateRow(row: CanonicalRow): {
   ok: boolean;
   errors: string[];
+  warnings: string[];
 } {
   const errors: string[] = [];
+  const warnings: string[] = [];
   if (!row.sku) errors.push("Missing SKU");
   if (!row.name) errors.push("Missing name");
   if (!row.category) errors.push("Missing category");
   if (!row.manufacturer) errors.push("Missing manufacturer");
   if (!row.quoteOnly && !(row.priceCents > 0)) errors.push("Price must be > 0");
-  if (row.imageUrl) {
+  // PLH-3h P4: validate each URL in imageUrls. Cap at MAX_IMAGES_PER_ROW;
+  // drop extras with a warning. Any URL that fails new URL() or is not
+  // http(s) fails the whole row. URL-supplied images cannot be magic-byte
+  // sniffed without fetching each one (expensive), so URL parse + scheme
+  // check is the only line of defense here.
+  if (row.imageUrls && row.imageUrls.length > 0) {
+    if (row.imageUrls.length > MAX_IMAGES_PER_ROW) {
+      const dropped = row.imageUrls.length - MAX_IMAGES_PER_ROW;
+      warnings.push(
+        `Dropped ${dropped} extra image URL${dropped === 1 ? "" : "s"} (cap is ${MAX_IMAGES_PER_ROW}).`
+      );
+      row.imageUrls = row.imageUrls.slice(0, MAX_IMAGES_PER_ROW);
+    }
+    for (const u of row.imageUrls) {
+      try {
+        const parsed = new URL(u);
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+          errors.push(`Image URL must be http or https: ${u}`);
+        }
+      } catch {
+        errors.push(`Image URL is not valid: ${u}`);
+      }
+    }
+  } else if (row.imageUrl) {
+    // Legacy single-image path (no images mapping in play).
     try {
       const u = new URL(row.imageUrl);
       if (u.protocol !== "https:" && u.protocol !== "http:") {
@@ -335,7 +411,7 @@ export function validateRow(row: CanonicalRow): {
       errors.push("imageUrl is not a valid URL");
     }
   }
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, warnings };
 }
 
 /**

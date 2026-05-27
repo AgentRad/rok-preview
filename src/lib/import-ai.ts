@@ -18,7 +18,7 @@ Critical:
 - sku, name, category, manufacturer are required. priceCents is required unless the row is quoteOnly.
 - priceCents is stored in cents. If the source column is in dollars use transform { kind: "dollars-to-cents" }. If the source is already in cents use { kind: "identity" }.
 - manufacturer must match an OEM brand that has claimed its name on PartsPort. Free-typed brand names will fail validation at commit.
-- imageUrl must be http(s).
+- imageUrl is the legacy single-image target and must be http(s). For multi-image products map source columns to the "images" target instead. Multiple source columns can all map to "images" (e.g. image1, image2, image3 columns); the values are accumulated in order into a single image array per product row. A single "images" column may also carry multiple URLs in one cell, pipe-separated ("https://a/1.jpg|https://a/2.jpg") or comma-separated. Cap is 12 images per row; extras are dropped. Every URL must be http or https or the row is rejected.
 - quoteOnly is a boolean. Suppliers often write "B/O" (back-order / quote) or "call" in the price column to mean quote-only. Use proposed_filters.quoteOnlyIfPriceMatches with a regex like "^(b/o|call|quote|tbd)$" to handle that.
 - Common junk rows: totals, subtotals, blank separator rows. Use proposed_filters.skipRowIf with "totals", "empty", or { regex: "..." }.
 

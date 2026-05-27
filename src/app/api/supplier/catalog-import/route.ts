@@ -210,7 +210,10 @@ async function commitRows(
 }> {
   const rowErrors: { rowNumber: number; error: string }[] = [];
 
-  // Field-level validation up front.
+  // Field-level validation up front. validateRow mutates row.imageUrls in
+  // place to enforce the MAX_IMAGES_PER_ROW cap (drops extras + warns).
+  // Warnings are non-fatal and don't surface in the route result today;
+  // the cap is enforced silently at the canonical-row layer.
   const validated: CanonicalRow[] = [];
   for (const r of rows) {
     const v = validateRow(r);
@@ -300,14 +303,19 @@ async function commitRows(
         for (const r of slice) {
           if (r.exists) {
             try {
-              await tx.product.update({
+              const updatedProduct = await tx.product.update({
                 where: { sku: r.sku, supplierId },
                 data: {
                   name: r.name,
                   category: r.category,
                   manufacturer: r.manufacturer,
                   icon: r.icon,
-                  imageUrl: r.imageUrl || null,
+                  // Backward compat: keep Product.imageUrl in sync with the
+                  // primary (ordinal 0) image when the row provides any.
+                  imageUrl:
+                    (r.imageUrls && r.imageUrls.length > 0
+                      ? r.imageUrls[0]
+                      : r.imageUrl) || null,
                   priceCents: r.priceCents,
                   unit: r.unit,
                   etaDays: r.etaDays,
@@ -315,7 +323,27 @@ async function commitRows(
                   quoteOnly: r.quoteOnly,
                   description: r.description || undefined,
                 },
+                select: { id: true },
               });
+              // PLH-3h P4: REPLACE semantics. When the row provides any
+              // imageUrls, wipe existing ProductImage rows and reinsert in
+              // order. The supplier should use the dashboard for
+              // incremental edits; CSV import is treated as the canonical
+              // image set for that row.
+              if (r.imageUrls && r.imageUrls.length > 0) {
+                await tx.productImage.deleteMany({
+                  where: { productId: updatedProduct.id },
+                });
+                for (let idx = 0; idx < r.imageUrls.length; idx++) {
+                  await tx.productImage.create({
+                    data: {
+                      productId: updatedProduct.id,
+                      url: r.imageUrls[idx],
+                      ordinal: idx,
+                    },
+                  });
+                }
+              }
               updated++;
             } catch (e) {
               if (
@@ -338,7 +366,12 @@ async function commitRows(
                   category: r.category,
                   manufacturer: r.manufacturer,
                   icon: r.icon,
-                  imageUrl: r.imageUrl || null,
+                  // Primary image goes onto Product.imageUrl for backward
+                  // compat with consumers still reading the single field.
+                  imageUrl:
+                    (r.imageUrls && r.imageUrls.length > 0
+                      ? r.imageUrls[0]
+                      : r.imageUrl) || null,
                   priceCents: r.priceCents,
                   unit: r.unit,
                   etaDays: r.etaDays,
@@ -351,12 +384,23 @@ async function commitRows(
                   active: true,
                 },
               });
-              if (r.imageUrl) {
+              // PLH-3h P4: write every imageUrl as a ProductImage row.
+              // No magic-byte check is possible for URL-supplied images
+              // (would require fetching every URL on every import, which
+              // is too expensive). URL parse + http(s) scheme check in
+              // validateRow is the only line of defense for URL imports.
+              const imgs =
+                r.imageUrls && r.imageUrls.length > 0
+                  ? r.imageUrls
+                  : r.imageUrl
+                    ? [r.imageUrl]
+                    : [];
+              for (let idx = 0; idx < imgs.length; idx++) {
                 await tx.productImage.create({
                   data: {
                     productId: product.id,
-                    url: r.imageUrl,
-                    ordinal: 0,
+                    url: imgs[idx],
+                    ordinal: idx,
                   },
                 });
               }
@@ -607,6 +651,14 @@ async function commitAction(body: {
     body.mapping,
     body.filters || {}
   );
+  // PLH-3h P4: pre-commit image-count tally for audit metadata. Counted
+  // before validateRow runs, so reflects what the supplier sent (the
+  // cap-applier in validateRow trims oversize rows in-place; that lower
+  // figure isn't worth re-walking the array for the audit row).
+  let imageCount = 0;
+  for (const r of canonical) {
+    imageCount += Math.min(r.imageUrls.length, 12);
+  }
   const result = await commitRows(
     canonical,
     ctx.supplier.id,
@@ -640,6 +692,7 @@ async function commitAction(body: {
       committedBatches: result.committedBatches,
       totalBatches: result.totalBatches,
       failedAtBatch: result.failedAtBatch,
+      imageCount,
     },
   });
 
@@ -647,6 +700,12 @@ async function commitAction(body: {
 }
 
 // ---------------------------------------------------------------------------
+// PLH-3h P4 note: the legacy CSV importer below remains single-image
+// (Product.imageUrl + one ProductImage at ordinal 0). The AI flow above
+// is the canonical multi-image route; suppliers who want to import 4 to
+// 12 images per product should use /supplier/catalog-import (AI flow)
+// with an `images` column or multiple image* columns.
+//
 // Legacy path. Preserves the exact behavior the existing CatalogCsvImport
 // component depends on. Inlined rather than refactored so the surface
 // stays bit-identical: same response shape, same error codes, same batch
