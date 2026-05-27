@@ -62,61 +62,86 @@ export async function POST(
   if (action === "approve") {
     const isOem = app.category === "Manufacturer / OEM";
     const role = isOem ? "MANUFACTURER" : "SUPPLIER";
-    const existingUser = await prisma.user.findUnique({
-      where: { email: app.email },
-    });
-    // PLH-1 commit 3: no shared "demo1234" temp password. New accounts get
-    // a random 32-byte secret which is bcrypt-hashed and then thrown away.
-    // The user sets a real password by clicking through the reset link in
-    // the welcome email below.
+    // PLH-3e F3: wrap the approve-write set in a $transaction so a
+    // concurrent second POST on the same application cannot create
+    // duplicate Supplier/SupplierMember rows. Re-read the application
+    // INSIDE the transaction and abort 409 if some other writer already
+    // flipped it out of PENDING.
     let isNewAccount = false;
-    const account = existingUser
-      ? await prisma.user.update({
-          where: { id: existingUser.id },
-          data: {
-            role,
-            ...(isOem ? { manufacturerName: app.companyName } : {}),
-          },
-        })
-      : await (async () => {
-          isNewAccount = true;
-          const throwaway = crypto.randomBytes(32).toString("hex");
-          const passwordHash = await hashPassword(throwaway);
-          return prisma.user.create({
+    let account: { id: string };
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const fresh = await tx.supplierApplication.findUnique({ where: { id } });
+        if (!fresh || fresh.status !== "PENDING") {
+          throw new Error("ALREADY_REVIEWED");
+        }
+        const existingUser = await tx.user.findUnique({
+          where: { email: app.email },
+        });
+        // PLH-1 commit 3: no shared "demo1234" temp password. New accounts get
+        // a random 32-byte secret which is bcrypt-hashed and then thrown away.
+        // The user sets a real password by clicking through the reset link in
+        // the welcome email below.
+        const acct = existingUser
+          ? await tx.user.update({
+              where: { id: existingUser.id },
+              data: {
+                role,
+                ...(isOem ? { manufacturerName: app.companyName } : {}),
+              },
+            })
+          : await (async () => {
+              isNewAccount = true;
+              const throwaway = crypto.randomBytes(32).toString("hex");
+              const passwordHash = await hashPassword(throwaway);
+              return tx.user.create({
+                data: {
+                  email: app.email,
+                  name: app.contactName,
+                  role,
+                  passwordHash,
+                  ...(isOem ? { manufacturerName: app.companyName } : {}),
+                },
+              });
+            })();
+
+        if (!isOem) {
+          const supplier = await tx.supplier.create({
             data: {
-              email: app.email,
-              name: app.contactName,
-              role,
-              passwordHash,
-              ...(isOem ? { manufacturerName: app.companyName } : {}),
+              name: app.companyName,
+              contactEmail: app.email,
+              status: "APPROVED",
+              certifications: app.certs,
+              rating: 4.7,
+              reviews: 0,
+              userId: acct.id,
             },
           });
-        })();
-
-    if (!isOem) {
-      const supplier = await prisma.supplier.create({
-        data: {
-          name: app.companyName,
-          contactEmail: app.email,
-          status: "APPROVED",
-          certifications: app.certs,
-          rating: 4.7,
-          reviews: 0,
-          userId: account.id,
-        },
+          await tx.supplierMember.create({
+            data: {
+              supplierId: supplier.id,
+              userId: acct.id,
+              role: "OWNER",
+            },
+          });
+        }
+        await tx.supplierApplication.update({
+          where: { id },
+          data: { status: "APPROVED" },
+        });
+        return { acct };
       });
-      await prisma.supplierMember.create({
-        data: {
-          supplierId: supplier.id,
-          userId: account.id,
-          role: "OWNER",
-        },
-      });
+      account = result.acct;
+    } catch (err) {
+      if ((err as Error).message === "ALREADY_REVIEWED") {
+        return NextResponse.json(
+          { error: "Application has already been reviewed." },
+          { status: 409 }
+        );
+      }
+      throw err;
     }
-    await prisma.supplierApplication.update({
-      where: { id },
-      data: { status: "APPROVED" },
-    });
+
     await writeAuditLog({
       actor: user,
       action: "SUPPLIER_APPROVED",
