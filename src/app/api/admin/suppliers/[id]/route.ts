@@ -120,46 +120,60 @@ export async function PATCH(
   // PLH-1 commit 3: server-side go-live gate. Admin can hide a live
   // supplier any time, but flipping hidden -> live requires all 10 readiness
   // items to pass. UI gating is belt-and-braces; this is the real lock.
-  if (
-    data.publicVisible === true &&
-    supplier.publicVisible === false
-  ) {
-    const [docs, productCount] = await Promise.all([
-      prisma.supplierDocument.findMany({
-        where: { supplierId: supplier.id },
-        select: { kind: true, status: true },
-      }),
-      prisma.product.count({ where: { supplierId: supplier.id, active: true } }),
-    ]);
-    const readiness = computeReadiness(
-      {
-        status: data.status ?? supplier.status,
-        logoUrl: supplier.logoUrl,
-        description: data.description ?? supplier.description,
-        certifications: data.certifications ?? supplier.certifications,
-        website: data.website ?? supplier.website,
-        bankInfoStatus: supplier.bankInfoStatus,
-        stripePayoutsEnabled: supplier.stripePayoutsEnabled,
-        stripeAccountId: supplier.stripeAccountId,
-      },
-      docs,
-      productCount
-    );
-    if (!readiness.ready) {
-      const missingItems = readiness.items
-        .filter((i) => !i.done)
-        .map((i) => i.label);
-      return NextResponse.json(
-        {
-          error: `Cannot go live. ${readiness.done}/${readiness.total} onboarding items complete.`,
-          missing: missingItems,
-        },
-        { status: 400 }
-      );
+  // PLH-3e B10: wrap the readiness re-check + the supplier.update in a
+  // single $transaction so a concurrent writer can't mutate readiness
+  // inputs between check and write. Mirrors PLH-3e F3 pattern.
+  const goingLive =
+    data.publicVisible === true && supplier.publicVisible === false;
+  let updated;
+  if (goingLive) {
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        const [docs, productCount] = await Promise.all([
+          tx.supplierDocument.findMany({
+            where: { supplierId: supplier.id },
+            select: { kind: true, status: true },
+          }),
+          tx.product.count({ where: { supplierId: supplier.id, active: true } }),
+        ]);
+        const readiness = computeReadiness(
+          {
+            status: data.status ?? supplier.status,
+            logoUrl: supplier.logoUrl,
+            description: data.description ?? supplier.description,
+            certifications: data.certifications ?? supplier.certifications,
+            website: data.website ?? supplier.website,
+            bankInfoStatus: supplier.bankInfoStatus,
+            stripePayoutsEnabled: supplier.stripePayoutsEnabled,
+            stripeAccountId: supplier.stripeAccountId,
+          },
+          docs,
+          productCount
+        );
+        if (!readiness.ready) {
+          const missingItems = readiness.items
+            .filter((i) => !i.done)
+            .map((i) => i.label);
+          throw Object.assign(new Error("NOT_READY"), {
+            readinessError: {
+              error: `Cannot go live. ${readiness.done}/${readiness.total} onboarding items complete.`,
+              missing: missingItems,
+            },
+          });
+        }
+        return tx.supplier.update({ where: { id }, data });
+      });
+    } catch (err) {
+      const re = (err as { readinessError?: { error: string; missing: string[] } })
+        .readinessError;
+      if (re) {
+        return NextResponse.json(re, { status: 400 });
+      }
+      throw err;
     }
+  } else {
+    updated = await prisma.supplier.update({ where: { id }, data });
   }
-
-  const updated = await prisma.supplier.update({ where: { id }, data });
 
   // Audit-log the kinds of changes a regulator or future-you cares about.
   // Plain edits (rating tweak, description tidy) collapse to one summary
