@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { siteUrl } from "@/lib/site-url";
@@ -247,49 +246,13 @@ export default async function ProductPage({
               </div>
 
               <div className="detail-buybox">
-                <div className="buybox-row">
-                  <span>{product.quoteOnly ? "Typical lead time" : "Delivery ETA"}</span>
-                  <span className="v" style={{ color: "var(--green)" }}>
-                    {product.etaDays} business day{product.etaDays > 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="buybox-row">
-                  <span>Availability</span>
-                  <span
-                    className="v"
-                    style={{
-                      color: product.quoteOnly
-                        ? "var(--ink)"
-                        : inStock
-                          ? "var(--green)"
-                          : "var(--red)",
-                    }}
-                  >
-                    {product.quoteOnly
-                      ? "Made to order"
-                      : inStock
-                        ? `${product.stock.toLocaleString()} in stock`
-                        : "Backorder"}
-                  </span>
-                </div>
-                <div className="buybox-row">
-                  <span>Sold &amp; fulfilled by</span>
-                  <span className="v" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    {product.supplier.logoUrl && (
-                      <Image
-                        className="supplier-logo-inline"
-                        src={product.supplier.logoUrl}
-                        alt=""
-                        width={18}
-                        height={18}
-                        unoptimized
-                      />
-                    )}
-                    {product.supplier.name}{" "}
-                    {supplierRating.kind === "computed" && (
-                      <>★ {supplierRating.average.toFixed(1)} ({supplierRating.count})</>
-                    )}
-                  </span>
+                <div className="muted-text" style={{ fontSize: 12, marginBottom: 6 }}>
+                  {product.quoteOnly
+                    ? `${product.etaDays} day${product.etaDays > 1 ? "s" : ""} · Made to order · ${product.supplier.name}`
+                    : `${product.etaDays} day${product.etaDays > 1 ? "s" : ""} · ${inStock ? `${product.stock.toLocaleString()} in stock` : "Backorder"} · ${product.supplier.name}`}
+                  {supplierRating.kind === "computed" && (
+                    <> · ★ {supplierRating.average.toFixed(1)} ({supplierRating.count})</>
+                  )}
                 </div>
 
                 {/* Purchase affordances only for buyer-eligible viewers
