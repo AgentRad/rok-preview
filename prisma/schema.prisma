@@ -79,6 +79,9 @@ model User {
   name                       String
   role                       Role                 @default(BUYER)
   manufacturerName           String?
+  // Partial unique index on (manufacturerName) where role='MANUFACTURER'
+  // is enforced by migration 20260607000000_unique_oem_manufacturer_name.
+  // Prisma doesn't model partial uniques natively.
   manufacturerTagline        String               @default("")
   manufacturerBio            String               @default("")
   manufacturerLogoUrl        String?
