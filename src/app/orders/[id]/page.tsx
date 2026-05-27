@@ -44,6 +44,13 @@ export default async function OrderPage({
     returns: { orderBy: { createdAt: "desc" as const } },
     messages: { orderBy: { createdAt: "asc" as const } },
     reviews: { select: { productId: true, rating: true, createdAt: true } },
+    // PLH-3j P8: pull the most recent Refund row so the totals breakdown
+    // can render "Refunded: $X.XX on <date>" below the Total line.
+    refunds: {
+      orderBy: { createdAt: "desc" as const },
+      take: 1,
+      select: { amountCents: true, createdAt: true },
+    },
     supplierSlots: {
       include: { supplier: { select: { id: true, name: true, logoUrl: true } } },
     },
@@ -577,6 +584,24 @@ export default async function OrderPage({
                 <span>Total</span>
                 <span>{formatCents(order.totalCents)}</span>
               </div>
+              {/* PLH-3j P8: surface refund amount + date on the buyer's
+                  order page. Order.refundedCents was already tracked but
+                  never rendered. Pull the most recent Refund row for the
+                  date so the buyer can see when the money was returned. */}
+              {order.refundedCents > 0 && (
+                <div
+                  className="summary-line"
+                  style={{ color: "var(--blue)", marginTop: 6 }}
+                >
+                  <span>
+                    Refunded
+                    {order.refunds[0]?.createdAt
+                      ? ` on ${new Date(order.refunds[0].createdAt).toLocaleDateString()}`
+                      : ""}
+                  </span>
+                  <span>{formatCents(order.refundedCents)}</span>
+                </div>
+              )}
               {order.taxCents === 0 && order.status === "PENDING" && (
                 <p
                   className="muted-text"
