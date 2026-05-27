@@ -65,6 +65,11 @@ const BUCKETS: Record<string, Bucket> = {
   // 30/hour. A normal supplier asking 5 to 10 things in a session never
   // touches this; a runaway client loop gets clean 429s.
   "ai-assistant": { capacity: 30, windowMs: 60 * 60_000 },
+  // PLH-3f S2: conversational import assistant. Per-supplier cap on
+  // the chat action of /api/supplier/catalog-import. Each chat hits
+  // the Anthropic API at real-money cost; 30/hour/supplier matches
+  // the ai-assistant bucket and stays comfortably above human pace.
+  "import-ai": { capacity: 30, windowMs: 60 * 60_000 },
   // PLH-3f: parse + commit actions on the import route. The existing
   // /api/supplier/catalog-import POST shared the "generic" bucket; the
   // new route now pulls under its own name so abuse cannot starve
