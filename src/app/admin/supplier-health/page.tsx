@@ -5,6 +5,21 @@ import { formatCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
+// PLH-3j P12: alert thresholds configurable via env vars. Defaults keep
+// the previously hardcoded values (refund 5%, days-to-ship 7, owed > 0,
+// inactive 30d). Set in Vercel without a code change to tune for noise.
+function envNum(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+const ALERT_REFUND_RATE = envNum("SUPPLIER_HEALTH_REFUND_RATE", 0.05);
+const ALERT_DAYS_TO_SHIP = envNum("SUPPLIER_HEALTH_DAYS_TO_SHIP", 7);
+const ALERT_OWED_CENTS = envNum("SUPPLIER_HEALTH_OWED_CENTS", 0);
+const ALERT_INACTIVE_DAYS = envNum("SUPPLIER_HEALTH_INACTIVE_DAYS", 30);
+
+
 /**
  * Polish 12 commit 5 (II): per-supplier health dashboard. Admin-only.
  *
@@ -159,12 +174,16 @@ export default async function SupplierHealthPage() {
     if (m.grossTotal > 0) {
       m.refundRate = m.refundedTotal / m.grossTotal;
     }
-    if (m.refundRate > 0.05) m.alerts.push("Refund rate > 5%");
-    if (m.daysToShip !== null && m.daysToShip > 7)
-      m.alerts.push("Avg days-to-ship > 7");
-    if (m.owed > 0) m.alerts.push("Owed to platform");
-    if (m.lastActivity && now - m.lastActivity.getTime() > 30 * 86400_000) {
-      m.alerts.push("Inactive > 30 days");
+    if (m.refundRate > ALERT_REFUND_RATE)
+      m.alerts.push(`Refund rate > ${(ALERT_REFUND_RATE * 100).toFixed(1)}%`);
+    if (m.daysToShip !== null && m.daysToShip > ALERT_DAYS_TO_SHIP)
+      m.alerts.push(`Avg days-to-ship > ${ALERT_DAYS_TO_SHIP}`);
+    if (m.owed > ALERT_OWED_CENTS) m.alerts.push("Owed to platform");
+    if (
+      m.lastActivity &&
+      now - m.lastActivity.getTime() > ALERT_INACTIVE_DAYS * 86400_000
+    ) {
+      m.alerts.push(`Inactive > ${ALERT_INACTIVE_DAYS} days`);
     }
     if (!m.lastActivity) m.alerts.push("No orders yet");
   }
