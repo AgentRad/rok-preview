@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ProductImage from "./ProductImage";
+import { primaryImageUrl } from "@/lib/product-images";
 import { formatCents } from "@/lib/money";
 
 type Result = {
@@ -94,7 +95,7 @@ export default function HeroSearch() {
           {results.map((r) => (
             <Link key={r.sku} href={`/product/${r.sku}`} className="hs-row">
               <span className="hs-thumb">
-                <ProductImage imageUrl={r.imageUrl} icon={r.icon} name={r.name} />
+                <ProductImage imageUrl={primaryImageUrl(r)} icon={r.icon} name={r.name} />
               </span>
               <span className="hs-info">
                 <span className="hs-name">{r.name}</span>

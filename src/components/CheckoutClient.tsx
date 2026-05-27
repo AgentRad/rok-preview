@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import ProductImage from "./ProductImage";
+import { primaryImageUrl } from "@/lib/product-images";
 import { getCart, clearCart, type CartLine } from "@/lib/cart";
 import { formatCents, FEE_RATE_LABEL } from "@/lib/money";
 import { computeOrderTotals } from "@/lib/order-totals";
@@ -417,7 +418,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
           return (
             <div className="summary-item" key={l.sku}>
               <div className="si-thumb">
-                <ProductImage imageUrl={p.imageUrl} icon={p.icon} name={p.name} />
+                <ProductImage imageUrl={primaryImageUrl(p)} icon={p.icon} name={p.name} />
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600 }}>{p.name}</div>

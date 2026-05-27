@@ -3,6 +3,7 @@ import Image from "next/image";
 import ProductImage from "./ProductImage";
 import QuickAddButton from "./QuickAddButton";
 import { formatCents } from "@/lib/money";
+import { primaryImageUrl } from "@/lib/product-images";
 
 export type CardProduct = {
   sku: string;
@@ -11,6 +12,7 @@ export type CardProduct = {
   manufacturer: string;
   icon: string;
   imageUrl?: string | null;
+  images?: { url: string; ordinal?: number }[];
   priceCents: number;
   unit: string;
   etaDays: number;
@@ -43,7 +45,7 @@ export default function ProductCard({
             <span className="thumb-count">+{imageCount - 1}</span>
           ) : null}
           <ProductImage
-            imageUrl={product.imageUrl}
+            imageUrl={primaryImageUrl(product)}
             icon={product.icon}
             name={product.name}
           />

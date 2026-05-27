@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ProductImage from "@/components/ProductImage";
+import { primaryImageUrl } from "@/lib/product-images";
 import QuoteActions from "@/components/QuoteActions";
 import MessageThread from "@/components/MessageThread";
 import { formatCents, feeFor, FEE_RATE_LABEL } from "@/lib/money";
@@ -96,7 +97,7 @@ export default async function QuotePage({
             <div className="card-body">
               <div className="quote-product">
                 <div className="quote-thumb">
-                  <ProductImage imageUrl={p.imageUrl} icon={p.icon} name={p.name} />
+                  <ProductImage imageUrl={primaryImageUrl(p)} icon={p.icon} name={p.name} />
                 </div>
                 <div>
                   <div className="product-mfr">{p.manufacturer}</div>

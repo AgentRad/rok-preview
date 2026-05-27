@@ -204,7 +204,7 @@ export default async function ProductPage({
             >
               {product.images.length > 0 ? (
                 <ProductGallery
-                  images={product.images.map((i) => ({ id: i.id, url: i.url }))}
+                  images={product.images.map((i) => ({ id: i.id, url: i.url, alt: i.alt }))}
                   name={product.name}
                 />
               ) : (

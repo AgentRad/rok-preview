@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import ProductImage from "./ProductImage";
+import { primaryImageUrl } from "@/lib/product-images";
 import { getCart, setQty, onCartChange, type CartLine } from "@/lib/cart";
 import { formatCents, FEE_RATE_LABEL } from "@/lib/money";
 import { computeOrderTotals } from "@/lib/order-totals";
@@ -142,7 +143,7 @@ export default function CartClient() {
               return (
                 <div className="cart-line" key={l.sku}>
                   <div className="cl-thumb">
-                    <ProductImage imageUrl={p.imageUrl} icon={p.icon} name={p.name} />
+                    <ProductImage imageUrl={primaryImageUrl(p)} icon={p.icon} name={p.name} />
                   </div>
                   <div className="cl-main">
                     <div className="cl-mfr">{p.manufacturer}</div>
