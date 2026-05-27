@@ -7,6 +7,15 @@ import {
 } from "@/lib/supplier-access";
 import { rateLimit } from "@/lib/rate-limit";
 import { writeAuditLog } from "@/lib/audit";
+import crypto from "node:crypto";
+
+// PLH-3e B7: hash last-4 in audit metadata so visibility into "did it
+// change?" is preserved without leaking the digits themselves through
+// the audit log read surface.
+function hashLast4(last4: string | null | undefined): string | null {
+  if (!last4) return null;
+  return crypto.createHash("sha256").update(last4).digest("hex").slice(0, 8);
+}
 
 export const runtime = "nodejs";
 
@@ -102,8 +111,8 @@ export async function PATCH(req: Request) {
     targetId: updated.id,
     summary: `Bank info updated to ${bankName} ****${last4Raw} (was ****${previous?.bankInfoLast4 ?? "none"})`,
     metadata: {
-      previousLast4: previous?.bankInfoLast4 ?? null,
-      newLast4: last4Raw,
+      previousLast4Hash: hashLast4(previous?.bankInfoLast4 ?? null),
+      newLast4Hash: hashLast4(last4Raw),
       previousStatus: previous?.bankInfoStatus ?? null,
       actor: user.id,
     },
