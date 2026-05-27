@@ -66,6 +66,55 @@ export default function CompactTiles(props: CompactTilesProps) {
     showPayouts,
     ordersHref,
   } = props;
+
+  // PLH-3l P6: render the quotes/orders/payouts tiles as 1-line compact
+  // summaries when there's anything to show. Single dot separator between
+  // count and detail. Whole tile is clickable via the wrapping Link.
+  const tiles: React.ReactNode[] = [];
+  if (showQuotes && openQuotes > 0) {
+    const oldestPart =
+      oldestQuoteDays != null
+        ? ` · oldest ${oldestQuoteDays} day${oldestQuoteDays === 1 ? "" : "s"}`
+        : "";
+    tiles.push(
+      <Tile
+        key="quotes"
+        href="/supplier/quotes"
+        icon="📋"
+        body={`${openQuotes} open RFQ${openQuotes === 1 ? "" : "s"}${oldestPart}`}
+        cta="View all"
+      />
+    );
+  }
+  if (showOrders && shipQueueCount > 0) {
+    tiles.push(
+      <Tile
+        key="orders"
+        href={ordersHref}
+        icon="📦"
+        body={
+          shipQueueCount === 1
+            ? "1 paid order awaiting ship"
+            : `${shipQueueCount} paid orders awaiting ship`
+        }
+        cta="View orders"
+      />
+    );
+  }
+  if (showPayouts && payoutsDueCents > 0) {
+    tiles.push(
+      <Tile
+        key="payouts"
+        href="/supplier/payouts"
+        icon="💰"
+        body={`${formatCents(payoutsDueCents)} in payouts due`}
+        cta="View payouts"
+      />
+    );
+  }
+
+  if (tiles.length === 0) return null;
+
   return (
     <div
       style={{
@@ -75,38 +124,7 @@ export default function CompactTiles(props: CompactTilesProps) {
         margin: "20px 0",
       }}
     >
-      {showQuotes && openQuotes > 0 && (
-        <Tile
-          href="/supplier/quotes"
-          icon="📋"
-          body={
-            openQuotes === 1
-              ? `1 open RFQ${oldestQuoteDays != null ? ` · oldest ${oldestQuoteDays} day${oldestQuoteDays === 1 ? "" : "s"}` : ""}`
-              : `${openQuotes} open RFQs${oldestQuoteDays != null ? ` · oldest ${oldestQuoteDays} day${oldestQuoteDays === 1 ? "" : "s"}` : ""}`
-          }
-          cta="View all"
-        />
-      )}
-      {showOrders && shipQueueCount > 0 && (
-        <Tile
-          href={ordersHref}
-          icon="📦"
-          body={
-            shipQueueCount === 1
-              ? "1 paid order awaiting ship"
-              : `${shipQueueCount} paid orders awaiting ship`
-          }
-          cta="View orders"
-        />
-      )}
-      {showPayouts && payoutsDueCents > 0 && (
-        <Tile
-          href="/supplier/payouts"
-          icon="💰"
-          body={`${formatCents(payoutsDueCents)} in payouts due`}
-          cta="View payouts"
-        />
-      )}
+      {tiles}
     </div>
   );
 }
