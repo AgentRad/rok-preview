@@ -82,7 +82,6 @@ export async function GET(req: Request) {
         to: adminAddr,
         senderName: "PartsPort Health Check",
         subjectPrefix: "[Health]",
-        context: "daily platform health probe",
         body: failed
           .map((c) => `${c.name}: ${c.detail}`)
           .join("\n"),

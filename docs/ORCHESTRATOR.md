@@ -650,6 +650,19 @@ These were MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4d. The Phase 4
 - **Re-subscribe affordance in the unsubscribe response HTML. SHIPPED (PLH-3j P5).** New `/api/email/resubscribe` route + button on the unsubscribe success page.
 - **Tax-exempt cert expiry. SHIPPED (PLH-3j P4).** `Address.taxExemptExpiresAt` + UI date input + `/api/cron/tax-exempt-expiry` daily reminder + `lookupTaxExemption` filters expired certs.
 
+## PLH-3o (2026-05-27): thread-message email redesign
+
+Shipped. One commit. Strips the branded `wrap()` card off the
+back-and-forth thread email; renders the sender body in plain
+paragraphs plus a standard "On ... wrote:" quoted block for the
+most recent prior message. Plain-text alternative mirrors the
+structure. `wrap()` retained for other transactional mail
+(order, refund, reset, etc.). `prevMessage` query added to both
+the `/api/messages` POST and the order + quote branches of the
+inbound webhook fan-out so each fan-out includes the prior turn.
+Smoke-test pending Conrad: send + Gmail eyeball + reply round-trip
+on RFQ-87K9UN. See CLAUDE.md PLH-3o block for the full state.
+
 ## Post-launch backlog (deferred from PLH-2 Phase 4e crons audit)
 
 These are MEDIUM/LOW findings explicitly skipped at PLH-2 Phase 4e. The Phase 4e commit closed the five CRITICAL/HIGH items: E1 (auto-deliver routed through `isAuthorizedCronRequest` so prod fails closed when CRON_SECRET is unset), E2 (auto-deliver no longer swallows email failures; new `AUTO_DELIVER_EMAIL_FAILED` audit + `Order.deliveryEmailSentAt` timestamp + Sentry on `sendOrderDelivered` throw), E3 (reserve-release two-stage so the Stripe transfer fires AFTER the row is staked out but BEFORE `reserveBalanceCents` is decremented; new `status` column on `SupplierReserveTransaction` with PENDING/COMPLETED/FAILED lifecycle and stage-3 re-read + Math.min on fresh balance), E4 (`MAX_PER_RUN=200` cap on auto-deliver and reserve-release, ASC ordering by oldest first, `hasMore` in response payload), E5 (`ReconciliationState` singleton with `cursor` column; reconcile now walks forward in 7-day chunks one window per invocation with 1000/1000 charges+transfers caps, advances cursor only on a non-capped run). New migration: `20260604000000_plh2_phase4e_cron_audit`. The list below is queued for a post-launch polish round, not for soft launch.

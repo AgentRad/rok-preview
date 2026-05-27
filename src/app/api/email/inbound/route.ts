@@ -416,7 +416,6 @@ async function handleInbound(req: Request) {
         to: senderEmail,
         senderName: "PartsPort",
         subjectPrefix: target.kind === "order" ? "Order reply" : "RFQ reply",
-        context: "your reply",
         body:
           "We couldn't match your email to a PartsPort account, so your reply was not posted to the thread. Sign in and reply on PartsPort at the link below, or reply from the email address that received the original message.",
         threadUrl: url,
@@ -480,8 +479,9 @@ async function handleInbound(req: Request) {
       .createHash("sha256")
       .update(`${user.id}|${order.id}||${cleaned.trim()}`)
       .digest("hex");
+    let createdId = "";
     try {
-      await prisma.message.create({
+      const created = await prisma.message.create({
         data: {
           orderId: order.id,
           senderId: user.id,
@@ -492,6 +492,7 @@ async function handleInbound(req: Request) {
           inboundFingerprint: orderFingerprint,
         },
       });
+      createdId = created.id;
     } catch (err) {
       const code = (err as { code?: string } | null)?.code;
       if (code === "P2002") {
@@ -499,6 +500,19 @@ async function handleInbound(req: Request) {
       }
       throw err;
     }
+    const prevRow = await prisma.message.findFirst({
+      where: { orderId: order.id, NOT: { id: createdId } },
+      orderBy: { createdAt: "desc" },
+      select: { senderName: true, senderEmail: true, body: true, createdAt: true },
+    });
+    const prevMessage = prevRow
+      ? {
+          senderName: prevRow.senderName,
+          senderEmail: prevRow.senderEmail,
+          body: prevRow.body,
+          createdAt: prevRow.createdAt,
+        }
+      : null;
     // Fan out to the other people on the thread (mirrors POST /api/messages).
     const recipients = new Set<string>();
     const recipientUserIds = new Map<string, string | null>();
@@ -527,12 +541,12 @@ async function handleInbound(req: Request) {
             to,
             senderName: user.name,
             subjectPrefix: `Order ${order.reference}`,
-            context: `order ${order.reference}`,
             body: cleaned,
             threadUrl: siteUrl(`/orders/${order.id}`),
             threadKind: "order",
             threadId: order.id,
             recipientUserId: recipientUserIds.get(to) ?? null,
+            prevMessage,
           });
         } catch (err) {
           captureError(err, { subsystem: "email", op: "inbound-fan-out", to });
@@ -604,8 +618,9 @@ async function handleInbound(req: Request) {
     .createHash("sha256")
     .update(`${user.id}||${quote.id}|${cleaned.trim()}`)
     .digest("hex");
+  let createdQuoteMsgId = "";
   try {
-    await prisma.message.create({
+    const created = await prisma.message.create({
       data: {
         quoteId: quote.id,
         senderId: user.id,
@@ -616,6 +631,7 @@ async function handleInbound(req: Request) {
         inboundFingerprint: quoteFingerprint,
       },
     });
+    createdQuoteMsgId = created.id;
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
     if (code === "P2002") {
@@ -623,6 +639,19 @@ async function handleInbound(req: Request) {
     }
     throw err;
   }
+  const prevQuoteRow = await prisma.message.findFirst({
+    where: { quoteId: quote.id, NOT: { id: createdQuoteMsgId } },
+    orderBy: { createdAt: "desc" },
+    select: { senderName: true, senderEmail: true, body: true, createdAt: true },
+  });
+  const prevQuoteMessage = prevQuoteRow
+    ? {
+        senderName: prevQuoteRow.senderName,
+        senderEmail: prevQuoteRow.senderEmail,
+        body: prevQuoteRow.body,
+        createdAt: prevQuoteRow.createdAt,
+      }
+    : null;
   const recipients = new Set<string>();
   const recipientUserIds = new Map<string, string | null>();
   if (!isBuyer) {
@@ -645,12 +674,12 @@ async function handleInbound(req: Request) {
           to,
           senderName: user.name,
           subjectPrefix: `RFQ ${quote.reference}`,
-          context: `RFQ ${quote.reference} for ${quote.product.name}`,
           body: cleaned,
           threadUrl: siteUrl(`/quotes/${quote.id}`),
           threadKind: "quote",
           threadId: quote.id,
           recipientUserId: recipientUserIds.get(to) ?? null,
+          prevMessage: prevQuoteMessage,
         });
       } catch (err) {
         captureError(err, { subsystem: "email", op: "inbound-fan-out", to });

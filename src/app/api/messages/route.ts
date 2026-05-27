@@ -42,7 +42,6 @@ export async function POST(req: Request) {
   const recipients = new Set<string>();
   const recipientUserIds = new Map<string, string | null>();
   let subjectPrefix = "";
-  let context = "";
   let threadUrl = "";
 
   if (orderId) {
@@ -83,7 +82,6 @@ export async function POST(req: Request) {
       }
     }
     subjectPrefix = `Order ${order.reference}`;
-    context = `your order ${order.reference}`;
     threadUrl = siteUrl(`/orders/${order.id}`);
   } else {
     const quote = await prisma.quoteRequest.findUnique({
@@ -117,7 +115,6 @@ export async function POST(req: Request) {
       }
     }
     subjectPrefix = `RFQ ${quote.reference}`;
-    context = `RFQ ${quote.reference} for ${quote.product.name}`;
     threadUrl = siteUrl(`/quotes/${quote.id}`);
   }
 
@@ -135,6 +132,32 @@ export async function POST(req: Request) {
 
   const threadKind = orderId ? "order" : "quote";
   const threadId = orderId || quoteId;
+
+  // PLH-3o: hand the most recent prior message on this thread to the
+  // email lib so it can render a standard "On <Date>, <Name> wrote:"
+  // quoted block under the new message. Single prior message only;
+  // Gmail collapses deeper history on its own.
+  const prevRow = await prisma.message.findFirst({
+    where: orderId
+      ? { orderId, NOT: { id: created.id } }
+      : { quoteId, NOT: { id: created.id } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      senderName: true,
+      senderEmail: true,
+      body: true,
+      createdAt: true,
+    },
+  });
+  const prevMessage = prevRow
+    ? {
+        senderName: prevRow.senderName,
+        senderEmail: prevRow.senderEmail,
+        body: prevRow.body,
+        createdAt: prevRow.createdAt,
+      }
+    : null;
+
   after(async () => {
     for (const to of recipients) {
       try {
@@ -142,12 +165,12 @@ export async function POST(req: Request) {
           to,
           senderName: user.name,
           subjectPrefix,
-          context,
           body: text,
           threadUrl,
           threadKind,
           threadId,
           recipientUserId: recipientUserIds.get(to) ?? null,
+          prevMessage,
         });
       } catch (err) {
         captureError(err, { subsystem: "email", op: "thread-message", to });

@@ -709,42 +709,99 @@ export async function sendApplicationStatus(args: {
   }
 }
 
+/**
+ * PLH-3o: thread emails render as a normal one-on-one conversation, not
+ * a branded card. Plain paragraphs for the sender's text, a quoted block
+ * for the most recent prior message in standard "On <Date> at <Time>,
+ * <Name> <email> wrote:" style, and a tiny gray "Open thread" link at
+ * the bottom. Gmail collapses its own thread history under "..." so we
+ * only send the single most recent prior message; the full DB thread
+ * does not need to ride along.
+ */
 export async function sendThreadMessage(args: {
   to: string;
   senderName: string;
   subjectPrefix: string; // "Order PP-ABC123" or "RFQ RFQ-ABC123"
-  context: string; // human-readable line, e.g. "your order for 100 A breakers"
   body: string;
   threadUrl: string;
   threadKind: ThreadKind;
   threadId: string;
   recipientUserId?: string | null;
+  prevMessage?: {
+    senderName: string;
+    senderEmail: string;
+    body: string;
+    createdAt: Date;
+  } | null;
 }): Promise<void> {
   if (args.recipientUserId) {
     const ok = await shouldSendToUser(args.recipientUserId, "order");
     if (!ok) return;
   }
-  const safeBody = args.body
-    .split("\n")
-    .map((line) => `<p style="margin:0 0 8px;">${line ? esc(line) : "&nbsp;"}</p>`)
-    .join("");
+
+  const paragraphs = (text: string, style = "margin:0 0 12px;"): string =>
+    text
+      .split("\n")
+      .map((line) => `<p style="${style}">${line ? esc(line) : "&nbsp;"}</p>`)
+      .join("");
+
+  let quotedHtml = "";
+  let quotedText = "";
+  if (args.prevMessage) {
+    const when = args.prevMessage.createdAt;
+    const dateStr = when.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const timeStr = when.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const attribution = `On ${dateStr} at ${timeStr}, ${args.prevMessage.senderName} <${args.prevMessage.senderEmail}> wrote:`;
+    quotedHtml = `
+      <div style="color:#6f6d64;font-size:13px;margin:20px 0 8px;">${esc(attribution)}</div>
+      <blockquote style="border-left:3px solid #ccc;padding-left:12px;margin:0;color:#6f6d64;">${paragraphs(args.prevMessage.body, "margin:0 0 10px;")}</blockquote>`;
+    const quotedLines = args.prevMessage.body
+      .split("\n")
+      .map((l) => `> ${l}`)
+      .join("\n");
+    quotedText = `\n\n${attribution}\n${quotedLines}`;
+  }
+
   const reply = replyAddress(args.threadKind, args.threadId);
-  const replyHint = reply
-    ? `<p style="font-size:12px;color:#6f6d64;margin-top:14px;">Reply to this email and your message posts straight to the thread. Everyone on the thread will see it.</p>`
-    : `<p style="font-size:12px;color:#6f6d64;margin-top:14px;">Reply on PartsPort to keep the thread tidy.</p>`;
-  const html = wrap(
-    "New message",
-    `<p>${esc(args.senderName)} sent you a message about ${esc(args.context)}:</p>
-     <div style="margin:14px 0;padding:14px 16px;background:#f3f2ef;border-left:3px solid #1a1916;">${safeBody}</div>
-     <p style="margin-top:18px;">${btn(args.threadUrl, "Open thread")}</p>
-     ${replyHint}`,
-    "Replies sent on PartsPort stay tied to this thread so admin support can step in if needed."
-  );
+
+  // Unsubscribe link: signed-token route when we know the user, mailto
+  // fallback otherwise. CAN-SPAM footer requirement.
+  const unsubUrl = args.recipientUserId
+    ? siteUrl(
+        `/api/email/unsubscribe?token=${encodeURIComponent(signUnsubscribeToken(args.recipientUserId))}`
+      )
+    : `mailto:unsubscribe@partsport.agentgaming.gg?subject=unsubscribe%20${encodeURIComponent(args.to)}`;
+
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:20px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#1a1916;">
+    ${paragraphs(args.body)}
+    ${quotedHtml}
+    <p style="margin:28px 0 4px;font-size:12px;color:#9b988d;">
+      <a href="${args.threadUrl}" style="color:#9b988d;text-decoration:none;">Open thread on PartsPort &rarr;</a>
+    </p>
+    <p style="margin:0;font-size:11px;color:#c4c2b9;">
+      <a href="${unsubUrl}" style="color:#c4c2b9;text-decoration:underline;">Unsubscribe</a>
+    </p>
+  </body>
+</html>`;
+
+  const text = `${args.body}${quotedText}\n\nOpen thread: ${args.threadUrl}`;
+
   await send({
     to: args.to,
     subject: `[${args.subjectPrefix}] Message from ${args.senderName}`,
     html,
+    text,
     replyTo: reply || undefined,
+    userId: args.recipientUserId,
   });
 }
 

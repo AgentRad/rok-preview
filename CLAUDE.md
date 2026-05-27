@@ -873,6 +873,49 @@ markdown-italic-name sig blocks.
   pending Conrad (needs INBOUND_WEBHOOK_SECRET + RESEND_API_KEY in
   the local shell, or run from Vercel preview shell).
 
+**PLH-3o (2026-05-27).** Thread-message email redesign. 1 commit.
+Conrad surfaced that back-and-forth on a thread stacked branded
+"New message" cards in Gmail and read like a marketing chain. Real
+one-on-one email looks like plain paragraphs plus a quoted block.
+- `sendThreadMessage` in `src/lib/email.ts` no longer wraps through
+  the `wrap()` scaffold (title bar, beige content card, prominent
+  black "Open thread" button, branded footer). New body is just the
+  sender's text in plain paragraphs, a separator + standard "On
+  <Date> at <Time>, <Name> <email> wrote:" attribution above the
+  most recent prior message indented `border-left: 3px solid #ccc;
+  padding-left: 12px;`, a 12px gray `Open thread on PartsPort &rarr;`
+  text link, and an 11px gray Unsubscribe link as CAN-SPAM footer.
+  Gmail collapses deeper thread history under "..." on its own, so
+  only the single most recent prior message rides along.
+- Plain-text alternative now mirrors the same minimal structure:
+  sender body, `> ` quoted attribution + prior message, single
+  `Open thread: <url>` line. No ASCII card.
+- `send()` now receives `text` and `userId` on this path so Resend
+  sends a multipart message and the List-Unsubscribe header uses
+  the signed per-user token when we know the recipient.
+- New `prevMessage` arg on `sendThreadMessage`. `/api/messages`
+  POST and the order + quote branches of `/api/email/inbound`
+  each query the latest prior `Message` on the same thread
+  (`findFirst orderBy createdAt desc NOT id: created.id`) and pass
+  it through. The bounce-back path (unknown-sender) and
+  health-check cron pass nothing, so they render as plain notices
+  with no quoted block.
+- `context` and `subjectPrefix` body interpolations both removed
+  from the email body. Subject line still carries `[RFQ <ref>]
+  Message from <name>` / `[Order <ref>] Message from <name>` so
+  Gmail threads correctly.
+- `wrap()` and `btn()` left in place. Every other transactional
+  email (order confirmation, payment received, refund, password
+  reset, etc.) still uses the branded card.
+- `npx next build` clean. Zero em dashes.
+
+Smoke-test still pending Conrad: send admin -> buyer message on
+RFQ-87K9UN, open the email in Gmail, source-view the HTML, paste
+back so Conrad can eyeball that it reads as a paragraph + small
+quoted block + one gray link (no card). Reply from Gmail and
+confirm the new Message row posts cleanly via the PLH-3n bug #3
+strip-quoted-reply path.
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no
