@@ -30,8 +30,11 @@ export const runtime = "nodejs";
  * Signature verification:
  *   - postmark: shared secret in Postmark UI; verify against
  *     X-Postmark-Webhook-Token header (if INBOUND_WEBHOOK_SECRET is set).
- *   - resend / sendgrid: optional shared secret via the same env var,
- *     compared against the request's `Authorization: Bearer <secret>` header.
+ *   - resend: Svix-style signed headers (svix-id, svix-timestamp,
+ *     svix-signature) verified against the `whsec_*` secret in
+ *     INBOUND_WEBHOOK_SECRET. Rejects when timestamp drift exceeds 5 min.
+ *   - sendgrid: optional shared secret compared against the request's
+ *     `Authorization: Bearer <secret>` header.
  */
 
 type ParsedInbound = {
@@ -86,16 +89,15 @@ function chooseProvider(req: Request): "resend" | "postmark" | "sendgrid" | null
   return "resend";
 }
 
-async function parseBody(req: Request): Promise<ParsedInbound | null> {
-  const provider = chooseProvider(req);
-  if (!provider) return null;
-
+function parseBodyFromRaw(
+  rawBody: string,
+  provider: "resend" | "postmark" | "sendgrid",
+  req: Request
+): ParsedInbound | null {
   if (provider === "postmark") {
-    const text = await req.text().catch(() => "");
-    if (!text || text.length > MAX_PARSE_BODY) return null;
     let body: Record<string, unknown>;
     try {
-      body = JSON.parse(text);
+      body = JSON.parse(rawBody);
     } catch {
       return null;
     }
@@ -114,35 +116,45 @@ async function parseBody(req: Request): Promise<ParsedInbound | null> {
   }
 
   if (provider === "sendgrid") {
-    // SendGrid Inbound Parse posts multipart/form-data.
-    if (!req.headers.get("content-type")?.includes("multipart/form-data")) {
-      return null;
+    // SendGrid Inbound Parse historically posts multipart/form-data; in
+    // practice we accept either x-www-form-urlencoded or multipart here.
+    // Parse the raw body via URLSearchParams (URL-encoded). Multipart
+    // bodies are not currently supported by this path; if needed, add
+    // a multipart parse driven off `req.headers.get("content-type")`.
+    const ct = req.headers.get("content-type") || "";
+    if (ct.includes("application/x-www-form-urlencoded")) {
+      const form = new URLSearchParams(rawBody);
+      const toRaw = String(form.get("to") || "");
+      return {
+        from: String(form.get("from") || "").trim(),
+        recipients: toRaw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        subject: String(form.get("subject") || ""),
+        text: String(form.get("text") || ""),
+        html: String(form.get("html") || ""),
+      };
     }
-    const form = await req.formData().catch(() => null);
-    if (!form) return null;
-    const toRaw = String(form.get("to") || "");
-    return {
-      from: String(form.get("from") || "").trim(),
-      recipients: toRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      subject: String(form.get("subject") || ""),
-      text: String(form.get("text") || ""),
-      html: String(form.get("html") || ""),
-    };
+    // Fall through: try JSON in case the user has SendGrid pointed at
+    // a JSON-style relay.
   }
 
-  // Resend / generic JSON
-  const raw = await req.text().catch(() => "");
-  if (!raw || raw.length > MAX_PARSE_BODY) return null;
+  // Resend / generic JSON (and fall-through for sendgrid JSON relays).
   let body: Record<string, unknown>;
   try {
-    body = JSON.parse(raw);
+    body = JSON.parse(rawBody);
   } catch {
     return null;
   }
-  const to = body.to ?? body.To ?? "";
+  // Resend wraps the inbound payload under { type, data: { ... } }.
+  const dataNode =
+    body && typeof body === "object" && body !== null && "data" in body &&
+    typeof (body as { data?: unknown }).data === "object" &&
+    (body as { data?: unknown }).data !== null
+      ? ((body as { data: Record<string, unknown> }).data)
+      : body;
+  const to = dataNode.to ?? dataNode.To ?? "";
   const recipients: string[] = Array.isArray(to)
     ? to.map((v: unknown) => String(v))
     : String(to)
@@ -150,31 +162,52 @@ async function parseBody(req: Request): Promise<ParsedInbound | null> {
         .map((s) => s.trim())
         .filter(Boolean);
   return {
-    from: String(body.from ?? body.From ?? "").trim(),
+    from: String(dataNode.from ?? dataNode.From ?? "").trim(),
     recipients,
-    subject: String(body.subject ?? body.Subject ?? ""),
-    text: String(body.text ?? body.TextBody ?? ""),
-    html: String(body.html ?? body.HtmlBody ?? ""),
+    subject: String(dataNode.subject ?? dataNode.Subject ?? ""),
+    text: String(dataNode.text ?? dataNode.TextBody ?? ""),
+    html: String(dataNode.html ?? dataNode.HtmlBody ?? ""),
   };
 }
 
-function verifyAuth(req: Request): boolean {
+/**
+ * Verify the inbound webhook request based on the configured provider.
+ *
+ * - postmark: shared-secret X-Postmark-Webhook-Token, timing-safe-equal.
+ * - resend: Svix v1 signature over `${svix-id}.${svix-timestamp}.${rawBody}`,
+ *   HMAC-SHA256 with a key derived from `whsec_*`-stripped base64 decode of
+ *   INBOUND_WEBHOOK_SECRET. Rejects when timestamp drifts more than 5 min.
+ * - sendgrid: shared-secret `Authorization: Bearer <secret>`.
+ *
+ * PLH-3b F5 rule preserved: in production with no secret set, fail closed.
+ * In dev, missing secret passes through to keep local testing painless.
+ */
+function verifyAuth(
+  req: Request,
+  provider: "resend" | "postmark" | "sendgrid",
+  rawBody: string
+): boolean {
   const secret = process.env.INBOUND_WEBHOOK_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === "production") return false;
     return true;
   }
-  // Postmark sends X-Postmark-Webhook-Token; everyone else uses bearer.
-  const postmarkHdr = req.headers.get("x-postmark-webhook-token") || "";
-  if (postmarkHdr) {
-    return (
-      postmarkHdr.length === secret.length &&
-      crypto.timingSafeEqual(
-        Buffer.from(postmarkHdr, "utf8"),
-        Buffer.from(secret, "utf8")
-      )
+
+  if (provider === "postmark") {
+    const postmarkHdr = req.headers.get("x-postmark-webhook-token") || "";
+    if (!postmarkHdr) return false;
+    if (postmarkHdr.length !== secret.length) return false;
+    return crypto.timingSafeEqual(
+      Buffer.from(postmarkHdr, "utf8"),
+      Buffer.from(secret, "utf8")
     );
   }
+
+  if (provider === "resend") {
+    return verifySvix(req, rawBody, secret);
+  }
+
+  // sendgrid (and any unknown future provider): bearer fallback.
   const auth = req.headers.get("authorization") || "";
   const expected = `Bearer ${secret}`;
   return (
@@ -184,6 +217,52 @@ function verifyAuth(req: Request): boolean {
       Buffer.from(expected, "utf8")
     )
   );
+}
+
+/**
+ * Svix v1 signature verification. Resend's inbound webhooks are delivered
+ * by Svix and ship three headers: svix-id, svix-timestamp, svix-signature.
+ * The signature header is a space-separated list of `v<n>,<base64>` entries;
+ * any v1 entry matching our recomputed HMAC accepts.
+ *
+ * Reference: https://docs.svix.com/receiving/verifying-payloads/how-manual
+ */
+function verifySvix(req: Request, rawBody: string, secret: string): boolean {
+  const id = req.headers.get("svix-id") || "";
+  const ts = req.headers.get("svix-timestamp") || "";
+  const sig = req.headers.get("svix-signature") || "";
+  if (!id || !ts || !sig) return false;
+
+  const tsNum = parseInt(ts, 10);
+  if (!Number.isFinite(tsNum)) return false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (Math.abs(nowSec - tsNum) > 5 * 60) return false;
+
+  // Strip `whsec_` prefix then base64-decode to get the raw HMAC key.
+  const keyBase64 = secret.startsWith("whsec_") ? secret.slice(6) : secret;
+  let keyBytes: Buffer;
+  try {
+    keyBytes = Buffer.from(keyBase64, "base64");
+  } catch {
+    return false;
+  }
+  if (keyBytes.length === 0) return false;
+
+  const signedPayload = `${id}.${ts}.${rawBody}`;
+  const computed = crypto
+    .createHmac("sha256", keyBytes)
+    .update(signedPayload, "utf8")
+    .digest("base64");
+  const computedBuf = Buffer.from(computed, "utf8");
+
+  for (const entry of sig.split(" ")) {
+    const [version, value] = entry.split(",");
+    if (version !== "v1" || !value) continue;
+    const valueBuf = Buffer.from(value, "utf8");
+    if (valueBuf.length !== computedBuf.length) continue;
+    if (crypto.timingSafeEqual(valueBuf, computedBuf)) return true;
+  }
+  return false;
 }
 
 /**
@@ -237,10 +316,21 @@ async function handleInbound(req: Request) {
       { status: 503 }
     );
   }
-  if (!verifyAuth(req)) {
+  const provider = chooseProvider(req);
+  if (!provider) {
+    return NextResponse.json({ error: "Bad provider." }, { status: 400 });
+  }
+  // Capture the raw body exactly once. Svix verification needs the
+  // unparsed bytes, and we must not call req.text() / req.formData()
+  // again afterwards (each consumes the body).
+  const rawBody = await req.text().catch(() => "");
+  if (!rawBody || rawBody.length > MAX_PARSE_BODY) {
+    return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
+  }
+  if (!verifyAuth(req, provider, rawBody)) {
     return NextResponse.json({ error: "Bad signature." }, { status: 401 });
   }
-  const parsed = await parseBody(req);
+  const parsed = parseBodyFromRaw(rawBody, provider, req);
   if (!parsed) {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
   }
