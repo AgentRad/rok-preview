@@ -73,6 +73,10 @@ export async function POST(
     );
   }
 
+  if (quote.quoteExpiresAt && quote.quoteExpiresAt.getTime() < Date.now()) {
+    return NextResponse.json({ error: "This quote has expired. Ask the supplier to re-quote." }, { status: 410 });
+  }
+
   // Shipping inputs. Required to compute freight and to seed Order.shipTo.
   // The full address is collected here (not in Stripe Checkout) so the
   // freight quote is exact; Stripe Checkout still re-collects the
