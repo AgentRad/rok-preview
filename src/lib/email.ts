@@ -998,3 +998,31 @@ export async function sendOemApplicationRejected(args: {
     html: wrap("Brand claim review", body),
   });
 }
+
+/**
+ * PLH-3c F7: order cancellation notice. Mirrors sendOrderRefunded but
+ * for the pre-shipped cancel path. When refundedCents > 0 the buyer paid
+ * already and Stripe is initiating the refund; when 0 the order was
+ * never paid so no refund line is shown.
+ */
+export async function sendOrderCancelled(
+  order: OrderLite,
+  refundedCents: number
+): Promise<void> {
+  const url = orderViewUrl(order);
+  const refundLine =
+    refundedCents > 0
+      ? `<p>Refund of <strong>${formatCents(refundedCents)}</strong> initiated to your card. Funds reach your issuer in 5 to 10 business days.</p>`
+      : "";
+  const body = `
+    <p>Hi ${esc(order.buyerName)},</p>
+    <p>Order <strong>${esc(order.reference)}</strong> has been cancelled.</p>
+    ${refundLine}
+    ${buyerBranding(order)}
+    <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
+  await send({
+    to: order.buyerEmail,
+    subject: `Order ${order.reference} cancelled`,
+    html: wrap("Order cancelled", body),
+  });
+}

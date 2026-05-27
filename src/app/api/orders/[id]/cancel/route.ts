@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { sendOrderCancelled } from "@/lib/email";
+import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 
@@ -58,6 +60,29 @@ export async function POST(
       data: { status: "VOID" },
     });
   });
+
+  // PLH-3c F7: notify the buyer that their order was cancelled. Refund
+  // amount is only included when payment was captured (status PAID).
+  // Mirrors the sendOrderRefunded pattern; runs via after() so the
+  // serverless function stays alive on Vercel.
+  const refundedCents = order.status === "PAID" ? order.totalCents : 0;
+  const cancelled = await prisma.order.findUnique({
+    where: { id },
+    include: { items: true },
+  });
+  if (cancelled) {
+    after(async () => {
+      try {
+        await sendOrderCancelled(cancelled, refundedCents);
+      } catch (err) {
+        captureError(err, {
+          subsystem: "email",
+          op: "order-cancelled",
+          orderId: id,
+        });
+      }
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

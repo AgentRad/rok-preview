@@ -31,3 +31,4 @@ test-runs/
 /*.cookie-jar
 /jar.txt
 /cookies.txt
+.local-secrets.env
