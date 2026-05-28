@@ -8,6 +8,7 @@ import ProductImage from "@/components/ProductImage";
 import { primaryImageUrl } from "@/lib/product-images";
 import QuoteActions from "@/components/QuoteActions";
 import MessageThread from "@/components/MessageThread";
+import DraftRfqReply from "@/components/DraftRfqReply";
 import { visibilitiesVisibleTo, type ViewerRole } from "@/lib/message-visibility";
 import { formatCents, feeFor, FEE_RATE_LABEL } from "@/lib/money";
 
@@ -42,13 +43,19 @@ export default async function QuotePage({
   const isBuyer = !!viewer && !!quote.buyerId && viewer.id === quote.buyerId;
   const isAdmin = viewer?.role === "ADMIN";
   let isQuoteSupplier = false;
+  let canDraftReply = false;
   if (viewer?.role === "SUPPLIER") {
-    const { userHasAccessToSupplier } = await import("@/lib/supplier-access");
-    isQuoteSupplier = (await userHasAccessToSupplier(
+    const { userHasAccessToSupplier, canSendMessages } = await import(
+      "@/lib/supplier-access"
+    );
+    const access = await userHasAccessToSupplier(
       viewer.id,
       quote.product.supplierId
-    )).ok;
+    );
+    isQuoteSupplier = access.ok;
+    canDraftReply = access.ok && canSendMessages(access.role);
   }
+  if (isAdmin) canDraftReply = true;
   const canMessage = !!viewer && (isBuyer || isAdmin || isQuoteSupplier);
   const viewerThreadRole: ViewerRole = isAdmin
     ? "admin"
@@ -209,6 +216,9 @@ export default async function QuotePage({
               <h2>Conversation{visibleMessages.length > 0 ? ` · ${visibleMessages.length}` : ""}</h2>
             </div>
             <div className="card-body">
+              {canDraftReply && process.env.ANTHROPIC_API_KEY && (
+                <DraftRfqReply quoteId={quote.id} />
+              )}
               <MessageThread
                 quoteId={quote.id}
                 canPost={canMessage}

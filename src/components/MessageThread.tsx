@@ -87,6 +87,22 @@ export default function MessageThread({
   const showSupplierToggle = viewerRole === "supplier" || viewerRole === "admin";
   const showAdminOption = viewerRole === "admin";
 
+  // PLH-3s B3: accept a draft body from sibling components (the AI
+  // "Draft reply" tile drops its output here via this CustomEvent).
+  useEffect(() => {
+    function onDraft(e: Event) {
+      const ce = e as CustomEvent<{ text?: string }>;
+      const t = ce.detail?.text;
+      if (typeof t === "string") setBody(t);
+    }
+    window.addEventListener("partsport:set-thread-draft", onDraft as EventListener);
+    return () =>
+      window.removeEventListener(
+        "partsport:set-thread-draft",
+        onDraft as EventListener
+      );
+  }, []);
+
   // PLH-3p F4: clear the unread badge for this thread once it has been
   // opened. Fire-and-forget; the route 401/403s anonymous and unrelated
   // users by itself so it is safe to call regardless of viewerRole.
