@@ -1072,6 +1072,78 @@ PLH-3o thread-email rebuild, PLH-3p threading parity, and PLH-3s
 three targeted AI actions (draft invoice, summarize RFQs, draft
 RFQ reply).**
 
+**PLH-3u (2026-05-27).** Fresh-POV onboarding + empty-state + first-use
+round driven by `docs/PLH-3t-fresh-pov-audit.md`. 3 commits, copy +
+layout only. No schema, no API, no migration.
+- **P1 onboarding status + transparency.** `/oem` PENDING
+  ManufacturerApplication branch now surfaces `submittedAt`, a "Most
+  applications reviewed within 2 business days" timeline, and a
+  mailto:rad@agentgaming.gg support line. `/oem` no-brand branch
+  replaced with a primary "Claim your brand" CTA to `/manufacturers#apply`.
+  `GoLiveReadiness` no longer renders null on ready+publicVisible;
+  instead renders a one-line green "You are live, accepting orders"
+  confirmation in the slot the checklist used to occupy. `/supplier`
+  no-supplier-profile branch was already done at PLH-3l (apply CTA +
+  timeline + mailto), verified in place.
+- **P2 empty-state nudges.** `/catalog` zero-result state replaced
+  with a primary "Open an RFQ instead" CTA (mailto prefilled with the
+  search query), plus a muted "AI search may find it" hint when the
+  query looks SKU-shaped (regex: mixed letters+digits, 4-30 chars,
+  `[A-Za-z0-9._\-\/]`). `CartClient` empty state was already done at
+  PLH-3l (Browse catalog primary link). `/supplier/products` empty
+  state hoists a hero AI-import tile at the top with "Upload your
+  first catalog in 5 minutes" + the metric "Suppliers with 10+ SKUs
+  receive RFQs within 7 days on average." `/supplier/payouts` empty
+  state renders a single-paragraph explainer about Friday payouts and
+  the 5% reserve. `AttentionPanel` caught-up state names the next
+  likely action ("Upload more SKUs" / "Respond to new RFQs" /
+  "Confirm pending shipments" / "Review pending payouts", falling
+  back to "Browse your catalog") computed off `productCount`,
+  `openQuotes`, `shipQueueCount`, `payoutsDueCents`. `AddToCart`
+  backorder copy adds an inline mailto RFQ link prefilled with the
+  SKU.
+- **P3 first-time feature surfacing + admin guidance.** `/orders/[id]`
+  renders a muted "Message the supplier about this order using the
+  thread below. Replies arrive by email too." line above
+  `MessageThread`, gated on no `ThreadLastRead` row for the viewer
+  on this order thread (PLH-3p F4 plumbing). `/account` shows a
+  dismissible "Get set up" card at the top when the buyer has no
+  saved address; two CTAs ("Save a delivery address" /
+  "Set notification preferences") and a localStorage dismissal key
+  `plh3u-account-setup-dismissed`. `/admin/manufacturer-applications`
+  gains a static "Approval criteria" card above the queue (verify
+  entity exists, real website, brand not already claimed, watch for
+  red flags, decline duplicates with reason). `/admin` gains a
+  "Today's urgent" card between the AttentionFeed and the AddSupplier
+  form, listing up to 5 attention items sorted urgent → warning →
+  info. `/admin/supplier-health` gains a "What healthy looks like"
+  alert that reads the active configured thresholds.
+- **Deviations** (resolved silently per the build spec):
+  - `/apply/supplier` and `/apply/oem` routes don't exist. Used
+    `/suppliers#apply` for the existing supplier apply target
+    (already in place at PLH-3l) and `/manufacturers#apply` for the
+    OEM claim flow.
+  - No `/suppliers/[slug]` storefront route. GoLiveReadiness
+    confirmation banner is text-only with no storefront link.
+  - No generic `/rfq?q=` route. `/catalog` zero-result "Open an RFQ
+    instead" CTA opens a mailto:rad@agentgaming.gg with the query
+    in the subject + body. Same pattern on the backorder link in
+    `AddToCart` (mailto with SKU prefilled).
+  - `ManufacturerApplication` model only has
+    `manufacturerName / submittedAt / reviewedAt / rejectionReason`
+    (no `website`/`contactEmail`). Only rendered fields that exist.
+
+Commits: 5016273 (P1), 0aa3cd9 (P2), a14151d (P3). No new
+dependencies. Every `npx next build` between commits compiled clean.
+Zero em dashes.
+
+**Cumulative across all rounds including PLH-3u: 28 CRITICAL + 62 HIGH
+closed, plus PLH-3g multi-supplier refactor, PLH-3h galleries, PLH-3i
+QuickBooks OAuth, PLH-3j deferred polish, PLH-3k buyer UX strip-back,
+PLH-3l supplier IA, PLH-3m OEM/admin polish, PLH-3n + PLH-3o
+thread-email rebuild, PLH-3p threading parity, PLH-3s three AI actions,
+and PLH-3u fresh-POV onboarding + empty states + first-use surfacing.**
+
 **PLH-3x (2026-05-27).** Enterprise procurement security and legal docs. 1
 commit, docs-only. No schema or API changes.
 - New `/legal/dpa` page: GDPR + CCPA compliant Data Processing Addendum
