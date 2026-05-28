@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { prisma } from "./db";
 import { writeAuditLog } from "./audit";
 import { captureError } from "./observability";
@@ -240,6 +241,47 @@ export async function evaluateAndApplyApproval(
       }),
     ]);
 
+    // Fire approval-requested email to the assigned approver. Best-effort.
+    if (resolvedApproverMemberId) {
+      after(async () => {
+        try {
+          const approverMember = await prisma.buyerOrgMember.findUnique({
+            where: { id: resolvedApproverMemberId! },
+            include: { user: { select: { email: true, name: true } } },
+          });
+          const fresh = await prisma.order.findUnique({
+            where: { id: order.id },
+            select: {
+              reference: true,
+              totalCents: true,
+              buyerName: true,
+              buyerOrgId: true,
+            },
+          });
+          if (!approverMember?.user || !fresh) return;
+          const org = await prisma.buyerOrg.findUnique({
+            where: { id: fresh.buyerOrgId! },
+            select: { name: true },
+          });
+          const { approvalActionUrl } = await import("./approval-token");
+          const { sendApprovalRequested } = await import("./email");
+          await sendApprovalRequested({
+            to: approverMember.user.email,
+            approverName: approverMember.user.name || approverMember.user.email,
+            buyerName: fresh.buyerName,
+            orgName: org?.name ?? "your organization",
+            orderReference: fresh.reference,
+            orderId: order.id,
+            totalCents: fresh.totalCents,
+            approveUrl: approvalActionUrl(order.id, resolvedApproverMemberId!, "approve"),
+            rejectUrl: approvalActionUrl(order.id, resolvedApproverMemberId!, "reject"),
+          });
+        } catch (emailErr) {
+          captureError(emailErr, { subsystem: "approval", op: "notify-approver", orderId: order.id });
+        }
+      });
+    }
+
     return "PENDING";
   } catch (err) {
     // Never let an approval evaluation failure block order creation.
@@ -333,6 +375,27 @@ export async function advanceApproval(args: {
         summary: `Approval rejected${reason ? ": " + reason : ""}.`,
         metadata: { stepId: pendingStep.id, deciderMemberId: args.deciderMemberId },
       });
+      // Notify buyer.
+      after(async () => {
+        try {
+          const fresh = await prisma.order.findUnique({
+            where: { id: args.orderId },
+            select: { reference: true, totalCents: true, buyerName: true, buyerEmail: true },
+          });
+          if (!fresh) return;
+          const { sendApprovalRejected } = await import("./email");
+          await sendApprovalRejected({
+            to: fresh.buyerEmail,
+            buyerName: fresh.buyerName,
+            orderReference: fresh.reference,
+            orderId: args.orderId,
+            totalCents: fresh.totalCents,
+            reason: reason || undefined,
+          });
+        } catch (emailErr) {
+          captureError(emailErr, { subsystem: "approval", op: "notify-rejected", orderId: args.orderId });
+        }
+      });
       return "REJECTED";
     }
 
@@ -363,6 +426,25 @@ export async function advanceApproval(args: {
         targetId: args.orderId,
         summary: "Admin short-circuit approval.",
         metadata: { stepId: pendingStep.id, deciderMemberId: args.deciderMemberId },
+      });
+      after(async () => {
+        try {
+          const fresh = await prisma.order.findUnique({
+            where: { id: args.orderId },
+            select: { reference: true, totalCents: true, buyerName: true, buyerEmail: true },
+          });
+          if (!fresh) return;
+          const { sendApprovalApproved } = await import("./email");
+          await sendApprovalApproved({
+            to: fresh.buyerEmail,
+            buyerName: fresh.buyerName,
+            orderReference: fresh.reference,
+            orderId: args.orderId,
+            totalCents: fresh.totalCents,
+          });
+        } catch (emailErr) {
+          captureError(emailErr, { subsystem: "approval", op: "notify-approved-admin", orderId: args.orderId });
+        }
       });
       return "APPROVED";
     }
@@ -475,6 +557,26 @@ export async function advanceApproval(args: {
       targetId: args.orderId,
       summary: "All approval steps complete. Order approved.",
       metadata: { stepId: pendingStep.id, deciderMemberId: args.deciderMemberId },
+    });
+    // Notify buyer that they can now pay.
+    after(async () => {
+      try {
+        const fresh = await prisma.order.findUnique({
+          where: { id: args.orderId },
+          select: { reference: true, totalCents: true, buyerName: true, buyerEmail: true },
+        });
+        if (!fresh) return;
+        const { sendApprovalApproved } = await import("./email");
+        await sendApprovalApproved({
+          to: fresh.buyerEmail,
+          buyerName: fresh.buyerName,
+          orderReference: fresh.reference,
+          orderId: args.orderId,
+          totalCents: fresh.totalCents,
+        });
+      } catch (emailErr) {
+        captureError(emailErr, { subsystem: "approval", op: "notify-approved", orderId: args.orderId });
+      }
     });
     return "APPROVED";
   } catch (err) {

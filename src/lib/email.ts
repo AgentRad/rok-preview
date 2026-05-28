@@ -1323,3 +1323,138 @@ export async function sendTaxExemptExpiryNotice(args: {
     html: wrap("Certificate expires soon", body),
   });
 }
+
+// ---------------------------------------------------------------------------
+// PLH-3y-6 C4: Approval workflow notification emails
+// ---------------------------------------------------------------------------
+
+/**
+ * Sent to the assigned approver when a new order enters the queue.
+ * Embeds one-click approve and reject links signed with approval tokens.
+ */
+export async function sendApprovalRequested(args: {
+  to: string;
+  approverName: string;
+  buyerName: string;
+  orgName: string;
+  orderReference: string;
+  orderId: string;
+  totalCents: number;
+  approveUrl: string;
+  rejectUrl: string;
+}): Promise<void> {
+  const orderUrl = siteUrl(`/orders/${args.orderId}`);
+  const body = `
+    <p>Hi ${esc(args.approverName)},</p>
+    <p><strong>${esc(args.buyerName)}</strong> placed order <strong>${esc(args.orderReference)}</strong> for <strong>${formatCents(args.totalCents)}</strong> on behalf of <strong>${esc(args.orgName)}</strong>. This order requires your approval before payment can proceed.</p>
+    <p style="margin-top:22px;">${btn(args.approveUrl, "Approve order")}</p>
+    <p style="margin-top:10px;"><a href="${args.rejectUrl}" style="color:#b91c1c;font-size:14px;">Reject order</a></p>
+    <p style="margin-top:18px;">Or <a href="${orderUrl}">view the full order</a> before deciding.</p>`;
+  await send({
+    to: args.to,
+    subject: `Approval needed: ${args.orderReference} (${formatCents(args.totalCents)})`,
+    html: wrap("Order approval request", body),
+  });
+}
+
+/**
+ * Sent to the buyer when their order is approved.
+ */
+export async function sendApprovalApproved(args: {
+  to: string;
+  buyerName: string;
+  orderReference: string;
+  orderId: string;
+  totalCents: number;
+}): Promise<void> {
+  const orderUrl = siteUrl(`/orders/${args.orderId}`);
+  const body = `
+    <p>Hi ${esc(args.buyerName)},</p>
+    <p>Your order <strong>${esc(args.orderReference)}</strong> for <strong>${formatCents(args.totalCents)}</strong> has been approved. You can now complete payment.</p>
+    <p style="margin-top:22px;">${btn(orderUrl, "Pay now")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Order approved: ${args.orderReference}`,
+    html: wrap("Your order has been approved", body),
+  });
+}
+
+/**
+ * Sent to the buyer when their order is rejected.
+ */
+export async function sendApprovalRejected(args: {
+  to: string;
+  buyerName: string;
+  orderReference: string;
+  orderId: string;
+  totalCents: number;
+  reason?: string;
+}): Promise<void> {
+  const orderUrl = siteUrl(`/orders/${args.orderId}`);
+  const reasonLine = args.reason
+    ? `<p>Reason: ${esc(args.reason)}</p>`
+    : "";
+  const body = `
+    <p>Hi ${esc(args.buyerName)},</p>
+    <p>Your order <strong>${esc(args.orderReference)}</strong> for <strong>${formatCents(args.totalCents)}</strong> was not approved by your organization.</p>
+    ${reasonLine}
+    <p>Contact your organization admin if you have questions.</p>
+    <p style="margin-top:22px;">${btn(orderUrl, "View order")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Order not approved: ${args.orderReference}`,
+    html: wrap("Order not approved", body),
+  });
+}
+
+/**
+ * Sent to the escalation target when an approval step times out.
+ */
+export async function sendApprovalEscalated(args: {
+  to: string;
+  escalateName: string;
+  buyerName: string;
+  orgName: string;
+  orderReference: string;
+  orderId: string;
+  totalCents: number;
+  approveUrl: string;
+  rejectUrl: string;
+  originalApproverName: string;
+}): Promise<void> {
+  const orderUrl = siteUrl(`/orders/${args.orderId}`);
+  const body = `
+    <p>Hi ${esc(args.escalateName)},</p>
+    <p>Order <strong>${esc(args.orderReference)}</strong> for <strong>${formatCents(args.totalCents)}</strong> placed by <strong>${esc(args.buyerName)}</strong> at <strong>${esc(args.orgName)}</strong> has been escalated to you because the original approver (${esc(args.originalApproverName)}) has not responded.</p>
+    <p style="margin-top:22px;">${btn(args.approveUrl, "Approve order")}</p>
+    <p style="margin-top:10px;"><a href="${args.rejectUrl}" style="color:#b91c1c;font-size:14px;">Reject order</a></p>
+    <p style="margin-top:18px;">Or <a href="${orderUrl}">view the full order</a>.</p>`;
+  await send({
+    to: args.to,
+    subject: `Escalated for approval: ${args.orderReference}`,
+    html: wrap("Approval escalated to you", body),
+  });
+}
+
+/**
+ * Sent to the buyer when an admin bypasses the approval queue.
+ */
+export async function sendApprovalBypassed(args: {
+  to: string;
+  buyerName: string;
+  orderReference: string;
+  orderId: string;
+  totalCents: number;
+  adminName: string;
+}): Promise<void> {
+  const orderUrl = siteUrl(`/orders/${args.orderId}`);
+  const body = `
+    <p>Hi ${esc(args.buyerName)},</p>
+    <p>Your order <strong>${esc(args.orderReference)}</strong> for <strong>${formatCents(args.totalCents)}</strong> was approved via an emergency bypass by <strong>${esc(args.adminName)}</strong>. You can now complete payment.</p>
+    <p style="margin-top:22px;">${btn(orderUrl, "Pay now")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Order approved (bypass): ${args.orderReference}`,
+    html: wrap("Your order has been approved", body),
+  });
+}
