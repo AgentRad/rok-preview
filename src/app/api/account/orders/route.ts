@@ -33,9 +33,12 @@ export async function GET(req: Request) {
   // 64 chars to match the indexed column; case-insensitive contains.
   const q = (url.searchParams.get("q") || "").trim().slice(0, 64);
 
-  // PLH-3y-2: an org ADMIN can scope to all orders placed by current members
-  // of their active org. The org scope is membership-based (orders whose buyer
-  // is a current member); non-admins or non-org requests fall back to own.
+  // PLH-3y-2 / PLH-3y-6: an org ADMIN can scope to all of their active org's
+  // orders. PLH-3y-6 added a persistent Order.buyerOrgId set at order creation;
+  // we now prefer it (an order placed under the org belongs to the org even
+  // after the member leaves). Legacy orders predating the column have
+  // buyerOrgId NULL, so we OR in the old membership-based scope as a fallback
+  // for those rows only.
   const scope = url.searchParams.get("scope");
   let orgScoped = false;
   let buyerWhere: Prisma.OrderWhereInput = { buyerId: user.id };
@@ -46,7 +49,14 @@ export async function GET(req: Request) {
         where: { buyerOrgId: ctx.org.id },
         select: { userId: true },
       });
-      buyerWhere = { buyerId: { in: members.map((m) => m.userId) } };
+      const memberIds = members.map((m) => m.userId);
+      buyerWhere = {
+        OR: [
+          { buyerOrgId: ctx.org.id },
+          // Legacy orders (no buyerOrgId) placed by a current member.
+          { buyerOrgId: null, buyerId: { in: memberIds } },
+        ],
+      };
       orgScoped = true;
     }
   }

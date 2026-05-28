@@ -488,6 +488,8 @@ model BuyerOrg {
   ssoConfig       SsoConfig?
   loginEvents     SsoLoginEvent[]
   activeForUsers  User[]           @relation("ActiveBuyerOrg")
+  // PLH-3y-6: orders permanently bound to this org.
+  orders          Order[]          @relation("BuyerOrgOrders")
 }
 
 // PLH-3y-4: per-org single sign-on configuration. SAML 2.0 ships this round;
@@ -890,6 +892,14 @@ model Order {
   // company's PO number at checkout for invoice reference. 64-char cap;
   // indexed for substring search in the buyer order history.
   purchaseOrderNumber   String?
+  // PLH-3y-6: persistent org tie. Set at order creation when the buyer has an
+  // activeBuyerOrgId. PLH-3y-2 made org spend-visibility membership-based with
+  // no column; approvals need orders permanently bound to an org (a member can
+  // leave and the order must still belong to the org). Historical orders stay
+  // null. The spend-visibility filter prefers this column when present and
+  // falls back to current-membership for legacy null-buyerOrgId orders.
+  buyerOrgId            String?
+  buyerOrg              BuyerOrg?           @relation("BuyerOrgOrders", fields: [buyerOrgId], references: [id])
   items                 OrderItem[]
   invoice               Invoice?
   returns               ReturnRequest[]
@@ -903,6 +913,7 @@ model Order {
   cancelledAt           DateTime?
 
   @@index([purchaseOrderNumber])
+  @@index([buyerOrgId])
 }
 
 model Invoice {

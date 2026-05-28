@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { generateReference } from "@/lib/order-utils";
 import { computeOrderTotals, computePerSupplierSlots } from "@/lib/order-totals";
 import { sendOrderConfirmation } from "@/lib/email";
+import { getActiveBuyerOrgContext } from "@/lib/buyer-org-access";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { captureError } from "@/lib/observability";
 import { writeAuditLog } from "@/lib/audit";
@@ -494,6 +495,15 @@ export async function POST(req: Request) {
   const orderTotalCents =
     totals.subtotalCents + totals.freightCents + orderFeeCents + totals.taxCents;
 
+  // PLH-3y-6 prerequisite: permanently bind the order to the buyer's active
+  // org when they have one, so approvals + org spend-visibility survive the
+  // member later leaving the org. Guests and orgless buyers stay null.
+  let buyerOrgId: string | null = null;
+  if (user) {
+    const orgCtx = await getActiveBuyerOrgContext(user);
+    buyerOrgId = orgCtx?.org.id ?? null;
+  }
+
   const order = await prisma.$transaction(async (tx) => {
     const created = await tx.order.create({
       data: {
@@ -511,6 +521,7 @@ export async function POST(req: Request) {
         buyerCompanyLogoUrl: user?.companyLogoUrl ?? null,
         shipTo,
         purchaseOrderNumber,
+        buyerOrgId,
         subtotalCents: totals.subtotalCents,
         freightCents: totals.freightCents,
         feeCents: orderFeeCents,

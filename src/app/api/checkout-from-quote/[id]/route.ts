@@ -8,6 +8,7 @@ import { getFreightRates, isShippoConfigured } from "@/lib/freight-server";
 import { calculateFreight } from "@/lib/freight";
 import { getProvider, type CheckoutLineItem } from "@/lib/payments";
 import { lookupTaxExemption } from "@/lib/stripe-tax";
+import { getActiveBuyerOrgContext } from "@/lib/buyer-org-access";
 import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
@@ -196,6 +197,15 @@ export async function POST(
     );
   }
 
+  // PLH-3y-6 prerequisite: bind the order to the buyer's active org so org
+  // spend-visibility + approvals survive the member leaving. Only the signed-in
+  // owner path can resolve an org context; guest checkout stays null.
+  let buyerOrgId: string | null = null;
+  if (user && isOwner) {
+    const orgCtx = await getActiveBuyerOrgContext(user);
+    buyerOrgId = orgCtx?.org.id ?? null;
+  }
+
   if (!order) {
     // H2: create order + bind quote.orderId in one transaction. On
     // P2002 (the orderId unique index), another concurrent writer beat
@@ -213,6 +223,7 @@ export async function POST(
             buyerCompanyLogoUrl: user?.companyLogoUrl || null,
             shipTo,
             purchaseOrderNumber,
+            buyerOrgId,
             subtotalCents,
             freightCents,
             feeCents,
