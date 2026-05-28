@@ -916,6 +916,118 @@ quoted block + one gray link (no card). Reply from Gmail and
 confirm the new Message row posts cleanly via the PLH-3n bug #3
 strip-quoted-reply path.
 
+**PLH-3p (2026-05-27).** Threading parity round. 4 sequential
+commits, one per feature, all on the same branch. Brings the
+messaging surface up to feature parity with a normal multi-party
+ticket system: team-wide fan-out, internal-note visibility, unread
+badges, and file attachments. Every commit `npx next build` clean.
+Zero em dashes throughout.
+- **F1 (`0426640`)**: team fan-out. New
+  `resolveSupplierThreadRecipients(supplierId)` helper in
+  `src/lib/supplier-access.ts` returns every active
+  `SupplierMember` user with `canSendMessages` permission, plus the
+  legacy single-owner `Supplier.userId` and the supplier's
+  `contactEmail`, deduped by lowercased email. POST `/api/messages`
+  (both order and quote branches) and the order + quote branches
+  of `/api/email/inbound` swapped their per-supplier
+  `contactEmail` send for the fan-out so every teammate gets
+  threaded. `sendThreadMessage` is also gated through
+  `shouldSendToUser` (PLH-2 4d notify-order-emails preference) so
+  any teammate who opted out is silently skipped. The posting user
+  themselves is dropped from the recipient set so suppliers do not
+  email themselves on their own reply.
+- **F3 (`3f06b10`)**: visibility enum. New `MessageVisibility`
+  Prisma enum (`PUBLIC`, `SUPPLIER_INTERNAL`, `BUYER_INTERNAL`,
+  `ADMIN_ONLY`), defaulted to `PUBLIC`. New
+  `src/lib/message-visibility.ts` holds
+  `resolveOutgoingVisibility(requested, role)` (server-side write
+  authority: buyers can only post `PUBLIC`, suppliers can post
+  `PUBLIC` or `SUPPLIER_INTERNAL`, admins can post any),
+  `visibilitiesVisibleTo(role)` (read-side filter), and the
+  `emailsBuyer` / `emailsSupplierTeam` predicates that gate the
+  fan-out. Order + quote pages filter `messages` through the
+  viewer's allowed visibility set before passing to
+  `MessageThread`. Composer renders a "Visible to" dropdown for
+  suppliers and admins; the option list is gated by role so a
+  buyer never sees the toggle. Internal notes render with a
+  colored left-border and an uppercase visibility chip (amber for
+  supplier-internal, gray for admin- and buyer-internal). Outbound
+  fan-out checks `emailsBuyer` / `emailsSupplierTeam` so an
+  internal note never emails the wrong side.
+  Migration: `prisma/migrations/20260628010000_add_message_visibility`.
+- **F4 (`aa7341f`)**: unread badges. New `ThreadLastRead` Prisma
+  model: one row per `(userId, threadKind, threadId)`. New
+  `src/lib/messages.ts` `getUnreadCounts(userId)` returns per-thread
+  unread counts (admin sees all, supplier sees orders/quotes with
+  items from any of their supplier memberships, buyer sees their
+  own orders/quotes); excludes messages sent by the user; honors
+  the F3 visibility filter; treats absence of a `ThreadLastRead`
+  row as "all messages unread" so badges light on first inbound.
+  New PATCH `/api/messages/mark-read` accepts
+  `{ threadKind, threadId }`, runs the same access check as the
+  thread itself, and upserts `ThreadLastRead.lastReadAt = now`.
+  `MessageThread.tsx` fires the PATCH once on mount whenever the
+  viewer is signed in. SiteHeader's Messages link renders a pill
+  badge with `getUnreadCounts(user.id).total`; the orders + quotes
+  list pages render per-row badges from the `byThread` map.
+  Migration: `prisma/migrations/20260628020000_add_thread_last_read`.
+- **F2 (`06426ed`, this commit)**: file attachments. New
+  `MessageAttachment` model (`messageId`, `fileName`, `fileSize`,
+  `mimeType`, `blobUrl`, `createdAt`, `@@index([messageId])`,
+  cascade on Message delete). New POST + GET
+  `/api/messages/[id]/attachments`. POST requires the calling user
+  to pass the same access check as the thread AND be the message's
+  `senderId` or an admin; runs the bytes through a magic-byte MIME
+  sniffer (PNG / JPEG / PDF / DOCX only, DOCX detected via
+  `PK\x03\x04` + `.docx` filename suffix); 5 MB max per file, 5
+  files max per message; rate-limited via the existing `messages`
+  bucket. Files land in Vercel Blob under
+  `messages/{messageId}/{8-hex-suffix}-{filename}` (PLH-3c F8
+  pattern). Each successful upload writes a
+  `MESSAGE_ATTACHMENT_UPLOADED` audit row. GET returns the
+  thread-visible attachments after the F3 visibility filter so a
+  buyer cannot enumerate attachments on a supplier-internal note.
+  POST `/api/messages` now returns `{ ...message, attachments: [] }`
+  so the client knows to follow up with per-file uploads. Inbound
+  webhook integration: when a Resend `email.received` payload
+  carries `attachments[]`, each item's `download_url` is fetched
+  with `Authorization: Bearer ${RESEND_API_KEY}`, magic-byte
+  checked, capped at 5 MB / 5 per message, and uploaded to Blob;
+  failures write an `INBOUND_ATTACHMENT_FAILED` audit row and
+  `captureError` but never fail the inbound (the message itself
+  still posts). `sendThreadMessage` does NOT attach files to the
+  outbound Resend email; when attachments exist it appends a
+  single muted line `📎 N attachment(s) - view in PartsPort` to
+  both HTML and text bodies (the only emoji exception in the
+  codebase, per spec). Composer in `MessageThread.tsx` exposes a
+  multi-file input below the textarea, renders chips with
+  filename + size + remove button for each selected file, and
+  posts the message first then uploads each file sequentially
+  while the Send button is disabled. Message display renders the
+  same paperclip chips below the body, each chip linking to the
+  blob URL in a new tab.
+  Migration: `prisma/migrations/20260628030000_add_message_attachment`.
+
+New audit actions in PLH-3p: `MESSAGE_ATTACHMENT_UPLOADED` (F2),
+`INBOUND_ATTACHMENT_FAILED` (F2). No new dependencies. No new
+crons.
+
+Migrations new in PLH-3p:
+- `prisma/migrations/20260628010000_add_message_visibility`
+- `prisma/migrations/20260628020000_add_thread_last_read`
+- `prisma/migrations/20260628030000_add_message_attachment`
+
+**Cumulative across all rounds including PLH-3p: 28 CRITICAL + 62
+HIGH closed, plus the single-supplier-cart constraint lifted by
+PLH-3g, multi-image galleries shipped by PLH-3h, QuickBooks Online
+full OAuth sync shipped by PLH-3i, the PLH-2 deferred-polish
+backlog closed by PLH-3j, the buyer-UX strip-back shipped by
+PLH-3k, the supplier dashboard IA split shipped by PLH-3l, the OEM
++ admin polish tail shipped by PLH-3m, the thread-email rebuild
+shipped by PLH-3n + PLH-3o, and the threading parity round
+(team fan-out, visibility enum, unread badges, file attachments)
+shipped by PLH-3p.**
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no
