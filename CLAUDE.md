@@ -1792,3 +1792,38 @@ post them back into the right thread. Until `INBOUND_EMAIL_PROVIDER` is set,
 - Optional `INBOUND_WEBHOOK_SECRET` to require a shared secret on the inbound
   webhook (sent as `Authorization: Bearer <secret>`, or
   `X-Postmark-Webhook-Token` for Postmark).
+
+## PLH-3y-1: Buyer org foundation (round 1 of 6)
+
+First round of the SSO + buyer-orgs + approvals initiative speced in
+`docs/PLH-3y-spec-sso-buyer-orgs-approval.md`. This round lands the buyer
+organization foundation only. NOT SSO, NOT approvals, NOT billing, NOT domain
+auto-join (those are rounds 2 through 6).
+
+Shipped (5 commits, each `npx next build` clean, zero em dashes):
+- Schema: `BuyerOrg`, `BuyerOrgMember`, `BuyerOrgInvite` models +
+  `BuyerOrgRole` enum (ADMIN | APPROVER | BUYER | VIEWER) +
+  `User.activeBuyerOrgId`. Migration
+  `20260702000000_add_buyer_org` (partial unique index keeps one pending
+  invite per email + org). Permission helpers in
+  `src/lib/buyer-org-access.ts`. APPROVER is a stub this round, treated like
+  BUYER; the real approval engine lands in PLH-3y-6. VIEWER is read-only and
+  cannot place orders. ADMIN manages members + settings and sees all org
+  orders.
+- Admin org management: `/admin/buyer-orgs` (create + list, no self-serve),
+  `/admin/buyer-orgs/[id]` (add existing accounts, invite new emails, remove
+  members, cancel pending invites). Invite flow mirrors the supplier team
+  pattern (hashed token, 14-day expiry, `sendBuyerOrgInvite` email).
+- Buyer accept flow: `/buyer-org-invite/[token]` +
+  `/api/buyer-org-invites/[token]`. Signed-in matching user joins directly;
+  new emails register as BUYER and get a session. Accept is idempotent, marks
+  the invite accepted, and sets the joined org active.
+- Nav org switcher (`BuyerOrgSwitcher`) rendered only when the user belongs
+  to 1+ orgs; `/api/buyer-org/switch` writes `User.activeBuyerOrgId`.
+  `activeBuyerOrgId` is plumbed through `SiteHeader` for later rounds.
+- Audit actions: `BUYER_ORG_CREATED`, `BUYER_ORG_MEMBER_ADDED`,
+  `BUYER_ORG_MEMBER_REMOVED`, `BUYER_ORG_INVITE_SENT`,
+  `BUYER_ORG_INVITE_ACCEPTED`. New `AuditTargetType` value `BuyerOrg`.
+
+Locked decisions honored: admin-managed only, default invited role BUYER,
+switcher shown when 1+ orgs. No new dependencies, no new crons.
