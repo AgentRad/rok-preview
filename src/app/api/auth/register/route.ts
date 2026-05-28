@@ -51,6 +51,20 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  // PLH-3w P1: refuse re-signup with a banned email. Generic "registration
+  // unavailable" so we neither confirm the address is banned nor leak that
+  // it exists. Checked before the existing-user branch so a banned account
+  // can't slip through the reset-link path either.
+  const banned = await prisma.bannedEmail.findUnique({
+    where: { email: cleanEmail },
+  });
+  if (banned) {
+    return NextResponse.json(
+      { error: "Registration is unavailable for this email." },
+      { status: 403 }
+    );
+  }
+
   // PLH-1 commit 2: enumeration suppression. If the email is already in
   // use, respond with the same generic success shape that a brand-new
   // registration sees. Asynchronously mail the existing account holder

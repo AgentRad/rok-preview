@@ -23,6 +23,15 @@ export async function POST(req: Request) {
   // don't buy through their own dashboard. Buyers and anonymous users are
   // the only roles that can POST here.
   const sessionUser = await getCurrentUser();
+  // PLH-3w P1: a suspended/banned buyer cannot place orders. Suspension
+  // already kills the session cookie (sessionsValidFrom bump), so this is
+  // a defensive belt for any session that somehow survives.
+  if (sessionUser && sessionUser.status !== "ACTIVE") {
+    return NextResponse.json(
+      { error: "This account is not available. Contact support@partsport.com." },
+      { status: 403 }
+    );
+  }
   if (sessionUser?.role === "MANUFACTURER") {
     return NextResponse.json(
       {

@@ -20,6 +20,8 @@ export async function listClaimedManufacturers(): Promise<string[]> {
     where: {
       role: "MANUFACTURER",
       manufacturerName: { not: null },
+      // PLH-3w P1: hide suspended/banned OEM brands.
+      status: "ACTIVE",
       manufacturerApplication: { status: "APPROVED" },
     },
     select: { manufacturerName: true },
@@ -41,6 +43,8 @@ export async function isClaimedManufacturer(name: string): Promise<boolean> {
     where: {
       role: "MANUFACTURER",
       manufacturerName: { equals: trimmed, mode: "insensitive" },
+      // PLH-3w P1: hide suspended/banned OEM brands.
+      status: "ACTIVE",
       manufacturerApplication: { status: "APPROVED" },
     },
     select: { id: true },

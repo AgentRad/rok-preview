@@ -21,6 +21,16 @@ enum SupplierStatus {
   SUSPENDED
 }
 
+// PLH-3w P1: account-level trust status, distinct from SupplierStatus
+// (which scopes a Supplier org). SUSPENDED is a reversible lockout
+// (admin can unsuspend); BANNED is terminal and also blacklists the
+// email via BannedEmail so re-signup is refused.
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
 enum ApplicationStatus {
   PENDING
   APPROVED
@@ -101,6 +111,14 @@ model User {
   totpSecret                 String?
   totpEnabledAt              DateTime?
   totpBackupCodes            Json?
+  // PLH-3w P1: account trust status. ACTIVE is the default; SUSPENDED is a
+  // reversible lockout, BANNED is terminal. Login is refused for both
+  // non-ACTIVE states; suspension/ban also bump sessionsValidFrom to kill
+  // outstanding cookies.
+  status                     UserStatus                @default(ACTIVE)
+  suspendedAt                DateTime?
+  suspendedReason            String?
+  suspendedByUserId          String?
   // Email verification. emailVerified is null until the user clicks the
   // link in the welcome email; verified buyers/suppliers can complete
   // state-changing flows (orders, listings). The token + expiry are
@@ -779,6 +797,20 @@ model ThreadLastRead {
 
   @@unique([userId, threadKind, threadId])
   @@index([userId])
+}
+
+// PLH-3w P1: email blacklist. A BANNED user's email lands here so the
+// register flow can refuse re-signup with a generic "registration
+// unavailable" message (no enumeration). Stored lowercased to match the
+// normalizeEmail() the register route uses.
+model BannedEmail {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  bannedAt       DateTime @default(now())
+  bannedByUserId String
+  reason         String
+
+  @@index([bannedByUserId])
 }
 
 model AuditLog {

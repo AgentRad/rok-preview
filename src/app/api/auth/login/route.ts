@@ -74,6 +74,20 @@ export async function POST(req: Request) {
     return NextResponse.json(INVALID_RESPONSE.body, { status: INVALID_RESPONSE.status });
   }
 
+  // PLH-3w P1: account trust gate. Suspended and banned accounts cannot
+  // sign in. Banned gets the same generic copy as suspended so the page
+  // doesn't confirm the harsher state. 403, not 401, since the
+  // credentials were valid but the account is locked.
+  if (user.status === "SUSPENDED" || user.status === "BANNED") {
+    return NextResponse.json(
+      {
+        error:
+          "This account is not available. If you believe this is a mistake, contact support@partsport.com.",
+      },
+      { status: 403 }
+    );
+  }
+
   // 2FA gate. Password was right, but we don't drop the session cookie yet.
   if (user.totpEnabledAt) {
     const ticket = await new SignJWT({ uid: user.id, kind: "2fa-pending" })

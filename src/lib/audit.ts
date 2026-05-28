@@ -132,6 +132,14 @@ export const AUDIT_ACTIONS = [
   // PLH-3v: admin edited an order's purchaseOrderNumber. Metadata
   // carries before/after values for investigators.
   "ORDER_PO_UPDATED",
+  // PLH-3w P1: admin suspended or lifted suspension on a user account.
+  // Suspension also bumps sessionsValidFrom + cascades (supplier hidden,
+  // products unpublished). Metadata carries the reason.
+  "USER_SUSPENDED",
+  "USER_UNSUSPENDED",
+  // PLH-3w P1: admin banned a user. Terminal: status BANNED + email added
+  // to BannedEmail so re-signup is refused.
+  "USER_BANNED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

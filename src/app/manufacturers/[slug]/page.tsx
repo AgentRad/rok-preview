@@ -41,6 +41,8 @@ async function resolveBrand(slug: string): Promise<ResolvedBrand | null> {
     where: {
       role: "MANUFACTURER",
       manufacturerName: { not: null },
+      // PLH-3w P1: suspended/banned OEMs lose the storefront.
+      status: "ACTIVE",
       // PLH-3c F3: only APPROVED OEMs get the editorial storefront. An
       // unapproved or pending OEM falls through to the unclaimed-stub
       // branch below, which renders catalog-only with a Claim CTA.

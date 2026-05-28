@@ -48,7 +48,8 @@ async function getLiveBrands(): Promise<LiveBrand[]> {
   // manufacturer string that appears on an active Product. We dedupe by name.
   const [oems, productGroups] = await Promise.all([
     prisma.user.findMany({
-      where: { role: "MANUFACTURER", manufacturerName: { not: null } },
+      // PLH-3w P1: suspended/banned OEMs drop off the brand index.
+      where: { role: "MANUFACTURER", manufacturerName: { not: null }, status: "ACTIVE" },
       select: {
         manufacturerName: true,
         manufacturerTagline: true,
