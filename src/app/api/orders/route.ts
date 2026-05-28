@@ -64,6 +64,12 @@ export async function POST(req: Request) {
   const buyerName = String(body.buyerName || "").trim();
   const buyerEmail = String(body.buyerEmail || "").toLowerCase().trim();
   const shipTo = String(body.shipTo || "").trim();
+  // PLH-3v: optional buyer-supplied PO number. Trim + cap at 64 chars
+  // to match the indexed Order.purchaseOrderNumber column.
+  const purchaseOrderNumberRaw = String(body.purchaseOrderNumber || "").trim();
+  const purchaseOrderNumber = purchaseOrderNumberRaw
+    ? purchaseOrderNumberRaw.slice(0, 64)
+    : null;
 
   if (!buyerName || !buyerEmail || !shipTo) {
     return NextResponse.json(
@@ -495,6 +501,7 @@ export async function POST(req: Request) {
         buyerCompanyName: user?.companyName ?? null,
         buyerCompanyLogoUrl: user?.companyLogoUrl ?? null,
         shipTo,
+        purchaseOrderNumber,
         subtotalCents: totals.subtotalCents,
         freightCents: totals.freightCents,
         feeCents: orderFeeCents,

@@ -612,6 +612,10 @@ model Order {
   // after the auto-deliver cron flips the order. If the email throws, this
   // stays null and the AUTO_DELIVER_EMAIL_FAILED audit row is the trail.
   deliveryEmailSentAt   DateTime?
+  // PLH-3v: enterprise procurement requirement. Buyers can attach their
+  // company's PO number at checkout for invoice reference. 64-char cap;
+  // indexed for substring search in the buyer order history.
+  purchaseOrderNumber   String?
   items                 OrderItem[]
   invoice               Invoice?
   returns               ReturnRequest[]
@@ -623,6 +627,8 @@ model Order {
   createdAt             DateTime            @default(now())
   paidAt                DateTime?
   cancelledAt           DateTime?
+
+  @@index([purchaseOrderNumber])
 }
 
 model Invoice {

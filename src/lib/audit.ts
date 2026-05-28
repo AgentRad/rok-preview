@@ -129,6 +129,9 @@ export const AUDIT_ACTIONS = [
   "AI_DRAFT_INVOICE",
   "AI_SUMMARIZE_RFQS",
   "AI_DRAFT_RFQ_REPLY",
+  // PLH-3v: admin edited an order's purchaseOrderNumber. Metadata
+  // carries before/after values for investigators.
+  "ORDER_PO_UPDATED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

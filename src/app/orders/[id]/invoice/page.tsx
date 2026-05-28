@@ -202,6 +202,14 @@ export default async function OrderInvoicePage({
               </div>
             </div>
             <div>
+              {order.purchaseOrderNumber && (
+                <div style={{ marginBottom: 10 }}>
+                  <div className="invoice-meta-label">Purchase Order</div>
+                  <div style={{ marginTop: 4, fontWeight: 700 }}>
+                    {order.purchaseOrderNumber}
+                  </div>
+                </div>
+              )}
               <div className="invoice-meta-label">Payment</div>
               <div style={{ marginTop: 4, fontWeight: 600 }}>
                 {order.paymentMethod}

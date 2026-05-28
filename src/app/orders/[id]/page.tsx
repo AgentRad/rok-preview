@@ -18,6 +18,7 @@ import { isPaymentsConfigured, reconcileOrderFromStripe } from "@/lib/payments";
 import { verifyOrderViewToken } from "@/lib/order-link";
 import WriteReview from "@/components/WriteReview";
 import DraftInvoiceWithAI from "@/components/DraftInvoiceWithAI";
+import AdminEditPurchaseOrder from "@/components/AdminEditPurchaseOrder";
 
 function rateLabelForOrder(order: { feeRateBps: number }): string {
   return `${(order.feeRateBps / 100).toFixed(order.feeRateBps % 100 === 0 ? 0 : 1)}%`;
@@ -433,9 +434,23 @@ export default async function OrderPage({
                 <div style={{ fontWeight: 700, fontSize: 16 }}>
                   {order.reference}
                 </div>
+                {order.purchaseOrderNumber && (
+                  <div
+                    className="muted-text"
+                    style={{ fontSize: 12.5, marginTop: 2 }}
+                  >
+                    PO #: {order.purchaseOrderNumber}
+                  </div>
+                )}
                 <div className={"badge " + (STATUS_CLASS[order.status] || "")}>
                   {order.status}
                 </div>
+                {isAdmin && (
+                  <AdminEditPurchaseOrder
+                    orderId={order.id}
+                    initial={order.purchaseOrderNumber || ""}
+                  />
+                )}
               </div>
             </div>
 

@@ -165,6 +165,12 @@ export async function POST(
   // Stripe Checkout page before paying.
   const totalCentsEstimate = subtotalCents + freightCents + feeCents;
 
+  // PLH-3v: optional buyer-supplied PO number, same shape as cart path.
+  const purchaseOrderNumberRaw = String(body.purchaseOrderNumber || "").trim();
+  const purchaseOrderNumber = purchaseOrderNumberRaw
+    ? purchaseOrderNumberRaw.slice(0, 64)
+    : null;
+
   const shipTo = [
     shipping.name,
     shipping.company,
@@ -206,6 +212,7 @@ export async function POST(
             buyerCompanyName: user?.companyName || null,
             buyerCompanyLogoUrl: user?.companyLogoUrl || null,
             shipTo,
+            purchaseOrderNumber,
             subtotalCents,
             freightCents,
             feeCents,
@@ -268,6 +275,7 @@ export async function POST(
       where: { id: order.id },
       data: {
         shipTo,
+        purchaseOrderNumber,
         subtotalCents,
         freightCents,
         feeCents,

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { sendOrderDelivered } from "@/lib/email";
 import { markOrderShipped, markOrderDelivered, loadOrderLite } from "@/lib/shipping";
 import { captureError } from "@/lib/observability";
+import { writeAuditLog } from "@/lib/audit";
 
 const STAGES = ["Processing", "Shipped", "Delivered"] as const;
 type Stage = (typeof STAGES)[number];
@@ -19,10 +20,43 @@ export async function POST(
   }
 
   const body = (await req.json().catch(() => null)) as {
+    action?: string;
     stage?: string;
     carrier?: string;
     trackingCode?: string;
+    purchaseOrderNumber?: string;
   } | null;
+
+  // PLH-3v: admin PO edit. Branches off before the stage check so the PO
+  // can be updated regardless of order status (enterprise buyers may
+  // supply the PO after the fact).
+  if (body?.action === "po") {
+    const existing = await prisma.order.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Order not found." }, { status: 404 });
+    }
+    const next = String(body.purchaseOrderNumber || "").trim().slice(0, 64);
+    const nextValue = next ? next : null;
+    if (nextValue !== existing.purchaseOrderNumber) {
+      await prisma.order.update({
+        where: { id },
+        data: { purchaseOrderNumber: nextValue },
+      });
+      await writeAuditLog({
+        actor: { id: user.id, email: user.email },
+        action: "ORDER_PO_UPDATED",
+        targetType: "Order",
+        targetId: id,
+        summary: `Updated PO on order ${existing.reference}`,
+        metadata: {
+          before: existing.purchaseOrderNumber,
+          after: nextValue,
+        },
+      });
+    }
+    return NextResponse.json({ ok: true, purchaseOrderNumber: nextValue });
+  }
+
   const stage = body?.stage as Stage | undefined;
   if (!stage || !STAGES.includes(stage)) {
     return NextResponse.json({ error: "Invalid stage." }, { status: 400 });

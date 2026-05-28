@@ -114,6 +114,7 @@ export default async function AccountPage({
                 status: o.status,
                 totalCents: o.totalCents,
                 qtyTotal: o.items.reduce((n, i) => n + i.qty, 0),
+                purchaseOrderNumber: o.purchaseOrderNumber,
               }))}
               totalCount={totalOrderCount}
               pageSize={PAGE_SIZE}

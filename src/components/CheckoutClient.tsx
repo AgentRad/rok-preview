@@ -60,6 +60,8 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [shipTo, setShipTo] = useState("");
+  // PLH-3v: optional enterprise PO number. 64-char cap matches server.
+  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
 
@@ -292,6 +294,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
         freightCarrier: topCarrier,
         freightService: topService,
         freightSurcharges: surcharges,
+        purchaseOrderNumber: purchaseOrderNumber.trim() || undefined,
       }),
     });
     const data = await res.json();
@@ -625,6 +628,21 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
                     )}
                   </div>
                 )}
+
+                <div className="form-row">
+                  <label htmlFor="cpo">Purchase order number (optional)</label>
+                  <input
+                    id="cpo"
+                    type="text"
+                    value={purchaseOrderNumber}
+                    onChange={(e) => setPurchaseOrderNumber(e.target.value.slice(0, 64))}
+                    maxLength={64}
+                    placeholder="e.g. PO-2026-04821"
+                  />
+                  <div className="muted-text" style={{ fontSize: 12, marginTop: 4 }}>
+                    Enter your company's PO number for invoice reference.
+                  </div>
+                </div>
 
                 <div className="form-row">
                   <label>Freight surcharges</label>

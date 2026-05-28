@@ -274,6 +274,10 @@ type OrderLite = {
   freightCarrier?: string | null;
   freightService?: string | null;
   freightSurcharges?: unknown;
+  // PLH-3v: enterprise PO number, surfaced in the order confirmation
+  // subject suffix when set so AP teams can match the email to a PO
+  // without opening it.
+  purchaseOrderNumber?: string | null;
   items: {
     nameSnapshot: string;
     skuSnapshot: string;
@@ -446,9 +450,10 @@ export async function sendOrderConfirmation(order: OrderLite): Promise<void> {
     ${itemsBlock}
     ${totals(order)}
     <p style="margin-top:22px;">${btn(url, "View order")}</p>`;
+  const poSuffix = order.purchaseOrderNumber ? ` [PO ${order.purchaseOrderNumber}]` : "";
   await send({
     to: order.buyerEmail,
-    subject: `Order ${order.reference} received`,
+    subject: `Order ${order.reference} received${poSuffix}`,
     html: wrap("Order received", body),
   });
 }
