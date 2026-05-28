@@ -870,6 +870,28 @@ export async function sendSupplierInvite(args: {
   });
 }
 
+// PLH-3y-1: buyer organization invite. Mirrors sendSupplierInvite. The
+// accept link lives at /buyer-org-invite/<raw-token>.
+export async function sendBuyerOrgInvite(args: {
+  to: string;
+  inviterName: string;
+  orgName: string;
+  acceptUrl: string;
+  expiresDays: number;
+}): Promise<void> {
+  const body = `
+    <p>${esc(args.inviterName)} added you to ${esc(args.orgName)} on PartsPort.</p>
+    <p>PartsPort is the marketplace where your team sources energy and utilities equipment, compares vetted suppliers, and places orders under one organization. The link below joins you to ${esc(args.orgName)} within the next ${args.expiresDays} days.</p>
+    <p style="margin-top:22px;">${btn(args.acceptUrl, "Join the organization")}</p>
+    <p style="font-size:12.5px;color:#6f6d64;margin-top:16px;">If you don't have an account yet, you'll be asked to create one in the same step.</p>`;
+  await send({
+    to: args.to,
+    subject: `${args.inviterName} added you to ${args.orgName} on PartsPort`,
+    html: wrap("Organization invitation", body),
+    from: FROM_AUTH,
+  });
+}
+
 export async function sendEmailVerification(args: {
   to: string;
   name: string;
