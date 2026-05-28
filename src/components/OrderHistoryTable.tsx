@@ -180,6 +180,13 @@ export default function OrderHistoryTable({
           >
             All {orgName || "org"} orders
           </button>
+          <a
+            href="/api/buyer-org/orders.csv"
+            className="btn btn-ghost btn-sm"
+            style={{ marginLeft: "auto" }}
+          >
+            Export CSV
+          </a>
         </div>
       )}
       <form

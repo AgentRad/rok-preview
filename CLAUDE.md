@@ -1827,3 +1827,66 @@ Shipped (5 commits, each `npx next build` clean, zero em dashes):
 
 Locked decisions honored: admin-managed only, default invited role BUYER,
 switcher shown when 1+ orgs. No new dependencies, no new crons.
+
+## PLH-3y-2: Org shared resources + billing modes (round 2 of 6)
+
+Second round of the SSO + buyer-orgs + approvals initiative. Lands org-level
+shared resources and billing. NOT SSO, NOT approvals, NOT domain auto-join
+(those are rounds 3 through 6). 6 commits, each `npx next build` clean, zero
+em dashes.
+
+- **Schema:** `BuyerOrgBillingMode` enum (MEMBER_PAYS default, HYBRID).
+  `BuyerOrg` gains `billingMode`, `stripeCustomerId`, and lifted org tax-exempt
+  fields (`taxExemptCertificateUrl`, `taxExemptStatus`, `taxExemptExpiresAt`,
+  mirroring the per-Address cert from PLH-3j P4). New `BuyerOrgAddress` model
+  for shared shipping addresses (soft-delete via `deletedAt`). Migration
+  `20260703000000_add_buyer_org_shared_resources`.
+  - Schema choice: a SEPARATE `BuyerOrgAddress` model rather than extending
+    `Address` with a nullable `buyerOrgId`. Address.userId is required + cascade
+    tied to a user, and the personal book carries per-user 25-cap, soft-delete,
+    and per-address tax-exempt logic; a dedicated model keeps all of that
+    untouched.
+  - Schema choice: org tax-exempt fields live DIRECTLY ON `BuyerOrg` (not a
+    separate `BuyerOrgTaxExemption` model) since an org has exactly one cert,
+    matching how `Address` carries the per-address cert inline.
+  - New audit actions: `BUYER_ORG_ADDRESS_ADDED`, `BUYER_ORG_ADDRESS_REMOVED`,
+    `BUYER_ORG_BILLING_MODE_CHANGED`, `BUYER_ORG_STRIPE_CUSTOMER_CREATED`,
+    `BUYER_ORG_TAX_EXEMPT_UPDATED`, `BUYER_ORG_ORDERS_EXPORTED`. New access
+    helper `canChargeOrgCard`.
+- **Shared address book.** `BuyerOrgAddress` CRUD at `/api/buyer-org/addresses`
+  (member read, org-ADMIN add via `validateAddress`, org-ADMIN soft-delete at
+  `[id]`). New `/buyer-org` org-home page renders an admin-managed shared
+  address list. `CheckoutClient` surfaces org shared addresses as a selectable
+  ship-to optgroup (value prefixed `org:`) alongside personal addresses.
+- **Lifted org tax-exempt cert.** Org ADMIN submits a cert (https URL +
+  optional expiry) at `/api/buyer-org/tax-exempt` (status PENDING); a site
+  admin approves at `/api/admin/buyer-orgs/[id]/tax-exempt` (PATCH), reviewed
+  in a new admin-console "Org tax-exempt certificates" block
+  (`OrgTaxExemptReview`). `lookupTaxExemption` now also checks the buyer's
+  active org cert (APPROVED + not expired) as an additional source after the
+  personal cert.
+- **HYBRID billing mode.** Org ADMIN toggles billing mode at
+  `/api/buyer-org/billing`; enabling HYBRID lazily creates an org Stripe
+  Customer via new `createStripeCustomer` in `lib/payments.ts` (503 when Stripe
+  not configured). At checkout, a permitted member (`canChargeOrgCard`) of a
+  HYBRID org with a customer may tick "Charge to org account"; `create-session`
+  resolves the org and attaches `customer: stripeCustomerId` to the Checkout
+  Session (customer and customer_email are mutually exclusive, so email is
+  dropped on that path). MEMBER_PAYS stays default; any unmet condition falls
+  back to member-pays silently.
+- **Spend visibility filter.** `/account` order history gets a "My orders /
+  All org orders" toggle for org ADMINs. `/api/account/orders?scope=org`
+  returns orders placed by current members of the active org (membership-based
+  scope, enforced server-side via `canSeeAllOrgOrders`) with a buyer column.
+  Non-admins see only their own.
+- **CSV export of org orders.** ADMIN-only `/api/buyer-org/orders.csv` exports
+  all org orders using the `csvSafeCell` formula-injection guard from PLH-2 4a.
+  "Export CSV" button on the org-scoped order history view. Audited
+  `BUYER_ORG_ORDERS_EXPORTED`.
+
+Locked decisions honored: new orgs default MEMBER_PAYS, HYBRID is opt-in by an
+org admin, org address book is additive (personal addresses still work).
+Org-scope spend visibility is membership-based (no `Order.buyerOrgId` column
+this round); a member leaving an org removes their orders from the admin view.
+No new dependencies, no new crons. Migration
+`20260703000000_add_buyer_org_shared_resources`.
