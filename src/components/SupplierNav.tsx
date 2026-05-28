@@ -3,6 +3,8 @@ import UnreadBadge from "./UnreadBadge";
 import { getCurrentUser } from "@/lib/auth";
 import { getUnreadCounts } from "@/lib/messages";
 
+
+
 export type SupplierNavKey =
   | "dashboard"
   | "products"
@@ -17,6 +19,10 @@ const TABS: { key: SupplierNavKey; label: string; href: string }[] = [
   { key: "payouts", label: "Payouts", href: "/supplier/payouts" },
   { key: "settings", label: "Settings", href: "/supplier/settings" },
 ];
+
+// PLH-3q P4: Messages is a top-right tail link rendered alongside (not
+// inside) TABS so it doesn't take a 'highlighted' state and doesn't
+// disturb the existing tab indexing.
 
 // PLH-3l: supplier dashboard IA split. Five tabs max. Active state is set
 // from the server parent via the `active` prop so this stays a server
@@ -33,10 +39,12 @@ export default async function SupplierNav({
   // (dashboard, products, payouts, quotes, settings) picks it up
   // without each page having to thread the prop through.
   const user = await getCurrentUser();
-  let unreadCount = 0;
+  let dashboardUnread = 0;
+  let directUnread = 0;
   if (user && (user.role === "SUPPLIER" || user.role === "ADMIN")) {
     const counts = await getUnreadCounts(user.id);
-    unreadCount = counts.total;
+    dashboardUnread = counts.orderUnread + counts.quoteUnread;
+    directUnread = counts.directUnread;
   }
   return (
     <nav
@@ -80,11 +88,25 @@ export default async function SupplierNav({
             >
               {t.label}
               {t.key === "dashboard" && (
-                <UnreadBadge count={unreadCount} />
+                <UnreadBadge count={dashboardUnread} />
               )}
             </Link>
           );
         })}
+        <Link
+          href="/messages"
+          style={{
+            fontSize: 14,
+            color: "var(--ink-soft)",
+            textDecoration: "none",
+            padding: "12px 0",
+            marginLeft: "auto",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Messages
+          <UnreadBadge count={directUnread} />
+        </Link>
       </div>
     </nav>
   );

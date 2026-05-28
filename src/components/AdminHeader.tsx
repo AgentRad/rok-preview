@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
+import { getUnreadCounts } from "@/lib/messages";
 import AdminUserMenu from "./AdminUserMenu";
+import UnreadBadge from "./UnreadBadge";
 
 export default async function AdminHeader() {
   const user = await getCurrentUser();
+  let directUnread = 0;
+  if (user && user.role === "ADMIN") {
+    const counts = await getUnreadCounts(user.id);
+    directUnread = counts.directUnread;
+  }
   return (
     <>
       <div className="admin-topbar">
@@ -34,6 +41,10 @@ export default async function AdminHeader() {
             <Link href="/admin/manufacturer-applications">OEM applications</Link>
             <Link href="/admin/integrations/quickbooks">QuickBooks</Link>
             <Link href="/ops">Ops console</Link>
+            <Link href="/messages">
+              Messages
+              <UnreadBadge count={directUnread} />
+            </Link>
           </div>
           {user && <AdminUserMenu user={{ name: user.name, role: user.role }} />}
         </div>

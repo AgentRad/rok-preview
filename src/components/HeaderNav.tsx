@@ -20,15 +20,14 @@ export default function HeaderNav({
   user,
   showSearch = true,
   unreadCount = 0,
+  directUnread = 0,
 }: {
   user: NavUser;
-  /** When false, the in-nav parts search bar is hidden. Used on supplier,
-   *  manufacturer, and admin contexts where searching the parts catalog
-   *  from a dashboard makes no sense. */
   showSearch?: boolean;
-  /** PLH-3p F4: unread thread-message count for this user. Badges the
-   *  dashboard link (and admin Fulfillment ops entry) when > 0. */
+  /** PLH-3p F4: order/quote unread total. Badges the dashboard link. */
   unreadCount?: number;
+  /** PLH-3q P4: direct-message unread total. Badges the /messages link. */
+  directUnread?: number;
 }) {
   const router = useRouter();
   const [count, setCount] = useState(0);
@@ -158,6 +157,12 @@ export default function HeaderNav({
             <Link href={dash.href} onClick={() => setMobileOpen(false)}>
               {dash.label}
               <UnreadBadge count={unreadCount} />
+            </Link>
+          )}
+          {user && user.role !== "MANUFACTURER" && (
+            <Link href="/messages" onClick={() => setMobileOpen(false)}>
+              Messages
+              <UnreadBadge count={directUnread} />
             </Link>
           )}
           {/* Cart is for buyers and anonymous shoppers. Suppliers, OEMs,

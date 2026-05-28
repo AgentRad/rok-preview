@@ -13,10 +13,12 @@ export default async function SiteHeader() {
   // PLH-3p F4: badge the dashboard link with the user's total unread
   // thread messages. Manufacturers/OEMs don't transact through threads
   // so skip the query for them.
-  let unreadCount = 0;
+  let dashboardUnread = 0;
+  let directUnread = 0;
   if (user && user.role !== "MANUFACTURER") {
     const counts = await getUnreadCounts(user.id);
-    unreadCount = counts.total;
+    dashboardUnread = counts.orderUnread + counts.quoteUnread;
+    directUnread = counts.directUnread;
   }
   return (
     <>
@@ -24,7 +26,8 @@ export default async function SiteHeader() {
       <HeaderNav
         user={user ? { name: user.name, role: user.role } : null}
         showSearch={isBuyerContext}
-        unreadCount={unreadCount}
+        unreadCount={dashboardUnread}
+        directUnread={directUnread}
       />
       {user && !user.emailVerified && (
         <UnverifiedEmailBanner email={user.email} />

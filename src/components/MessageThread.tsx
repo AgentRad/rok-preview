@@ -33,6 +33,7 @@ type Props = {
   messages: ThreadMessage[];
   orderId?: string;
   quoteId?: string;
+  directThreadId?: string;
   canPost: boolean;
   viewerRole?: ThreadViewerRole;
 };
@@ -73,9 +74,11 @@ export default function MessageThread({
   messages,
   orderId,
   quoteId,
+  directThreadId,
   canPost,
   viewerRole = "none",
 }: Props) {
+  const isDirect = !!directThreadId;
   const router = useRouter();
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -84,8 +87,11 @@ export default function MessageThread({
   const [pending, setPending] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const showSupplierToggle = viewerRole === "supplier" || viewerRole === "admin";
-  const showAdminOption = viewerRole === "admin";
+  // PLH-3q P4: DM threads always send PUBLIC and never expose the visibility
+  // toggle. Order/quote threads keep the per-role toggle behaviour.
+  const showSupplierToggle =
+    !isDirect && (viewerRole === "supplier" || viewerRole === "admin");
+  const showAdminOption = !isDirect && viewerRole === "admin";
 
   // PLH-3s B3: accept a draft body from sibling components (the AI
   // "Draft reply" tile drops its output here via this CustomEvent).
@@ -108,15 +114,21 @@ export default function MessageThread({
   // users by itself so it is safe to call regardless of viewerRole.
   useEffect(() => {
     if (viewerRole === "none") return;
-    const threadKind = orderId ? "order" : quoteId ? "quote" : null;
-    const threadId = orderId || quoteId;
+    const threadKind = orderId
+      ? "order"
+      : quoteId
+        ? "quote"
+        : directThreadId
+          ? "direct"
+          : null;
+    const threadId = orderId || quoteId || directThreadId;
     if (!threadKind || !threadId) return;
     fetch("/api/messages/mark-read", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ threadKind, threadId }),
     }).catch(() => {});
-  }, [orderId, quoteId, viewerRole]);
+  }, [orderId, quoteId, directThreadId, viewerRole]);
 
   function onFilesPicked(e: React.ChangeEvent<HTMLInputElement>) {
     const list = e.target.files;
@@ -154,7 +166,13 @@ export default function MessageThread({
       const res = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, quoteId, body, visibility }),
+        body: JSON.stringify({
+          orderId,
+          quoteId,
+          directThreadId,
+          body,
+          visibility: isDirect ? "PUBLIC" : visibility,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
