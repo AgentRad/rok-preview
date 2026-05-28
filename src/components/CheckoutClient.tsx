@@ -63,6 +63,11 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   // PLH-3v: optional enterprise PO number. 64-char cap matches server.
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  // PLH-3y-2: shared org addresses any member can pick as ship-to. Prefixed
+  // with "org:" in the dropdown value so pickAddress can tell them apart from
+  // the user's personal saved addresses.
+  const [orgAddresses, setOrgAddresses] = useState<SavedAddress[]>([]);
+  const [orgName, setOrgName] = useState("");
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
 
   const [step, setStep] = useState<"form" | "pay">("form");
@@ -204,6 +209,14 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
         }
       })
       .catch(() => {});
+    // PLH-3y-2: pull the active org's shared addresses too (if any).
+    fetch("/api/buyer-org/addresses")
+      .then((r) => r.json())
+      .then((data) => {
+        setOrgAddresses((data.addresses || []) as SavedAddress[]);
+        if (data.orgName) setOrgName(data.orgName as string);
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -211,6 +224,14 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
     if (id === "") {
       setSelectedAddressId("");
       setShipTo("");
+      return;
+    }
+    if (id.startsWith("org:")) {
+      const a = orgAddresses.find((x) => `org:${x.id}` === id);
+      if (!a) return;
+      setSelectedAddressId(id);
+      setShipTo(formatAddressBlock(a));
+      if (!name) setName(a.recipient);
       return;
     }
     const a = savedAddresses.find((x) => x.id === id);
@@ -503,7 +524,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
                     />
                   </div>
                 </div>
-                {savedAddresses.length > 0 && (
+                {(savedAddresses.length > 0 || orgAddresses.length > 0) && (
                   <div className="form-row">
                     <label htmlFor="csaved">Saved addresses</label>
                     <select
@@ -512,14 +533,29 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
                       onChange={(e) => pickAddress(e.target.value)}
                     >
                       <option value="">Enter a new address</option>
-                      {savedAddresses.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.label || a.recipient}
-                          {a.label ? ` (${a.recipient})` : ""}, {a.city},{" "}
-                          {a.region}
-                          {a.isDefault ? " (default)" : ""}
-                        </option>
-                      ))}
+                      {savedAddresses.length > 0 && (
+                        <optgroup label="Your addresses">
+                          {savedAddresses.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.label || a.recipient}
+                              {a.label ? ` (${a.recipient})` : ""}, {a.city},{" "}
+                              {a.region}
+                              {a.isDefault ? " (default)" : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {orgAddresses.length > 0 && (
+                        <optgroup label={orgName ? `${orgName} (shared)` : "Organization (shared)"}>
+                          {orgAddresses.map((a) => (
+                            <option key={a.id} value={`org:${a.id}`}>
+                              {a.label || a.recipient}
+                              {a.label ? ` (${a.recipient})` : ""}, {a.city},{" "}
+                              {a.region}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                   </div>
                 )}

@@ -215,6 +215,9 @@ export default function HeaderNav({
                     <div className="nm-role">{user.role.toLowerCase()}</div>
                   </div>
                   {dash && <Link href={dash.href} onClick={() => setMenuOpen(false)}>{dash.label}</Link>}
+                  {buyerOrgs.length > 0 && (
+                    <Link href="/buyer-org" onClick={() => setMenuOpen(false)}>Organization</Link>
+                  )}
                   <Link href="/settings" onClick={() => setMenuOpen(false)}>Settings</Link>
                   <button onClick={logout}>Sign out</button>
                 </div>
