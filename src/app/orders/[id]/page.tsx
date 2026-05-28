@@ -693,6 +693,21 @@ export default async function OrderPage({
             </div>
           )}
 
+          {canMessage && viewer && (await (async () => {
+            const seen = await prisma.threadLastRead.findFirst({
+              where: { userId: viewer.id, threadKind: "order", threadId: order.id },
+              select: { id: true },
+            });
+            return !seen;
+          })()) && (
+            <p
+              className="muted-text"
+              style={{ marginTop: 28, marginBottom: -8, fontSize: 13 }}
+            >
+              Message the supplier about this order using the thread below.
+              Replies arrive by email too.
+            </p>
+          )}
           <div className="card" id="messages" style={{ marginTop: 28 }}>
             <div className="card-head">
               <h2>Conversation{visibleMessages.length > 0 ? ` · ${visibleMessages.length}` : ""}</h2>

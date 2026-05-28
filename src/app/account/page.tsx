@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import AddressBook from "@/components/AddressBook";
+import AccountSetupCard from "@/components/AccountSetupCard";
 import OrderHistoryTable from "@/components/OrderHistoryTable";
 import AttentionFeed from "@/components/AttentionFeed";
 import { getBuyerAttention } from "@/lib/attention";
@@ -80,6 +81,9 @@ export default async function AccountPage({
               have expired or been used already. Use the Resend button in the
               banner above to get a new one.
             </div>
+          )}
+          {user.role === "BUYER" && (
+            <AccountSetupCard hasAddress={addresses.length > 0} />
           )}
           <h1 className="page-title">My orders</h1>
           <p className="page-sub">

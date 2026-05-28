@@ -178,6 +178,37 @@ export default async function AdminConsole() {
             </div>
           </div>
 
+          {attention.length > 0 && (
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-head">
+                <h2>Today&rsquo;s urgent</h2>
+              </div>
+              <div className="card-body">
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: 1.7 }}>
+                  {[...attention]
+                    .sort((a, b) => {
+                      const w = { urgent: 0, warning: 1, info: 2 } as const;
+                      return w[a.severity] - w[b.severity];
+                    })
+                    .slice(0, 5)
+                    .map((item) => (
+                      <li key={item.id}>
+                        <Link
+                          href={item.actionHref}
+                          style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+                        >
+                          {item.title}
+                        </Link>
+                        <span className="muted-text" style={{ marginLeft: 6, fontSize: 12.5 }}>
+                          {item.body}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
           <AddSupplierForm />
 
           <div className="card">

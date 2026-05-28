@@ -36,6 +36,21 @@ export default async function ManufacturerApplicationsPage() {
 
         <section className="card" style={{ marginTop: 16 }}>
           <div className="card-head">
+            <h2>Approval criteria</h2>
+          </div>
+          <div className="card-body">
+            <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13.5, lineHeight: 1.6 }}>
+              <li>Verify the legal entity exists (state registration, EIN, or equivalent).</li>
+              <li>Real website at a brand-owned domain. No social-only presence.</li>
+              <li>Brand name is not already claimed by another approved manufacturer.</li>
+              <li>Watch for red flags: free-mail domains, generic names matching well-known brands, blank or copy-pasted descriptions.</li>
+              <li>Decline duplicates with a clear reason so the applicant can re-submit if it was a typo.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section className="card" style={{ marginTop: 16 }}>
+          <div className="card-head">
             <h2>Pending review ({pending.length})</h2>
           </div>
           <div className="card-body">

@@ -204,6 +204,14 @@ export default async function SupplierHealthPage() {
           Per-supplier metrics + alerts. Triage rows with badges first.
         </p>
 
+        <div className="alert alert-info" style={{ marginTop: 12 }}>
+          <strong>What healthy looks like:</strong> refund rate under{" "}
+          {(ALERT_REFUND_RATE * 100).toFixed(1)}%, avg days-to-ship under{" "}
+          {ALERT_DAYS_TO_SHIP}, owed-to-platform at $0, and at least one order
+          in the last {ALERT_INACTIVE_DAYS} days. Suppliers crossing any of
+          those lines get a badge in the Alerts column.
+        </div>
+
         <div className="card" style={{ marginTop: 18 }}>
           <div className="table-wrap">
             <table className="table">
