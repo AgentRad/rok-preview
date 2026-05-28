@@ -159,7 +159,7 @@ export default function HeaderNav({
               <UnreadBadge count={unreadCount} />
             </Link>
           )}
-          {user && user.role !== "MANUFACTURER" && (
+          {user && (
             <Link href="/messages" onClick={() => setMobileOpen(false)}>
               Messages
               <UnreadBadge count={directUnread} />

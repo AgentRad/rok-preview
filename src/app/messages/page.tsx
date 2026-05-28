@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
@@ -10,9 +9,6 @@ export const dynamic = "force-dynamic";
 
 export default async function MessagesPage() {
   const user = await requireUser();
-  if (user.role === "MANUFACTURER") {
-    redirect("/oem");
-  }
   const threads = await loadThreadList(user.id);
   const viewerRole =
     user.role === "ADMIN"

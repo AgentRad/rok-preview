@@ -1184,6 +1184,8 @@ conversation not tied to a specific order or RFQ.
   tail), and `AdminHeader` (rightmost). OEMs remain DM-able by
   admin only (no `/messages` link, redirected to `/oem`).
 
+P6: OEMs can access the DM inbox (earlier P4 redirect was a bug).
+
 Deferred to a future round: a participant cannot currently leave or
 be removed from a DM thread; "Joined X" system notices render when
 participants are added but there is no matching "Left X" path yet.

@@ -11,11 +11,12 @@ export default async function SiteHeader() {
   // The marketing top bar is restricted to marketing routes only via TopBar.
   const isBuyerContext = !user || user.role === "BUYER";
   // PLH-3p F4: badge the dashboard link with the user's total unread
-  // thread messages. Manufacturers/OEMs don't transact through threads
-  // so skip the query for them.
+  // order/quote messages. PLH-3q P6: also badge the /messages link with
+  // direct-message unread for every signed-in role, OEMs included (they
+  // can be DM participants even though they have no order/quote threads).
   let dashboardUnread = 0;
   let directUnread = 0;
-  if (user && user.role !== "MANUFACTURER") {
+  if (user) {
     const counts = await getUnreadCounts(user.id);
     dashboardUnread = counts.orderUnread + counts.quoteUnread;
     directUnread = counts.directUnread;

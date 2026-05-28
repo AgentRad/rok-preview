@@ -56,7 +56,10 @@ export async function getUnreadCounts(
   });
   if (!user) return EMPTY;
   const viewer = viewerRoleForUser(user.role);
-  if (viewer === "none") return EMPTY;
+  // PLH-3q P6: a "none"-role viewer (e.g. MANUFACTURER/OEM) has no
+  // order/quote thread access, but can still be a direct-message
+  // participant. Skip the order/quote pass and fall through to the
+  // role-agnostic DM unread query below.
 
   const allowed = visibilitiesVisibleTo(viewer) as MessageVisibility[];
 

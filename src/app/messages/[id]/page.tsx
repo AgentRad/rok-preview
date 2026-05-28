@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
@@ -13,9 +13,6 @@ export default async function MessagesThreadPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireUser();
-  if (user.role === "MANUFACTURER") {
-    redirect("/oem");
-  }
   const { id } = await params;
   const [threads, detail] = await Promise.all([
     loadThreadList(user.id),
