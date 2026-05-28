@@ -4,6 +4,7 @@ import {
   resolveSsoConfigByEmail,
   resolveSsoConfigByOrgId,
 } from "@/lib/sso";
+import { buildOidcAuthorizeUrl } from "@/lib/oidc";
 import { writeAuditLog } from "@/lib/audit";
 import { siteUrl } from "@/lib/site-url";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
@@ -33,16 +34,28 @@ export async function GET(req: Request) {
       ? await resolveSsoConfigByEmail(email)
       : null;
 
-  if (!config || !config.idpSsoUrl || !config.idpEntityId) {
+  if (!config) {
     return NextResponse.redirect(siteUrl("/login?sso=unavailable"), {
       status: 303,
     });
   }
 
+  // Route to the OIDC /authorize endpoint or the SAML AuthnRequest depending
+  // on the org's configured IdP type.
   let redirectUrl: string;
   try {
-    const saml = buildSaml(config, { requireCert: true });
-    redirectUrl = await saml.getAuthorizeUrlAsync("", undefined, {});
+    if (config.idpType === "OIDC") {
+      if (!config.oidcIssuer || !config.oidcClientId) {
+        throw new Error("OIDC not configured.");
+      }
+      redirectUrl = await buildOidcAuthorizeUrl(config);
+    } else {
+      if (!config.idpSsoUrl || !config.idpEntityId) {
+        throw new Error("SAML not configured.");
+      }
+      const saml = buildSaml(config, { requireCert: true });
+      redirectUrl = await saml.getAuthorizeUrlAsync("", undefined, {});
+    }
   } catch {
     return NextResponse.redirect(siteUrl("/login?sso=unavailable"), {
       status: 303,

@@ -251,12 +251,37 @@ export async function provisionSsoUser(args: {
   const email = args.email.toLowerCase().trim();
   const groups = extractGroups(args.attributes, args.config);
   const role = pickRole(groups, args.config);
+  return provisionResolvedSsoUser({
+    config: args.config,
+    email,
+    role,
+    name: nameFromAttributes(args.attributes, email),
+    groups,
+  });
+}
+
+/**
+ * PLH-3y-5: provision (or update) a user from an already-resolved identity.
+ * Both the SAML path (after extracting attributes) and the OIDC path (after
+ * verifying the ID token) funnel through here so the User + BuyerOrgMember
+ * upsert, audit, and domain auto-join logic live in exactly one place.
+ */
+export async function provisionResolvedSsoUser(args: {
+  config: SsoConfig;
+  email: string;
+  role: BuyerOrgRole;
+  name: string;
+  groups: string[];
+}): Promise<ProvisionResult> {
+  const email = args.email.toLowerCase().trim();
+  const role = args.role;
+  const groups = args.groups;
   const orgId = args.config.buyerOrgId;
 
   let user = await prisma.user.findUnique({ where: { email } });
   let provisioned = false;
   if (!user) {
-    const name = nameFromAttributes(args.attributes, email);
+    const name = args.name || email.split("@")[0];
     user = await prisma.user.create({
       data: {
         email,

@@ -510,10 +510,18 @@ model SsoConfig {
   // assertion is accepted if it verifies against either the current or the
   // next cert.
   idpX509CertNext String?    @db.Text
-  // OIDC fields (PLH-3y-5; unused this round).
+  // OIDC fields (PLH-3y-5). Generic OIDC: works with Google Workspace, Okta
+  // OIDC, and Azure AD OIDC. oidcIssuer is the issuer URL; discovery and JWKS
+  // are resolved at runtime from <issuer>/.well-known/openid-configuration.
   oidcIssuer      String?
   oidcClientId    String?
   oidcClientSecret String?   @db.Text
+  // SCIM 2.0 provisioning (PLH-3y-5). scimTokenHash is SHA-256 hex of the
+  // bearer token, shown to the admin exactly once at generation; only the hash
+  // and the last 4 chars persist. scimEnabled gates the endpoints.
+  scimEnabled     Boolean    @default(false)
+  scimTokenHash   String?    @unique
+  scimTokenLast4  String?
   // Common.
   domainAllowlist String[]
   // SAML assertion attribute name carrying the user's group memberships.
@@ -621,6 +629,11 @@ model BuyerOrgMember {
   // a member with this flag may still password-login. Off by default; an org
   // admin opts a specific member in for emergency recovery.
   emergencyPasswordAccess Boolean @default(false)
+  // PLH-3y-5: SCIM/SSO deprovision flag. SCIM PATCH active=false or DELETE sets
+  // this (soft) so order ownership and history survive. A non-null value
+  // suspends the membership: the user can no longer act in the org. Re-activate
+  // by clearing it (SCIM PATCH active=true).
+  deactivatedAt DateTime?
 
   @@unique([buyerOrgId, userId])
   @@index([userId])

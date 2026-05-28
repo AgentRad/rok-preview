@@ -180,6 +180,20 @@ export const AUDIT_ACTIONS = [
   "SSO_CONFIG_REMOVED",
   "SSO_CERT_ROTATED",
   "EMERGENCY_PASSWORD_LOGIN",
+  // PLH-3y-5: OIDC + SCIM + cert rotation + SLO.
+  // SCIM provisioning lifecycle (SsoLoginEvent stays SAML-only; these are
+  // management-plane rows in AuditLog).
+  "SSO_DEPROVISIONED",
+  "SCIM_USER_PROVISIONED",
+  "SCIM_USER_UPDATED",
+  "SCIM_TOKEN_ROTATED",
+  // Cert rotation flow: an org staged a next signing cert, then activated it
+  // (promoting next to current). Distinct from SSO_CERT_ROTATED which the
+  // config save path stamps when the current cert string changes directly.
+  "SSO_CERT_STAGED",
+  "SSO_CERT_ACTIVATED",
+  // SLO: a session was destroyed via the single-logout endpoint.
+  "SSO_LOGOUT",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
