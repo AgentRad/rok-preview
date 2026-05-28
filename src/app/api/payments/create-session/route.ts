@@ -4,6 +4,10 @@ import { getProvider, type CheckoutLineItem } from "@/lib/payments";
 import { feeFor } from "@/lib/money";
 import { lookupTaxExemption } from "@/lib/stripe-tax";
 import { captureError } from "@/lib/observability";
+import {
+  getActiveBuyerOrgContext,
+  canChargeOrgCard,
+} from "@/lib/buyer-org-access";
 
 export const runtime = "nodejs";
 
@@ -41,6 +45,23 @@ export async function POST(req: Request) {
   // now; tighten to per-shipping-address once Order.shippingAddressId
   // exists. See src/lib/stripe-tax.ts for the full flow doc.
   const { isExempt: taxExempt } = await lookupTaxExemption(order.buyerId);
+
+  // PLH-3y-2: HYBRID billing. When the buyer asks to charge the org card and
+  // their active org is HYBRID with a Stripe Customer, and the member is
+  // permitted, attach the org customer to the Checkout Session. Falls back to
+  // member-pays silently if any condition is unmet (never blocks checkout).
+  let stripeCustomerId: string | undefined;
+  if (body.chargeOrgCard && order.buyer) {
+    const ctx = await getActiveBuyerOrgContext(order.buyer);
+    if (
+      ctx &&
+      ctx.org.billingMode === "HYBRID" &&
+      ctx.org.stripeCustomerId &&
+      canChargeOrgCard(ctx.role)
+    ) {
+      stripeCustomerId = ctx.org.stripeCustomerId;
+    }
+  }
 
   // Itemize the line items so Stripe Tax can compute per-jurisdiction.
   // The platform fee is charged as a separate line so it shows up on the
@@ -86,6 +107,7 @@ export async function POST(req: Request) {
       items: allLines,
       collectShipping: true,
       taxExempt,
+      stripeCustomerId,
     });
     return NextResponse.json({ ok: true, url: session.url });
   } catch (err) {

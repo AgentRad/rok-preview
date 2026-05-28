@@ -36,13 +36,20 @@ type TaxExempt = {
   expiresAt: string | null;
 };
 
+type Billing = {
+  mode: "MEMBER_PAYS" | "HYBRID";
+  hasStripeCustomer: boolean;
+};
+
 export default function BuyerOrgClient({
   isAdmin,
   taxExempt,
+  billing,
   initialAddresses,
 }: {
   isAdmin: boolean;
   taxExempt: TaxExempt;
+  billing: Billing;
   initialAddresses: OrgAddress[];
 }) {
   const [addresses, setAddresses] = useState<OrgAddress[]>(initialAddresses);
@@ -50,6 +57,29 @@ export default function BuyerOrgClient({
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const [billingMode, setBillingMode] = useState(billing.mode);
+  const [hasCustomer, setHasCustomer] = useState(billing.hasStripeCustomer);
+  const [billingError, setBillingError] = useState("");
+  const [billingBusy, setBillingBusy] = useState(false);
+
+  async function setMode(mode: "MEMBER_PAYS" | "HYBRID") {
+    setBillingBusy(true);
+    setBillingError("");
+    const res = await fetch("/api/buyer-org/billing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ billingMode: mode }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBillingBusy(false);
+    if (!res.ok) {
+      setBillingError(data.error || "Could not update billing mode.");
+      return;
+    }
+    setBillingMode(mode);
+    setHasCustomer(!!data.hasStripeCustomer);
+  }
 
   const [cert, setCert] = useState<TaxExempt>(taxExempt);
   const [certUrl, setCertUrl] = useState("");
@@ -139,6 +169,50 @@ export default function BuyerOrgClient({
 
   return (
     <>
+    <div className="card" style={{ marginTop: 24 }}>
+      <div className="card-head">
+        <h2>Billing</h2>
+        <span className="muted-text" style={{ fontSize: 13 }}>
+          {billingMode === "HYBRID" ? "Hybrid (org card available)" : "Members pay"}
+        </span>
+      </div>
+      <div className="card-body">
+        {billingError && <div className="alert alert-error">{billingError}</div>}
+        <p className="muted-text" style={{ fontSize: 13 }}>
+          {billingMode === "HYBRID"
+            ? "Permitted members can charge the org card at checkout, or still pay with their own card."
+            : "Each member pays with their own card. Switch to hybrid to add a centralized org card."}
+        </p>
+        {isAdmin && (
+          <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+            {billingMode === "MEMBER_PAYS" ? (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => setMode("HYBRID")}
+                disabled={billingBusy}
+              >
+                {billingBusy ? "Enabling…" : "Enable hybrid billing"}
+              </button>
+            ) : (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setMode("MEMBER_PAYS")}
+                disabled={billingBusy}
+              >
+                {billingBusy ? "Switching…" : "Switch to members pay"}
+              </button>
+            )}
+          </div>
+        )}
+        {billingMode === "HYBRID" && !hasCustomer && (
+          <p className="muted-text" style={{ fontSize: 12, marginTop: 8 }}>
+            No org card on file yet. The org Stripe customer is created when
+            hybrid billing is enabled on a Stripe-configured environment.
+          </p>
+        )}
+      </div>
+    </div>
+
     <div className="card" style={{ marginTop: 24 }}>
       <div className="card-head">
         <h2>Tax-exempt certificate</h2>

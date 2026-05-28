@@ -68,6 +68,10 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   // the user's personal saved addresses.
   const [orgAddresses, setOrgAddresses] = useState<SavedAddress[]>([]);
   const [orgName, setOrgName] = useState("");
+  // PLH-3y-2: HYBRID billing. When the active org allows it, the member can
+  // opt to charge the org card instead of their own.
+  const [canChargeOrgCard, setCanChargeOrgCard] = useState(false);
+  const [chargeOrgCard, setChargeOrgCard] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
 
   const [step, setStep] = useState<"form" | "pay">("form");
@@ -215,6 +219,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
       .then((data) => {
         setOrgAddresses((data.addresses || []) as SavedAddress[]);
         if (data.orgName) setOrgName(data.orgName as string);
+        setCanChargeOrgCard(!!data.canChargeOrgCard);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -363,7 +368,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
       const res = await fetch("/api/payments/create-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId }),
+        body: JSON.stringify({ orderId, chargeOrgCard }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) {
@@ -767,6 +772,24 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
                 PartsPort collects payment, then releases funds to the supplier
                 on dispatch. The marketplace fee is included in the total below.
               </div>
+              {canChargeOrgCard && (
+                <label
+                  className="surcharge-row"
+                  style={{ marginBottom: 12 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={chargeOrgCard}
+                    onChange={(e) => setChargeOrgCard(e.target.checked)}
+                  />
+                  <span className="surcharge-row-name">
+                    Charge to {orgName || "my organization"} account
+                    <span className="muted-text" style={{ fontSize: 12, marginLeft: 6 }}>
+                      bills the org card instead of your own
+                    </span>
+                  </span>
+                </label>
+              )}
               {paymentsConfigured ? (
                 <>
                   <button

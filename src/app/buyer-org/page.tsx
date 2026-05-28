@@ -51,6 +51,10 @@ export default async function BuyerOrgPage() {
                 ? ctx.org.taxExemptExpiresAt.toISOString()
                 : null,
             }}
+            billing={{
+              mode: ctx.org.billingMode,
+              hasStripeCustomer: !!ctx.org.stripeCustomerId,
+            }}
             initialAddresses={addresses.map((a) => ({
               id: a.id,
               label: a.label,

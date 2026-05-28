@@ -28,6 +28,12 @@ export type CheckoutSessionInput = {
   collectShipping?: boolean;
   /** Skip tax for approved tax-exempt buyers. */
   taxExempt?: boolean;
+  /**
+   * PLH-3y-2: when set, the Checkout Session is attached to this Stripe
+   * Customer (the org's centralized customer under HYBRID billing) so the
+   * charge is associated with the org account rather than the member.
+   */
+  stripeCustomerId?: string;
 };
 
 export type CheckoutSessionResult = {
@@ -176,7 +182,13 @@ const stripeProvider: PaymentProvider = {
       // default. ACH is still offered, but it should be the alternative, not
       // the primary path (test cards are the most common flow).
       payment_method_types: ["card", "us_bank_account"],
-      customer_email: input.buyerEmail,
+      // PLH-3y-2: HYBRID billing attaches the org's Stripe Customer so the
+      // charge centralizes on the org account. customer and customer_email
+      // are mutually exclusive on a Session, so only set email when we are
+      // not billing the org customer.
+      ...(input.stripeCustomerId
+        ? { customer: input.stripeCustomerId }
+        : { customer_email: input.buyerEmail }),
       client_reference_id: input.orderId,
       metadata: {
         orderId: input.orderId,
@@ -320,6 +332,26 @@ export function getProvider(): PaymentProvider | null {
 
 export function isPaymentsConfigured(): boolean {
   return getProvider() !== null;
+}
+
+/**
+ * PLH-3y-2: create a Stripe Customer for an org's centralized (HYBRID) billing.
+ * Returns the new customer id, or null when Stripe is not configured. The org
+ * id rides along in metadata so the Stripe dashboard can be cross-referenced.
+ */
+export async function createStripeCustomer(args: {
+  name: string;
+  email?: string | null;
+  buyerOrgId: string;
+}): Promise<string | null> {
+  const s = stripeClient();
+  if (!s) return null;
+  const customer = await s.customers.create({
+    name: args.name,
+    email: args.email || undefined,
+    metadata: { partsportBuyerOrgId: args.buyerOrgId },
+  });
+  return customer.id;
 }
 
 /**

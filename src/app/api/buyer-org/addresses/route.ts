@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/lib/audit";
 import {
   getActiveBuyerOrgContext,
   canManageBuyerOrg,
+  canChargeOrgCard,
 } from "@/lib/buyer-org-access";
 import { validateAddress, ADDRESS_FIELD_CAPS } from "@/lib/address";
 
@@ -29,9 +30,17 @@ export async function GET() {
     where: { buyerOrgId: ctx.org.id, deletedAt: null },
     orderBy: { createdAt: "desc" },
   });
+  // PLH-3y-2: whether this member can offer to charge the org card at
+  // checkout (org is HYBRID, has a Stripe Customer, and the role is permitted).
+  const canBillOrg =
+    ctx.org.billingMode === "HYBRID" &&
+    !!ctx.org.stripeCustomerId &&
+    canChargeOrgCard(ctx.role);
+
   return NextResponse.json({
     orgName: ctx.org.name,
     canManage: canManageBuyerOrg(ctx.role),
+    canChargeOrgCard: canBillOrg,
     addresses: addresses.map((a) => ({
       id: a.id,
       label: a.label,
