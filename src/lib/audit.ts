@@ -140,6 +140,10 @@ export const AUDIT_ACTIONS = [
   // PLH-3w P1: admin banned a user. Terminal: status BANNED + email added
   // to BannedEmail so re-signup is refused.
   "USER_BANNED",
+  // PLH-3w P2: admin granted a 1-hour "2FA recovery in progress" override,
+  // suppressing the enforcement interstitial so the user can re-enroll.
+  // Heavily audited since it is a security-control bypass.
+  "USER_2FA_ADMIN_OVERRIDE",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

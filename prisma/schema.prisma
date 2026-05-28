@@ -110,7 +110,18 @@ model User {
   companyLogoUrl             String?
   totpSecret                 String?
   totpEnabledAt              DateTime?
+  // Legacy backup-code store (Json array of sha256 hashes). PLH-3w P2
+  // moved the canonical store to backupCodesHashed; login still reads
+  // this as a fallback for accounts enrolled before P2.
   totpBackupCodes            Json?
+  // PLH-3w P2: single-use 2FA backup codes, sha256-hashed at rest. 8 are
+  // generated when 2FA is enabled (or regenerated); each is removed on
+  // use at login.
+  backupCodesHashed          String[]                  @default([])
+  // PLH-3w P2: admin "2FA recovery in progress" override. When set in the
+  // future, the per-role 2FA interstitial is suppressed for this user so
+  // they can sign in and re-enroll. Expires after 1 hour.
+  twoFactorRecoveryUntil     DateTime?
   // PLH-3w P1: account trust status. ACTIVE is the default; SUSPENDED is a
   // reversible lockout, BANNED is terminal. Login is refused for both
   // non-ACTIVE states; suspension/ban also bump sessionsValidFrom to kill

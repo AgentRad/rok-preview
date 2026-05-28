@@ -136,6 +136,7 @@ export default async function SettingsPage({
                 enabledAt={
                   user.totpEnabledAt ? user.totpEnabledAt.toISOString() : null
                 }
+                backupCodesRemaining={(user.backupCodesHashed ?? []).length}
               />
             </div>
           </div>

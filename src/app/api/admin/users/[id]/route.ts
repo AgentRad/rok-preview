@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { suspendUser, unsuspendUser, banUser } from "@/lib/user-status";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -75,8 +76,27 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   }
 
+  if (action === "2fa-recovery") {
+    // PLH-3w P2: grant a 1-hour 2FA recovery override so a locked-out user
+    // can sign in and re-enroll. Heavily audited (security-control bypass).
+    const until = new Date(Date.now() + 60 * 60 * 1000);
+    await prisma.user.update({
+      where: { id },
+      data: { twoFactorRecoveryUntil: until },
+    });
+    await writeAuditLog({
+      actor: admin,
+      action: "USER_2FA_ADMIN_OVERRIDE",
+      targetType: "User",
+      targetId: id,
+      summary: `Granted 1-hour 2FA recovery override (until ${until.toISOString()}).`,
+      metadata: { until: until.toISOString(), reason: reason || null },
+    });
+    return NextResponse.json({ ok: true, until: until.toISOString() });
+  }
+
   return NextResponse.json(
-    { error: "action must be suspend, unsuspend, or ban." },
+    { error: "action must be suspend, unsuspend, ban, or 2fa-recovery." },
     { status: 400 }
   );
 }

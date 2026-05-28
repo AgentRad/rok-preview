@@ -11,9 +11,11 @@ type EnrollResult = {
 export default function TwoFactorSetup({
   enabled,
   enabledAt,
+  backupCodesRemaining = 0,
 }: {
   enabled: boolean;
   enabledAt: string | null;
+  backupCodesRemaining?: number;
 }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -23,6 +25,62 @@ export default function TwoFactorSetup({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showDisable, setShowDisable] = useState(false);
+  const [showRegen, setShowRegen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function copyCodes() {
+    if (!backupCodes) return;
+    navigator.clipboard.writeText(backupCodes.join("\n")).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      },
+      () => setCopied(false)
+    );
+  }
+
+  function downloadCodes() {
+    if (!backupCodes) return;
+    const blob = new Blob(
+      [
+        "PartsPort two-factor backup codes\n",
+        "Each code works once. Store them somewhere safe.\n\n",
+        backupCodes.join("\n"),
+        "\n",
+      ],
+      { type: "text/plain" }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "partsport-backup-codes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function regenerate(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/2fa/backup-codes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not generate new codes.");
+        return;
+      }
+      setBackupCodes(data.backupCodes || []);
+      setShowRegen(false);
+      setPassword("");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function startEnroll(e: React.FormEvent) {
     e.preventDefault();
@@ -118,14 +176,29 @@ export default function TwoFactorSetup({
             <div key={c}>{c}</div>
           ))}
         </div>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          style={{ marginTop: 14 }}
-          onClick={() => setBackupCodes(null)}
-        >
-          Done
-        </button>
+        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={downloadCodes}
+          >
+            Download .txt
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={copyCodes}
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setBackupCodes(null)}
+          >
+            Done
+          </button>
+        </div>
       </div>
     );
   }
@@ -180,6 +253,59 @@ export default function TwoFactorSetup({
             Turn off 2FA
           </button>
         )}
+
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
+          <div style={{ fontSize: 14, marginBottom: 8 }}>
+            <strong>Backup codes</strong>{" "}
+            <span className="muted">
+              ({backupCodesRemaining} unused). Each works once if you lose your
+              authenticator.
+            </span>
+          </div>
+          {showRegen ? (
+            <form onSubmit={regenerate}>
+              {error && <div className="alert alert-error">{error}</div>}
+              <div className="form-row">
+                <label htmlFor="r-pw">Current password (to confirm)</label>
+                <input
+                  id="r-pw"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="row-gap">
+                <button className="btn btn-primary btn-sm" disabled={busy}>
+                  {busy ? "Generating…" : "Generate new codes"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={busy}
+                  onClick={() => {
+                    setShowRegen(false);
+                    setError("");
+                    setPassword("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+              <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                Generating new codes invalidates any codes you saved before.
+              </p>
+            </form>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowRegen(true)}
+            >
+              Generate new codes
+            </button>
+          )}
+        </div>
       </div>
     );
   }

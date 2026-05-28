@@ -61,12 +61,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, role: user.role });
   }
 
-  // Try backup codes (single-use, hashed at rest).
-  const storedHashes = (user.totpBackupCodes as string[] | null) ?? [];
+  // Try backup codes (single-use, hashed at rest). PLH-3w P2: the canonical
+  // store is backupCodesHashed (String[]); fall back to the legacy
+  // totpBackupCodes Json for accounts enrolled before P2.
   const candidateHash = hashBackupCode(code);
-  const matchIndex = storedHashes.indexOf(candidateHash);
-  if (matchIndex >= 0) {
-    const remaining = storedHashes.filter((_, i) => i !== matchIndex);
+  const newStore = user.backupCodesHashed ?? [];
+  const newIndex = newStore.indexOf(candidateHash);
+  if (newIndex >= 0) {
+    const remaining = newStore.filter((_, i) => i !== newIndex);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { backupCodesHashed: remaining },
+    });
+    await createSession(user.id);
+    return NextResponse.json({
+      ok: true,
+      role: user.role,
+      backupCodeUsed: true,
+      remainingBackupCodes: remaining.length,
+    });
+  }
+  const legacyStore = (user.totpBackupCodes as string[] | null) ?? [];
+  const legacyIndex = legacyStore.indexOf(candidateHash);
+  if (legacyIndex >= 0) {
+    const remaining = legacyStore.filter((_, i) => i !== legacyIndex);
     await prisma.user.update({
       where: { id: user.id },
       data: { totpBackupCodes: remaining },

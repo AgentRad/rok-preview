@@ -30,7 +30,9 @@ export default function AdminUserRow({
   const [mode, setMode] = useState<"none" | "suspend" | "ban">("none");
   const [reason, setReason] = useState("");
 
-  async function send(action: "suspend" | "unsuspend" | "ban") {
+  const [recoveryNote, setRecoveryNote] = useState("");
+
+  async function send(action: "suspend" | "unsuspend" | "ban" | "2fa-recovery") {
     setBusy(true);
     setError("");
     const res = await fetch(`/api/admin/users/${id}`, {
@@ -43,6 +45,9 @@ export default function AdminUserRow({
       const data = await res.json().catch(() => ({}));
       setError(data.error || "Could not save.");
       return;
+    }
+    if (action === "2fa-recovery") {
+      setRecoveryNote("2FA recovery granted for 1 hour.");
     }
     setMode("none");
     setReason("");
@@ -167,6 +172,19 @@ export default function AdminUserRow({
             >
               Ban
             </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              disabled={busy}
+              title="Grant a 1-hour window for the user to re-enroll 2FA"
+              onClick={() => send("2fa-recovery")}
+            >
+              2FA recovery
+            </button>
+          </div>
+        )}
+        {recoveryNote && (
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            {recoveryNote}
           </div>
         )}
       </td>

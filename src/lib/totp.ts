@@ -47,11 +47,11 @@ export function verifyTotp(secret: string, code: string): boolean {
   }
 }
 
-/** Returns 10 backup codes, each 10 characters (5+5 with dash). */
+/** Returns 8 backup codes, each 10 characters (5+5 with dash). */
 export function generateBackupCodes(): string[] {
   const codes: string[] = [];
   const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 8; i++) {
     let s = "";
     for (let j = 0; j < 10; j++) {
       s += ALPHABET[crypto.randomInt(0, ALPHABET.length)];

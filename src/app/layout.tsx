@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import DeferredChrome from "@/components/DeferredChrome";
+import TwoFactorGate from "@/components/TwoFactorGate";
 import { siteUrl } from "@/lib/site-url";
 
 // P11.10: trimmed from 5 weights x 2 styles to 4 weights x 1 style. 300 is
@@ -82,6 +83,7 @@ export default function RootLayout({
       </head>
       <body>
         <a href="#main" className="skip-link">Skip to main content</a>
+        <TwoFactorGate />
         {children}
         <DeferredChrome showDemoGuide={process.env.VERCEL_ENV !== "production"} />
         <Analytics />

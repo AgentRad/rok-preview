@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -42,7 +43,10 @@ export async function POST(req: Request) {
     where: { id: user.id },
     data: {
       totpEnabledAt: new Date(),
-      totpBackupCodes: hashed,
+      // PLH-3w P2: canonical store is backupCodesHashed (String[]). Clear
+      // the legacy Json column so a future read can't resurrect stale codes.
+      backupCodesHashed: hashed,
+      totpBackupCodes: Prisma.DbNull,
     },
   });
 

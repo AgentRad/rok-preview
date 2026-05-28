@@ -40,6 +40,7 @@ export async function POST(req: Request) {
       totpSecret: secret,
       totpEnabledAt: null,
       totpBackupCodes: Prisma.DbNull,
+      backupCodesHashed: [],
     },
   });
 
