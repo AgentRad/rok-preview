@@ -57,6 +57,11 @@ export async function lookupTaxExemption(
   buyerId: string | null | undefined
 ): Promise<TaxExemptionState> {
   if (!buyerId) return { isExempt: false, certificateUrl: null };
+  const now = new Date();
+  const notExpired = [
+    { taxExemptExpiresAt: null },
+    { taxExemptExpiresAt: { gt: now } },
+  ];
   const approved = await prisma.address.findFirst({
     where: {
       userId: buyerId,
@@ -65,15 +70,34 @@ export async function lookupTaxExemption(
       // PLH-3j P4: skip certs that have expired so we don't waive tax
       // on a stale cert. Null expiry is treated as "no date on file",
       // which is allowed for pre-P4 certs.
-      OR: [
-        { taxExemptExpiresAt: null },
-        { taxExemptExpiresAt: { gt: new Date() } },
-      ],
+      OR: notExpired,
     },
     orderBy: { createdAt: "desc" },
   });
-  return {
-    isExempt: !!approved,
-    certificateUrl: approved?.taxExemptCertificateUrl ?? null,
-  };
+  if (approved) {
+    return { isExempt: true, certificateUrl: approved.taxExemptCertificateUrl };
+  }
+
+  // PLH-3y-2: the buyer's active org cert is an additional source. If the org
+  // has an APPROVED, not-expired cert, every member's orders are tax-exempt
+  // even when the member has no personal cert.
+  const buyer = await prisma.user.findUnique({
+    where: { id: buyerId },
+    select: { activeBuyerOrgId: true },
+  });
+  if (buyer?.activeBuyerOrgId) {
+    const org = await prisma.buyerOrg.findFirst({
+      where: {
+        id: buyer.activeBuyerOrgId,
+        taxExemptStatus: "APPROVED",
+        OR: notExpired,
+      },
+      select: { taxExemptCertificateUrl: true },
+    });
+    if (org) {
+      return { isExempt: true, certificateUrl: org.taxExemptCertificateUrl };
+    }
+  }
+
+  return { isExempt: false, certificateUrl: null };
 }

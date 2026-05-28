@@ -44,6 +44,13 @@ export default async function BuyerOrgPage() {
           </p>
           <BuyerOrgClient
             isAdmin={isAdmin}
+            taxExempt={{
+              status: ctx.org.taxExemptStatus,
+              certificateUrl: ctx.org.taxExemptCertificateUrl,
+              expiresAt: ctx.org.taxExemptExpiresAt
+                ? ctx.org.taxExemptExpiresAt.toISOString()
+                : null,
+            }}
             initialAddresses={addresses.map((a) => ({
               id: a.id,
               label: a.label,

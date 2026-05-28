@@ -30,11 +30,19 @@ const BLANK = {
   phone: "",
 };
 
+type TaxExempt = {
+  status: string | null;
+  certificateUrl: string | null;
+  expiresAt: string | null;
+};
+
 export default function BuyerOrgClient({
   isAdmin,
+  taxExempt,
   initialAddresses,
 }: {
   isAdmin: boolean;
+  taxExempt: TaxExempt;
   initialAddresses: OrgAddress[];
 }) {
   const [addresses, setAddresses] = useState<OrgAddress[]>(initialAddresses);
@@ -42,6 +50,49 @@ export default function BuyerOrgClient({
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const [cert, setCert] = useState<TaxExempt>(taxExempt);
+  const [certUrl, setCertUrl] = useState("");
+  const [certExpiry, setCertExpiry] = useState("");
+  const [certError, setCertError] = useState("");
+  const [certBusy, setCertBusy] = useState(false);
+
+  async function saveCert(e: React.FormEvent) {
+    e.preventDefault();
+    setCertBusy(true);
+    setCertError("");
+    const res = await fetch("/api/buyer-org/tax-exempt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: certUrl, expiresAt: certExpiry || undefined }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setCertBusy(false);
+    if (!res.ok) {
+      setCertError(data.error || "Could not save the certificate.");
+      return;
+    }
+    setCert({
+      status: "PENDING",
+      certificateUrl: certUrl,
+      expiresAt: certExpiry || null,
+    });
+    setCertUrl("");
+    setCertExpiry("");
+  }
+
+  async function clearCert() {
+    setCertBusy(true);
+    setCertError("");
+    const res = await fetch("/api/buyer-org/tax-exempt", { method: "DELETE" });
+    setCertBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setCertError(data.error || "Could not clear the certificate.");
+      return;
+    }
+    setCert({ status: null, certificateUrl: null, expiresAt: null });
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -78,7 +129,88 @@ export default function BuyerOrgClient({
     setAddresses((prev) => prev.filter((a) => a.id !== id));
   }
 
+  const certStatusLabel = cert.status
+    ? cert.status === "APPROVED"
+      ? "Approved"
+      : cert.status === "REJECTED"
+        ? "Rejected"
+        : "Pending review"
+    : "None on file";
+
   return (
+    <>
+    <div className="card" style={{ marginTop: 24 }}>
+      <div className="card-head">
+        <h2>Tax-exempt certificate</h2>
+        <span className="muted-text" style={{ fontSize: 13 }}>{certStatusLabel}</span>
+      </div>
+      <div className="card-body">
+        {certError && <div className="alert alert-error">{certError}</div>}
+        <p className="muted-text" style={{ fontSize: 13 }}>
+          An approved org certificate waives sales tax for every member's
+          orders. It applies in addition to any personal certificate a member
+          has on file.
+        </p>
+        {cert.certificateUrl ? (
+          <div style={{ marginTop: 8, fontSize: 13.5 }}>
+            <a
+              href={cert.certificateUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--blue)", fontWeight: 600, textDecoration: "none" }}
+            >
+              View certificate &rarr;
+            </a>
+            {cert.expiresAt && (
+              <span className="muted-text" style={{ marginLeft: 8 }}>
+                Expires {new Date(cert.expiresAt).toLocaleDateString()}
+              </span>
+            )}
+            {isAdmin && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={clearCert}
+                disabled={certBusy}
+                style={{ marginLeft: 12 }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className="muted-text" style={{ fontSize: 13, marginTop: 8 }}>
+            No certificate on file.
+          </p>
+        )}
+        {isAdmin && (
+          <form onSubmit={saveCert} style={{ marginTop: 12 }}>
+            <div className="form-row">
+              <label htmlFor="cert-url">Certificate URL (https)</label>
+              <input
+                id="cert-url"
+                value={certUrl}
+                onChange={(e) => setCertUrl(e.target.value)}
+                placeholder="https://…"
+                required
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="cert-exp">Expiry date (optional)</label>
+              <input
+                id="cert-exp"
+                type="date"
+                value={certExpiry}
+                onChange={(e) => setCertExpiry(e.target.value)}
+              />
+            </div>
+            <button className="btn btn-primary" disabled={certBusy}>
+              {certBusy ? "Saving…" : "Submit certificate for review"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+
     <div className="card" style={{ marginTop: 24 }}>
       <div className="card-head">
         <h2>Shared shipping addresses</h2>
@@ -235,5 +367,6 @@ export default function BuyerOrgClient({
         )}
       </div>
     </div>
+    </>
   );
 }

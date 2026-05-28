@@ -7,6 +7,7 @@ import AddSupplierForm from "@/components/AddSupplierForm";
 import SupplierAdminRow from "@/components/SupplierAdminRow";
 import AttentionFeed from "@/components/AttentionFeed";
 import TaxExemptReview from "@/components/TaxExemptReview";
+import OrgTaxExemptReview from "@/components/OrgTaxExemptReview";
 import SupplierDocsReview from "@/components/SupplierDocsReview";
 import { getAdminAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
@@ -46,7 +47,7 @@ export default async function AdminConsole() {
     ? (await getUnreadCounts(currentAdmin.id)).total
     : 0;
 
-  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns, taxExemptAddresses, supplierDocs, attention] =
+  const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns, taxExemptAddresses, orgTaxExemptOrgs, supplierDocs, attention] =
     await Promise.all([
       prisma.order.findMany({
         include: { items: true },
@@ -102,6 +103,12 @@ export default async function AdminConsole() {
           { taxExemptStatus: "asc" },
           { createdAt: "desc" },
         ],
+        take: 30,
+      }),
+      // PLH-3y-2: orgs with a tax-exempt cert on file, PENDING first.
+      prisma.buyerOrg.findMany({
+        where: { taxExemptCertificateUrl: { not: null } },
+        orderBy: [{ taxExemptStatus: "asc" }, { createdAt: "desc" }],
         take: 30,
       }),
       prisma.supplierDocument.findMany({
@@ -493,6 +500,26 @@ export default async function AdminConsole() {
                 buyerName: a.user?.name || "",
                 buyerEmail: a.user?.email || "",
                 createdAt: a.createdAt.toISOString(),
+              }))}
+            />
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Org tax-exempt certificates</h2>
+              {orgTaxExemptOrgs.filter((o) => o.taxExemptStatus === "PENDING").length > 0 && (
+                <span className="muted-text" style={{ fontSize: 13 }}>
+                  {orgTaxExemptOrgs.filter((o) => o.taxExemptStatus === "PENDING").length} pending review
+                </span>
+              )}
+            </div>
+            <OrgTaxExemptReview
+              rows={orgTaxExemptOrgs.map((o) => ({
+                id: o.id,
+                name: o.name,
+                certificateUrl: o.taxExemptCertificateUrl || "",
+                status: o.taxExemptStatus || "PENDING",
+                expiresAt: o.taxExemptExpiresAt ? o.taxExemptExpiresAt.toISOString() : null,
               }))}
             />
           </div>
