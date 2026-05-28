@@ -96,6 +96,10 @@ const BUCKETS: Record<string, Bucket> = {
   // schema change later. In-memory pass at this round is fine; PartsPort
   // won't approach this limit at launch.
   intuit: { capacity: 500, windowMs: 60_000 },
+  // PLH-3y-5: SCIM 2.0 provisioning endpoints, keyed per org. Okta bursts
+  // hard on the initial directory sync, so the ceiling is high (600/min/org).
+  // Keyed by org, not IP, since a single IdP connector drives all the traffic.
+  scim: { capacity: 600, windowMs: 60_000 },
   generic: { capacity: 60, windowMs: 60_000 },
 };
 
