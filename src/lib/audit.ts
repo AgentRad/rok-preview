@@ -169,6 +169,17 @@ export const AUDIT_ACTIONS = [
   "BUYER_ORG_DOMAIN_REMOVED",
   "BUYER_ORG_DOMAIN_AUTOJOIN_UPDATED",
   "BUYER_ORG_DOMAIN_AUTOJOINED",
+  // PLH-3y-4: SSO management-plane + login events. The high-volume per-login
+  // outcome lives in SsoLoginEvent; these AuditLog rows cover config edits,
+  // cert rotation, JIT provisioning, and the break-glass password path.
+  "SSO_INITIATED",
+  "SSO_LOGIN_SUCCESS",
+  "SSO_LOGIN_FAILED",
+  "SSO_PROVISIONED",
+  "SSO_CONFIG_UPDATED",
+  "SSO_CONFIG_REMOVED",
+  "SSO_CERT_ROTATED",
+  "EMERGENCY_PASSWORD_LOGIN",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -188,7 +199,8 @@ export type AuditTargetType =
   | "IntegrationCredential"
   | "DirectMessageThread"
   | "Message"
-  | "BuyerOrg";
+  | "BuyerOrg"
+  | "SsoConfig";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

@@ -119,6 +119,14 @@ enum MessageVisibility {
   ADMIN_ONLY
 }
 
+// PLH-3y-4: identity provider protocol for an org's SSO config. SAML ships
+// this round; OIDC lands in PLH-3y-5 (the OIDC columns on SsoConfig are
+// present but unused until then).
+enum SsoIdpType {
+  SAML
+  OIDC
+}
+
 model User {
   id                         String                    @id @default(cuid())
   email                      String                    @unique
@@ -476,7 +484,74 @@ model BuyerOrg {
   invites         BuyerOrgInvite[]
   addresses       BuyerOrgAddress[]
   domains         BuyerOrgDomain[]
+  // PLH-3y-4: at most one SSO configuration per org.
+  ssoConfig       SsoConfig?
+  loginEvents     SsoLoginEvent[]
   activeForUsers  User[]           @relation("ActiveBuyerOrg")
+}
+
+// PLH-3y-4: per-org single sign-on configuration. SAML 2.0 ships this round;
+// the OIDC columns are present but unused until PLH-3y-5. An org admin (or a
+// site admin) pastes the IdP's EntityID, SSO URL, and signing certificate;
+// PartsPort verifies the SAML assertion signature with a vetted library
+// (@node-saml/node-saml) on every login. enforced=false by default so password
+// login stays on until an org admin explicitly locks the domain.
+model SsoConfig {
+  id              String     @id @default(cuid())
+  buyerOrgId      String     @unique
+  buyerOrg        BuyerOrg   @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  idpType         SsoIdpType @default(SAML)
+  // SAML fields.
+  idpEntityId     String?
+  idpSsoUrl       String?
+  idpSloUrl       String?
+  idpX509Cert     String?    @db.Text
+  // Staged signing cert for zero-downtime IdP cert rotation. When set, an
+  // assertion is accepted if it verifies against either the current or the
+  // next cert.
+  idpX509CertNext String?    @db.Text
+  // OIDC fields (PLH-3y-5; unused this round).
+  oidcIssuer      String?
+  oidcClientId    String?
+  oidcClientSecret String?   @db.Text
+  // Common.
+  domainAllowlist String[]
+  // SAML assertion attribute name carrying the user's group memberships.
+  // Defaults handled in code to the standard claim + memberOf.
+  groupAttributeName String?
+  // { "PartsPort-Admins": "ADMIN", "Procurement": "BUYER" }
+  groupRoleMap    Json?
+  defaultRole     BuyerOrgRole @default(BUYER)
+  // When true, password login is disabled for users whose email domain is in
+  // domainAllowlist. A site admin (platform Role=ADMIN) always keeps a
+  // break-glass password path, as does a member with emergencyPasswordAccess.
+  enforced        Boolean    @default(false)
+  sessionMaxAgeMin Int       @default(480)
+  honorIdpSessionExpiry Boolean @default(true)
+  configuredById  String?
+  configuredAt    DateTime   @default(now())
+  rotatedCertAt   DateTime?
+
+  @@index([buyerOrgId])
+}
+
+// PLH-3y-4: high-volume per-login audit trail for SSO. The management-plane
+// events (config edits, cert rotation) go to AuditLog; this table records the
+// outcome of every assertion processed at the ACS endpoint.
+model SsoLoginEvent {
+  id          String   @id @default(cuid())
+  buyerOrgId  String
+  buyerOrg    BuyerOrg @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  userId      String?
+  email       String
+  // SUCCESS | FAILED_SIG | FAILED_NOTAFTER | FAILED_DOMAIN | FAILED_AUDIENCE
+  outcome     String
+  ipHash      String
+  userAgent   String
+  createdAt   DateTime @default(now())
+
+  @@index([buyerOrgId, createdAt])
+  @@index([email, createdAt])
 }
 
 // PLH-3y-3: a claimed email domain for an org. An admin claims a domain, the
@@ -542,6 +617,10 @@ model BuyerOrgMember {
   role          BuyerOrgRole @default(BUYER)
   joinedAt      DateTime     @default(now())
   addedByUserId String?
+  // PLH-3y-4: per-member break-glass. When the org enforces SSO (domain lock),
+  // a member with this flag may still password-login. Off by default; an org
+  // admin opts a specific member in for emergency recovery.
+  emergencyPasswordAccess Boolean @default(false)
 
   @@unique([buyerOrgId, userId])
   @@index([userId])
