@@ -12,6 +12,7 @@ import SiteFooter from "@/components/SiteFooter";
 import SupplierNav from "@/components/SupplierNav";
 import ActingAsBanner from "@/components/ActingAsBanner";
 import SupplierAIAssistant from "@/components/SupplierAIAssistant";
+import SummarizeRfqsTile from "@/components/SummarizeRfqsTile";
 import { getSupplierAttention } from "@/lib/attention";
 
 import {
@@ -54,11 +55,31 @@ export default async function SupplierDashboard() {
         <main id="main" className="app-page">
           <div className="page-pad narrow">
             <h1 className="page-title">Supplier dashboard</h1>
-            <div className="alert alert-info" style={{ marginTop: 16 }}>
-              {user.role === "ADMIN"
-                ? "No supplier selected. Go to /admin and click 'Manage as' next to a supplier to operate their dashboard."
-                : "No supplier profile is linked to this account yet. Once an admin approves your supplier application, your dashboard appears here."}
-            </div>
+            {user.role === "ADMIN" ? (
+              <div className="alert alert-info" style={{ marginTop: 16 }}>
+                No supplier selected. Go to /admin and click &lsquo;Manage as&rsquo; next to a supplier to operate their dashboard.
+              </div>
+            ) : (
+              <div className="alert alert-info" style={{ marginTop: 16 }}>
+                <p style={{ margin: 0 }}>
+                  No supplier profile is linked to this account yet. Apply to
+                  become a PartsPort distributor and your dashboard appears
+                  here once approved.
+                </p>
+                <p style={{ marginTop: 10, marginBottom: 0 }}>
+                  <a className="btn btn-primary btn-sm" href="/suppliers#apply">
+                    Apply to become a supplier
+                  </a>
+                </p>
+                <p
+                  className="muted-text"
+                  style={{ marginTop: 10, marginBottom: 0, fontSize: 12.5 }}
+                >
+                  Most applications reviewed within 2 business days. Questions?
+                  Email <a href="mailto:rad@agentgaming.gg">rad@agentgaming.gg</a>.
+                </p>
+              </div>
+            )}
           </div>
         </main>
         <SiteFooter />
