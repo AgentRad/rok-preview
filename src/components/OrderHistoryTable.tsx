@@ -23,6 +23,8 @@ export type OrderRow = {
   /** PLH-3v: enterprise PO number, optional. Column renders only when at
    *  least one row in the visible page has a value. */
   purchaseOrderNumber?: string | null;
+  /** PLH-3y-2: buyer name, shown only in org-scoped admin view. */
+  buyerName?: string | null;
 };
 
 /**
@@ -34,6 +36,8 @@ export default function OrderHistoryTable({
   totalCount,
   pageSize,
   unreadByOrderId,
+  canViewOrgOrders = false,
+  orgName = "",
 }: {
   initial: OrderRow[];
   totalCount: number;
@@ -41,6 +45,10 @@ export default function OrderHistoryTable({
   /** PLH-3p F4: optional unread message count per order id. Renders a
    *  small red dot next to the reference when > 0. */
   unreadByOrderId?: Record<string, number>;
+  /** PLH-3y-2: when true, the viewer is an ADMIN of their active org and may
+   *  toggle to all org members' orders. */
+  canViewOrgOrders?: boolean;
+  orgName?: string;
 }) {
   const [rows, setRows] = useState<OrderRow[]>(initial);
   const [page, setPage] = useState(1);
@@ -50,11 +58,14 @@ export default function OrderHistoryTable({
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
   const [filtered, setFiltered] = useState(false);
+  // PLH-3y-2: org-scope view (admin only).
+  const [orgScope, setOrgScope] = useState(false);
 
-  const hasMore = filtered
+  const hasMore = filtered || orgScope
     ? rows.length >= pageSize && rows.length % pageSize === 0
     : rows.length < totalCount;
   const showPoColumn = rows.some((r) => !!r.purchaseOrderNumber);
+  const showBuyerColumn = orgScope;
 
   async function loadMore() {
     if (busy || !hasMore) return;
@@ -63,6 +74,7 @@ export default function OrderHistoryTable({
     try {
       const qs = new URLSearchParams({ page: String(page + 1) });
       if (filtered && q.trim()) qs.set("q", q.trim());
+      if (orgScope) qs.set("scope", "org");
       const res = await fetch(`/api/account/orders?${qs.toString()}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -84,6 +96,7 @@ export default function OrderHistoryTable({
       const trimmed = q.trim();
       const qs = new URLSearchParams({ page: "1" });
       if (trimmed) qs.set("q", trimmed);
+      if (orgScope) qs.set("scope", "org");
       const res = await fetch(`/api/account/orders?${qs.toString()}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -103,9 +116,40 @@ export default function OrderHistoryTable({
     setRows(initial);
     setPage(1);
     setFiltered(false);
+    setOrgScope(false);
   }
 
-  if (rows.length === 0) {
+  // PLH-3y-2: flip between own orders and all org orders. Refetches page 1.
+  async function toggleOrgScope() {
+    const next = !orgScope;
+    setBusy(true);
+    setError("");
+    try {
+      if (!next) {
+        setRows(initial);
+        setPage(1);
+        setOrgScope(false);
+        setQ("");
+        setFiltered(false);
+        return;
+      }
+      const qs = new URLSearchParams({ page: "1", scope: "org" });
+      if (q.trim()) qs.set("q", q.trim());
+      const res = await fetch(`/api/account/orders?${qs.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not load org orders.");
+        return;
+      }
+      setRows(data.orders as OrderRow[]);
+      setPage(1);
+      setOrgScope(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (rows.length === 0 && !orgScope) {
     return (
       <div className="empty-block">
         <h3>No orders yet</h3>
@@ -116,6 +160,28 @@ export default function OrderHistoryTable({
 
   return (
     <>
+      {canViewOrgOrders && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "8px 0 4px" }}>
+          <button
+            type="button"
+            className={"btn btn-sm " + (orgScope ? "btn-ghost" : "btn-primary")}
+            onClick={toggleOrgScope}
+            disabled={busy}
+            aria-pressed={!orgScope}
+          >
+            My orders
+          </button>
+          <button
+            type="button"
+            className={"btn btn-sm " + (orgScope ? "btn-primary" : "btn-ghost")}
+            onClick={toggleOrgScope}
+            disabled={busy}
+            aria-pressed={orgScope}
+          >
+            All {orgName || "org"} orders
+          </button>
+        </div>
+      )}
       <form
         onSubmit={runSearch}
         style={{
@@ -157,6 +223,7 @@ export default function OrderHistoryTable({
           <thead>
             <tr>
               <th>Reference</th>
+              {showBuyerColumn && <th>Buyer</th>}
               {showPoColumn && <th>PO #</th>}
               <th>Date</th>
               <th>Items</th>
@@ -178,6 +245,9 @@ export default function OrderHistoryTable({
                       ariaLabel="Unread messages"
                     />
                   </td>
+                  {showBuyerColumn && (
+                    <td style={{ fontSize: 13 }}>{o.buyerName || ""}</td>
+                  )}
                   {showPoColumn && (
                     <td className="muted-text" style={{ fontSize: 12.5 }}>
                       {o.purchaseOrderNumber || ""}
@@ -226,7 +296,9 @@ export default function OrderHistoryTable({
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
         <span className="muted-text" style={{ fontSize: 12.5 }}>
-          Showing {rows.length} of {totalCount}
+          {orgScope || filtered
+            ? `Showing ${rows.length}`
+            : `Showing ${rows.length} of ${totalCount}`}
         </span>
         {hasMore && (
           <button

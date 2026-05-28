@@ -10,6 +10,10 @@ import OrderHistoryTable from "@/components/OrderHistoryTable";
 import AttentionFeed from "@/components/AttentionFeed";
 import { getBuyerAttention } from "@/lib/attention";
 import { getUnreadCounts } from "@/lib/messages";
+import {
+  getActiveBuyerOrgContext,
+  canSeeAllOrgOrders,
+} from "@/lib/buyer-org-access";
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage({
@@ -47,6 +51,11 @@ export default async function AccountPage({
       : Promise.resolve([]),
     getUnreadCounts(user.id),
   ]);
+
+  // PLH-3y-2: org ADMINs can toggle to all org members' orders on this table.
+  const orgCtx = await getActiveBuyerOrgContext(user);
+  const canViewOrgOrders = !!orgCtx && canSeeAllOrgOrders(orgCtx.role);
+  const orgName = orgCtx?.org.name ?? "";
 
   // PLH-3p F4: feed per-order unread counts into the table so each row
   // can light up a small red dot. byThread keys are `order:<id>` or
@@ -123,6 +132,8 @@ export default async function AccountPage({
               totalCount={totalOrderCount}
               pageSize={PAGE_SIZE}
               unreadByOrderId={unreadByOrderId}
+              canViewOrgOrders={canViewOrgOrders}
+              orgName={orgName}
             />
           </div>
 

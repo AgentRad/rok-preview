@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  getActiveBuyerOrgContext,
+  canSeeAllOrgOrders,
+} from "@/lib/buyer-org-access";
 
 export const runtime = "nodejs";
 
@@ -27,12 +32,28 @@ export async function GET(req: Request) {
   // PLH-3v: optional substring search on purchaseOrderNumber. Capped at
   // 64 chars to match the indexed column; case-insensitive contains.
   const q = (url.searchParams.get("q") || "").trim().slice(0, 64);
-  const where = q
-    ? {
-        buyerId: user.id,
-        purchaseOrderNumber: { contains: q, mode: "insensitive" as const },
-      }
-    : { buyerId: user.id };
+
+  // PLH-3y-2: an org ADMIN can scope to all orders placed by current members
+  // of their active org. The org scope is membership-based (orders whose buyer
+  // is a current member); non-admins or non-org requests fall back to own.
+  const scope = url.searchParams.get("scope");
+  let orgScoped = false;
+  let buyerWhere: Prisma.OrderWhereInput = { buyerId: user.id };
+  if (scope === "org") {
+    const ctx = await getActiveBuyerOrgContext(user);
+    if (ctx && canSeeAllOrgOrders(ctx.role)) {
+      const members = await prisma.buyerOrgMember.findMany({
+        where: { buyerOrgId: ctx.org.id },
+        select: { userId: true },
+      });
+      buyerWhere = { buyerId: { in: members.map((m) => m.userId) } };
+      orgScoped = true;
+    }
+  }
+
+  const where: Prisma.OrderWhereInput = q
+    ? { ...buyerWhere, purchaseOrderNumber: { contains: q, mode: "insensitive" } }
+    : buyerWhere;
   const orders = await prisma.order.findMany({
     where,
     include: { items: { select: { qty: true } } },
@@ -43,6 +64,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     page,
     pageSize: PAGE_SIZE,
+    orgScoped,
     orders: orders.map((o) => ({
       id: o.id,
       reference: o.reference,
@@ -51,6 +73,7 @@ export async function GET(req: Request) {
       totalCents: o.totalCents,
       qtyTotal: o.items.reduce((n, i) => n + i.qty, 0),
       purchaseOrderNumber: o.purchaseOrderNumber,
+      buyerName: o.buyerName,
     })),
   });
 }
