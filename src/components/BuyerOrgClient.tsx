@@ -41,15 +41,28 @@ type Billing = {
   hasStripeCustomer: boolean;
 };
 
+type OrgDomain = {
+  id: string;
+  domain: string;
+  status: "PENDING" | "VERIFIED" | "FAILED";
+  verifiedAt: string | null;
+  txtRecordName: string;
+  txtRecordValue: string;
+  autoJoinEnabled: boolean;
+  autoJoinRole: "VIEWER" | "BUYER" | "APPROVER" | "ADMIN";
+};
+
 export default function BuyerOrgClient({
   isAdmin,
   taxExempt,
   billing,
+  initialDomains,
   initialAddresses,
 }: {
   isAdmin: boolean;
   taxExempt: TaxExempt;
   billing: Billing;
+  initialDomains: OrgDomain[];
   initialAddresses: OrgAddress[];
 }) {
   const [addresses, setAddresses] = useState<OrgAddress[]>(initialAddresses);
@@ -159,6 +172,84 @@ export default function BuyerOrgClient({
     setAddresses((prev) => prev.filter((a) => a.id !== id));
   }
 
+  const [domains, setDomains] = useState<OrgDomain[]>(initialDomains);
+  const [newDomain, setNewDomain] = useState("");
+  const [domainError, setDomainError] = useState("");
+  const [domainBusy, setDomainBusy] = useState(false);
+
+  async function claimDomain(e: React.FormEvent) {
+    e.preventDefault();
+    setDomainBusy(true);
+    setDomainError("");
+    const res = await fetch("/api/buyer-org/domains", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: newDomain }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setDomainBusy(false);
+    if (!res.ok) {
+      setDomainError(data.error || "Could not claim the domain.");
+      return;
+    }
+    setDomains((prev) => [
+      {
+        id: data.id,
+        domain: data.domain,
+        status: data.status,
+        verifiedAt: null,
+        txtRecordName: data.txtRecordName,
+        txtRecordValue: data.txtRecordValue,
+        autoJoinEnabled: data.autoJoinEnabled,
+        autoJoinRole: data.autoJoinRole,
+      },
+      ...prev,
+    ]);
+    setNewDomain("");
+  }
+
+  async function updateAutoJoin(
+    id: string,
+    autoJoinEnabled: boolean,
+    autoJoinRole: OrgDomain["autoJoinRole"]
+  ) {
+    setDomainBusy(true);
+    setDomainError("");
+    const res = await fetch(`/api/buyer-org/domains/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autoJoinEnabled, autoJoinRole }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setDomainBusy(false);
+    if (!res.ok) {
+      setDomainError(data.error || "Could not update auto-join.");
+      return;
+    }
+    setDomains((prev) =>
+      prev.map((d) =>
+        d.id === id
+          ? { ...d, autoJoinEnabled: data.autoJoinEnabled, autoJoinRole: data.autoJoinRole }
+          : d
+      )
+    );
+  }
+
+  async function removeDomain(id: string) {
+    setDomainBusy(true);
+    setDomainError("");
+    const res = await fetch(`/api/buyer-org/domains/${id}`, { method: "DELETE" });
+    setDomainBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setDomainError(data.error || "Could not remove the domain.");
+      return;
+    }
+    setDomains((prev) => prev.filter((d) => d.id !== id));
+  }
+
+  const failedDomains = domains.filter((d) => d.status === "FAILED");
+
   const certStatusLabel = cert.status
     ? cert.status === "APPROVED"
       ? "Approved"
@@ -169,6 +260,162 @@ export default function BuyerOrgClient({
 
   return (
     <>
+    {failedDomains.length > 0 && (
+      <div className="alert alert-error" style={{ marginTop: 24 }}>
+        <strong>Domain verification needs attention.</strong> The DNS TXT
+        record for {failedDomains.map((d) => d.domain).join(", ")} could not be
+        found. Auto-join is paused until the record is restored and the domain
+        re-verifies. Check the TXT record below.
+      </div>
+    )}
+
+    <div className="card" style={{ marginTop: 24 }}>
+      <div className="card-head">
+        <h2>Email domains</h2>
+        <span className="muted-text" style={{ fontSize: 13 }}>
+          {domains.length === 0
+            ? "None claimed"
+            : `${domains.length} claimed`}
+        </span>
+      </div>
+      <div className="card-body">
+        {domainError && <div className="alert alert-error">{domainError}</div>}
+        <p className="muted-text" style={{ fontSize: 13 }}>
+          Verify a domain you own, then turn on auto-join so new users who sign
+          up with an email at that domain join this org automatically. Public
+          email providers cannot be claimed.
+        </p>
+        {domains.length > 0 && (
+          <div className="stack-list" style={{ marginTop: 12 }}>
+            {domains.map((d) => (
+              <div
+                key={d.id}
+                style={{
+                  padding: "12px 0",
+                  borderBottom: "1px solid var(--line)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    alignItems: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>
+                    {d.domain}{" "}
+                    <span
+                      className="muted-text"
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color:
+                          d.status === "VERIFIED"
+                            ? "var(--green, #1a7f37)"
+                            : d.status === "FAILED"
+                              ? "var(--red, #b42318)"
+                              : undefined,
+                      }}
+                    >
+                      {d.status === "VERIFIED"
+                        ? "Verified"
+                        : d.status === "FAILED"
+                          ? "Verification failed"
+                          : "Pending verification"}
+                    </span>
+                  </div>
+                  {isAdmin && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => removeDomain(d.id)}
+                      disabled={domainBusy}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {d.status !== "VERIFIED" && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 12.5,
+                      background: "var(--wash, #f6f5f2)",
+                      padding: "8px 10px",
+                      borderRadius: 6,
+                    }}
+                  >
+                    <div className="muted-text">
+                      Add this DNS TXT record, then we check it automatically:
+                    </div>
+                    <div style={{ fontFamily: "var(--mono, monospace)", marginTop: 4 }}>
+                      <div>Name: {d.txtRecordName}</div>
+                      <div>Value: {d.txtRecordValue}</div>
+                    </div>
+                  </div>
+                )}
+                {isAdmin && d.status === "VERIFIED" && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={d.autoJoinEnabled}
+                        disabled={domainBusy}
+                        onChange={(e) =>
+                          updateAutoJoin(d.id, e.target.checked, d.autoJoinRole)
+                        }
+                      />
+                      Auto-join new signups
+                    </label>
+                    <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
+                      as
+                      <select
+                        value={d.autoJoinRole}
+                        disabled={domainBusy || !d.autoJoinEnabled}
+                        onChange={(e) =>
+                          updateAutoJoin(
+                            d.id,
+                            d.autoJoinEnabled,
+                            e.target.value as OrgDomain["autoJoinRole"]
+                          )
+                        }
+                      >
+                        <option value="VIEWER">Viewer</option>
+                        <option value="BUYER">Buyer</option>
+                        <option value="APPROVER">Approver</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {isAdmin && (
+          <form onSubmit={claimDomain} style={{ marginTop: 14, display: "flex", gap: 8 }}>
+            <input
+              value={newDomain}
+              onChange={(e) => setNewDomain(e.target.value)}
+              placeholder="acme.com"
+              required
+              style={{ flex: 1 }}
+            />
+            <button className="btn btn-primary btn-sm" disabled={domainBusy}>
+              {domainBusy ? "Working…" : "Claim domain"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+
     <div className="card" style={{ marginTop: 24 }}>
       <div className="card-head">
         <h2>Billing</h2>

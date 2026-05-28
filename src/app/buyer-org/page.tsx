@@ -30,6 +30,11 @@ export default async function BuyerOrgPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  const domains = await prisma.buyerOrgDomain.findMany({
+    where: { buyerOrgId: ctx.org.id },
+    orderBy: { createdAt: "desc" },
+  });
+
   return (
     <>
       <SiteHeader />
@@ -55,6 +60,16 @@ export default async function BuyerOrgPage() {
               mode: ctx.org.billingMode,
               hasStripeCustomer: !!ctx.org.stripeCustomerId,
             }}
+            initialDomains={domains.map((d) => ({
+              id: d.id,
+              domain: d.domain,
+              status: d.status,
+              verifiedAt: d.verifiedAt ? d.verifiedAt.toISOString() : null,
+              txtRecordName: `_partsport.${d.domain}`,
+              txtRecordValue: `partsport-verify=${d.verificationToken}`,
+              autoJoinEnabled: d.autoJoinEnabled,
+              autoJoinRole: d.autoJoinRole,
+            }))}
             initialAddresses={addresses.map((a) => ({
               id: a.id,
               label: a.label,
