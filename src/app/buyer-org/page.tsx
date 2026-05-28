@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import BuyerOrgClient from "@/components/BuyerOrgClient";
@@ -51,7 +52,14 @@ export default async function BuyerOrgPage({
               shown below.
             </div>
           )}
-          <h1 className="page-title">{ctx.org.name}</h1>
+          <div className="row between">
+            <h1 className="page-title">{ctx.org.name}</h1>
+            {isAdmin && (
+              <Link href="/buyer-org/sso" className="btn btn-ghost btn-sm">
+                Single sign-on
+              </Link>
+            )}
+          </div>
           <p className="page-sub">
             Your role: {ctx.role.toLowerCase()}.{" "}
             {isAdmin

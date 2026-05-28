@@ -46,9 +46,14 @@ export default async function AdminBuyerOrgDetailPage({
       <div className="page-pad wide">
         <div className="admin-page-head">
           <h1 className="page-title">{org.name}</h1>
-          <Link href="/admin/buyer-orgs" className="btn btn-ghost btn-sm">
-            All organizations
-          </Link>
+          <div className="row gap">
+            <Link href={`/admin/buyer-orgs/${org.id}/sso`} className="btn btn-ghost btn-sm">
+              SSO
+            </Link>
+            <Link href="/admin/buyer-orgs" className="btn btn-ghost btn-sm">
+              All organizations
+            </Link>
+          </div>
         </div>
         <p className="page-sub">
           Add existing buyers directly, or invite a new email. ADMIN manages
