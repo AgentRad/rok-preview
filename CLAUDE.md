@@ -1277,6 +1277,86 @@ enforced in the API layer, indexed for substring search). Migration
 New audit action: `ORDER_PO_UPDATED`. No new dependencies, no new
 crons. `npx next build` clean. Zero em dashes.
 
+**PLH-3w (2026-07-01).** Trust and safety: account suspend/ban,
+per-role 2FA enforcement, and abuse-report messaging. 3 feature commits
+plus docs.
+- **P1 (3d7211f) user suspend/ban + admin tools.** New `UserStatus`
+  enum (ACTIVE/SUSPENDED/BANNED) + `User.status` (default ACTIVE) +
+  `suspendedAt`/`suspendedReason`/`suspendedByUserId`. New `BannedEmail`
+  blacklist (unique lowercased email). Login refuses non-ACTIVE accounts
+  with 403 (same generic copy for SUSPENDED and BANNED so the harsher
+  state isn't confirmed); register refuses banned emails with a generic
+  "registration unavailable" before the existing-user branch. Suspend
+  and ban bump `sessionsValidFrom` (kills outstanding cookies), flip the
+  user's owned suppliers to `status=SUSPENDED + publicVisible=false`
+  (which unpublishes their catalog and trips the existing
+  SUSPENDED-supplier order/RFQ gates), and a suspended/banned
+  MANUFACTURER drops out of the brand index + storefront via a
+  `status: "ACTIVE"` filter on the manufacturer queries
+  (`listClaimedManufacturers`, `isClaimedManufacturer`,
+  `/manufacturers`, `/manufacturers/[slug]`). Defensive belt on POST
+  `/api/orders` rejects a non-ACTIVE session user. New `/admin/users`
+  directory: status tabs (All/Active/Suspended/Banned), name/email
+  search, per-row Suspend (500-char reason modal) / Unsuspend / Ban
+  (terminal, confirm dialog). Admins cannot change their own status.
+  Cascade logic lives in `src/lib/user-status.ts`. Audit:
+  `USER_SUSPENDED`, `USER_UNSUSPENDED`, `USER_BANNED`. Migrations
+  `20260701000000_add_user_status`, `20260701010000_add_banned_email`.
+  Deviation: unsuspend does NOT auto-republish the supplier org
+  (re-approval + go-live flip is a deliberate admin step). Deviation:
+  SUSPENDED is a full login lockout per the explicit login-gate
+  requirement, so the spec's "suspended buyer can still view history"
+  nuance is not honored (you cannot both block login and let them
+  browse). The cascade gates remain as defense in depth.
+- **P2 (db68837) per-role 2FA enforcement.** `REQUIRE_2FA_FOR_ROLES`
+  env (comma list; tokens ADMIN / SUPPLIER / SUPPLIER_OWNER /
+  MANUFACTURER / BUYER, where SUPPLIER_OWNER matches a supplier owner
+  via SupplierMember OWNER or legacy userId). `src/lib/two-factor-policy.ts`
+  computes per-user state; `TwoFactorGate` server component mounted once
+  in the root layout renders a banner during a 24h grace window (from
+  `createdAt`) and a blocking fixed-overlay interstitial after grace,
+  suppressed by an active admin recovery override. Backup codes moved
+  from the legacy `totpBackupCodes` Json to a typed
+  `User.backupCodesHashed String[]` (8 codes, sha256 at rest); enroll
+  clears it, verify writes it (+ clears legacy), login-2fa checks new
+  store first then falls back to legacy for pre-P2 enrollees. New
+  `/api/auth/2fa/backup-codes` regenerates 8 (password-confirmed);
+  settings shows remaining count, a Generate-new-codes form, and
+  download-.txt / copy on the codes screen. Admin 2FA recovery override:
+  `User.twoFactorRecoveryUntil` set 1h ahead via the `2fa-recovery`
+  action on `/api/admin/users/[id]`, surfaced as a "2FA recovery" button
+  per ACTIVE row, audited `USER_2FA_ADMIN_OVERRIDE`. Migration
+  `20260701020000_add_user_backup_codes` (adds both columns). Deviation:
+  the spec named one P2 migration and a `backupCodesHashed` field only;
+  the recovery-override column rides in the same migration since the
+  feature needs storage. `generateBackupCodes()` changed 10 to 8.
+- **P3 (6a89118) abuse-report messaging.** `Message` gains
+  `reportedAt`/`reportedByUserId`/`reportReason`/`reviewedAt`/
+  `reviewedByUserId` + a `reportedAt` index. Each message in
+  `MessageThread` gets a Report control (reason dropdown
+  Spam/Abusive/Off-topic/Other + optional 500-char detail) that POSTs
+  `/api/messages/[id]/report`, gated by the same thread-membership +
+  visibility check the attachments route uses, idempotent on an
+  already-pending report, audited `MESSAGE_REPORTED`. New
+  `/admin/reported-messages` queue: pending reports (reportedAt set,
+  reviewedAt null) with body, linked thread context (order/quote/DM),
+  reporter, and reason. Dismiss marks reviewed (`MESSAGE_REPORT_DISMISSED`
+  via `/api/admin/reported-messages/[id]`); Suspend sender links to the
+  P1 `/admin/users?q=<email>` flow. Migration
+  `20260701030000_add_message_report`.
+
+New audit actions in PLH-3w: `USER_SUSPENDED`, `USER_UNSUSPENDED`,
+`USER_BANNED`, `USER_2FA_ADMIN_OVERRIDE`, `MESSAGE_REPORTED`,
+`MESSAGE_REPORT_DISMISSED`. New `AuditTargetType` value `Message`. Admin
+nav gains Users + Reports links. No new dependencies, no new crons.
+`npx next build` clean across all three commits. Zero em dashes.
+
+**Cumulative across all rounds including PLH-3w: 28 CRITICAL + 62 HIGH
+closed, plus the trust-and-safety layer (account suspend/ban with
+cascading effects, per-role 2FA enforcement with grace + backup codes,
+and user-reportable messages with an admin review queue) shipped by
+PLH-3w.**
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no
