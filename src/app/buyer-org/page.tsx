@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import {
   getActiveBuyerOrgContext,
   canManageBuyerOrg,
+  canApproveOrders,
 } from "@/lib/buyer-org-access";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ export default async function BuyerOrgPage({
   const ctx = await getActiveBuyerOrgContext(user);
   if (!ctx) redirect("/account");
   const isAdmin = canManageBuyerOrg(ctx.role);
+  const canApprove = canApproveOrders(ctx.role);
 
   const addresses = await prisma.buyerOrgAddress.findMany({
     where: { buyerOrgId: ctx.org.id, deletedAt: null },
@@ -54,11 +56,23 @@ export default async function BuyerOrgPage({
           )}
           <div className="row between">
             <h1 className="page-title">{ctx.org.name}</h1>
-            {isAdmin && (
-              <Link href="/buyer-org/sso" className="btn btn-ghost btn-sm">
-                Single sign-on
-              </Link>
-            )}
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              {canApprove && (
+                <Link href="/buyer-org/approvals" className="btn btn-ghost btn-sm">
+                  Approvals
+                </Link>
+              )}
+              {isAdmin && (
+                <Link href="/buyer-org/approval-rules" className="btn btn-ghost btn-sm">
+                  Approval rules
+                </Link>
+              )}
+              {isAdmin && (
+                <Link href="/buyer-org/sso" className="btn btn-ghost btn-sm">
+                  Single sign-on
+                </Link>
+              )}
+            </div>
           </div>
           <p className="page-sub">
             Your role: {ctx.role.toLowerCase()}.{" "}

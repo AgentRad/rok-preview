@@ -2139,3 +2139,80 @@ tax tier), SCIM tokens shown once and stored hashed. No new dependencies (jose
 was already present). No new crons. Migration
 `20260706000000_add_oidc_scim_fields`. Round 5 of 6; approvals (PLH-3y-6) is
 the final round.
+
+## PLH-3y-6: Approval workflows (round 6 of 6, EPIC COMPLETE)
+
+Final round of the SSO + buyer-orgs + approvals initiative. Lands order
+approval workflows for buyer organizations. 6 commits, each `npx next build`
+clean, zero em dashes.
+
+- **C1 (prerequisite)**: `Order.buyerOrgId String?` column set at order
+  creation from the buyer's active org context. Indexed. Spend-visibility
+  filter in `/api/account/orders` updated to OR `buyerOrgId = org.id` (for
+  new orders) with the membership-based fallback (legacy orders). Migration
+  `20260707000000_add_order_buyer_org_id`.
+
+- **C2 (schema + engine)**: Migration
+  `20260708000000_add_approval_workflows` adds `Order.approvalStatus`
+  (default NONE), `Order.approvedByMemberId`, `BuyerOrgMember.oooUntil`,
+  `BuyerOrgMember.delegateToMemberId`, `ApprovalRule` table, `OrderApproval`
+  table. `src/lib/approval.ts`: `evaluateAndApplyApproval` (best-effort,
+  returns NONE/PENDING/AUTO_APPROVED; non-org buyers and org buyers with no
+  matching rules are completely unaffected) + `advanceApproval` (OOO-aware
+  chain with admin short-circuit). POST `/api/orders` and
+  `/api/checkout-from-quote/[id]` call `evaluateAndApplyApproval` after
+  order creation and return `pendingApproval: true` when PENDING.
+  POST `/api/payments/create-session` rejects PENDING and REJECTED orders
+  with `APPROVAL_PENDING` / `APPROVAL_REJECTED` error codes.
+  `canApproveOrders` + `canManageApprovalRules` helpers added.
+  12 approval audit actions registered.
+
+- **C3 (approver pages)**: GET `/api/buyer-org/approvals` (paginated queue
+  by status), POST `/api/buyer-org/approvals/[orderId]/decide` (single
+  approve/reject), POST `/api/buyer-org/approvals/bulk` (up to 50 orders
+  in one call). `/buyer-org/approvals` page gated to ADMIN/APPROVER.
+  `ApprovalsClient`: tabbed PENDING/APPROVED/REJECTED queue, per-row
+  approve/reject actions, bulk-select checkbox (ADMIN only), reject modal.
+  `/orders/[id]` approval status banners (PENDING: awaiting approver with
+  Remind + Emergency bypass inline buttons; REJECTED: reason shown).
+
+- **C4 (one-click email approve)**: `src/lib/approval-token.ts`: signed
+  HMAC tokens for one-click approve/reject URLs (same pattern as
+  `order-link.ts`). GET `/api/approval/decide`: verifies token, approves
+  directly or redirects to `/approval/reject/[token]` page for rejection.
+  POST `/api/approval/decide`: reads `body.reason` and calls
+  `advanceApproval`. 5 notification emails: `sendApprovalRequested` (fired
+  on step creation), `sendApprovalApproved` / `sendApprovalRejected` (fired
+  on decision), `sendApprovalEscalated`, `sendApprovalBypassed`.
+
+- **C5 (crons + safety)**: `/api/cron/approval-escalate`: escalates
+  PENDING steps past `escalateAfterHours` to `escalateToMemberId`, audits
+  `APPROVAL_ESCALATED`. Scheduled twice at 8:00 + 8:30 UTC.
+  `/api/cron/approval-orphan-sweep`: reassigns steps with no approver
+  after 48h to org ADMIN, audits `APPROVAL_ORPHANED_REASSIGNED`. Scheduled
+  7:30 UTC. POST `/api/approval/bypass`: site-admin emergency bypass, sets
+  `approvalStatus=BYPASSED`, audits `EMERGENCY_APPROVAL_BYPASS`. POST
+  `/api/approval/poke`: buyer re-notifies approver (rate-limited 1/24h/order).
+  PATCH `/api/buyer-org/member/ooo`: member sets/clears OOO delegation.
+
+- **C6 (SLA dashboard + rule CRUD)**: `/buyer-org/approvals/dashboard`:
+  pending count, avg age, oldest pending age, pending value, 7-day
+  approved/rejected counts. `/buyer-org/approval-rules`: ADMIN-only rule
+  CRUD page with `ApprovalRulesClient` form. Rule API:
+  GET/POST `/api/buyer-org/approval-rules`,
+  PATCH/DELETE `/api/buyer-org/approval-rules/[id]`. All mutations audit
+  `APPROVAL_RULE_CREATED/UPDATED/DELETED`. Buyer-org home page gains
+  Approvals + Approval rules nav links (role-gated).
+
+Locked decisions honored: approvalStatus=NONE default so non-org and
+no-rule orders are completely unaffected; evaluateAndApplyApproval is
+best-effort and never throws into order creation; BYPASSED state allowed
+through to payment.
+
+New cron entries in vercel.json: approval-escalate x2 (8:00 + 8:30 UTC),
+approval-orphan-sweep (7:30 UTC).
+
+Migrations: `20260707000000_add_order_buyer_org_id`,
+`20260708000000_add_approval_workflows`.
+
+**THE SSO + BUYER-ORGS + APPROVALS EPIC (PLH-3y) IS NOW COMPLETE (6 of 6).**
