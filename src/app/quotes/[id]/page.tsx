@@ -8,6 +8,7 @@ import ProductImage from "@/components/ProductImage";
 import { primaryImageUrl } from "@/lib/product-images";
 import QuoteActions from "@/components/QuoteActions";
 import MessageThread from "@/components/MessageThread";
+import { visibilitiesVisibleTo, type ViewerRole } from "@/lib/message-visibility";
 import { formatCents, feeFor, FEE_RATE_LABEL } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,15 @@ export default async function QuotePage({
     )).ok;
   }
   const canMessage = !!viewer && (isBuyer || isAdmin || isQuoteSupplier);
+  const viewerThreadRole: ViewerRole = isAdmin
+    ? "admin"
+    : isQuoteSupplier
+      ? "supplier"
+      : isBuyer
+        ? "buyer"
+        : "none";
+  const visibleSet = new Set(visibilitiesVisibleTo(viewerThreadRole));
+  const visibleMessages = quote.messages.filter((m) => visibleSet.has(m.visibility));
 
   const p = quote.product;
   const quoted = quote.quotedUnitCents != null;
@@ -193,18 +203,20 @@ export default async function QuotePage({
 
           <div className="card" id="messages" style={{ marginTop: 22 }}>
             <div className="card-head">
-              <h2>Conversation{quote.messages.length > 0 ? ` · ${quote.messages.length}` : ""}</h2>
+              <h2>Conversation{visibleMessages.length > 0 ? ` · ${visibleMessages.length}` : ""}</h2>
             </div>
             <div className="card-body">
               <MessageThread
                 quoteId={quote.id}
                 canPost={canMessage}
-                messages={quote.messages.map((m) => ({
+                viewerRole={viewerThreadRole}
+                messages={visibleMessages.map((m) => ({
                   id: m.id,
                   senderName: m.senderName,
                   senderRole: m.senderRole,
                   body: m.body,
                   createdAt: m.createdAt.toISOString(),
+                  visibility: m.visibility,
                 }))}
               />
             </div>

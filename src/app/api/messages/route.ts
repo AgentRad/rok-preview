@@ -10,6 +10,12 @@ import {
   userHasAccessToSupplier,
 } from "@/lib/supplier-access";
 import { rateLimit } from "@/lib/rate-limit";
+import {
+  emailsBuyer,
+  emailsSupplierTeam,
+  resolveOutgoingVisibility,
+  type ViewerRole,
+} from "@/lib/message-visibility";
 
 export const runtime = "nodejs";
 
@@ -29,6 +35,7 @@ export async function POST(req: Request) {
   const orderId = body.orderId ? String(body.orderId) : "";
   const quoteId = body.quoteId ? String(body.quoteId) : "";
   const text = String(body.body || "").trim().slice(0, 4000);
+  const requestedVisibility = body.visibility;
 
   if (!text) {
     return NextResponse.json({ error: "Message body is required." }, { status: 400 });
@@ -44,6 +51,8 @@ export async function POST(req: Request) {
   const recipientUserIds = new Map<string, string | null>();
   let subjectPrefix = "";
   let threadUrl = "";
+  let viewerRole: ViewerRole = "none";
+  let visibility: ReturnType<typeof resolveOutgoingVisibility> = "PUBLIC";
 
   if (orderId) {
     const order = await prisma.order.findUnique({
@@ -68,14 +77,16 @@ export async function POST(req: Request) {
     if (!isBuyer && !isAdmin && !isOrderSupplier) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }
+    viewerRole = isAdmin ? "admin" : isOrderSupplier ? "supplier" : "buyer";
+    visibility = resolveOutgoingVisibility(requestedVisibility, viewerRole);
     // Buyer message goes to each supplier email + admin (BCC bundled). Supplier
     // message goes to the buyer + admin. Admin message goes to both.
-    if (!isBuyer) {
+    if (!isBuyer && emailsBuyer(visibility)) {
       const k = order.buyerEmail.toLowerCase();
       recipients.add(k);
       recipientUserIds.set(k, order.buyerId || null);
     }
-    if (!isOrderSupplier) {
+    if (!isOrderSupplier && emailsSupplierTeam(visibility)) {
       // PLH-3p F1: fan out to every supplier teammate with send-message
       // permission instead of only the supplier's single contactEmail.
       const supplierIds = Array.from(
@@ -116,12 +127,14 @@ export async function POST(req: Request) {
     if (!isBuyer && !isAdmin && !isQuoteSupplier) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }
-    if (!isBuyer) {
+    viewerRole = isAdmin ? "admin" : isQuoteSupplier ? "supplier" : "buyer";
+    visibility = resolveOutgoingVisibility(requestedVisibility, viewerRole);
+    if (!isBuyer && emailsBuyer(visibility)) {
       const k = quote.buyerEmail.toLowerCase();
       recipients.add(k);
       recipientUserIds.set(k, quote.buyerId || null);
     }
-    if (!isQuoteSupplier) {
+    if (!isQuoteSupplier && emailsSupplierTeam(visibility)) {
       // PLH-3p F1: fan out to every supplier teammate with send-message
       // permission instead of only the supplier's single contactEmail.
       const fans = await resolveSupplierThreadRecipients(
@@ -149,6 +162,7 @@ export async function POST(req: Request) {
       senderEmail: user.email,
       senderRole: user.role,
       body: text,
+      visibility,
     },
   });
 

@@ -10,6 +10,7 @@ import CancelOrderButton from "@/components/CancelOrderButton";
 import ConfirmReceiptButton from "@/components/ConfirmReceiptButton";
 import ReturnRequestForm from "@/components/ReturnRequestForm";
 import MessageThread from "@/components/MessageThread";
+import { visibilitiesVisibleTo, type ViewerRole } from "@/lib/message-visibility";
 import { formatCents } from "@/lib/money";
 import { SURCHARGE_CENTS } from "@/lib/freight";
 import { trackingLink } from "@/lib/tracking";
@@ -106,6 +107,15 @@ export default async function OrderPage({
     notFound();
   }
   const canMessage = !!viewer && (isBuyer || isAdmin || isOrderSupplier);
+  const viewerThreadRole: ViewerRole = isAdmin
+    ? "admin"
+    : isOrderSupplier
+      ? "supplier"
+      : isBuyer || isGuestViaToken
+        ? "buyer"
+        : "none";
+  const visibleSet = new Set(visibilitiesVisibleTo(viewerThreadRole));
+  const visibleMessages = order.messages.filter((m) => visibleSet.has(m.visibility));
 
   const paid = order.status !== "PENDING" && order.status !== "CANCELLED";
   const fulfilled = order.status === "FULFILLED";
@@ -658,18 +668,20 @@ export default async function OrderPage({
 
           <div className="card" id="messages" style={{ marginTop: 28 }}>
             <div className="card-head">
-              <h2>Conversation{order.messages.length > 0 ? ` · ${order.messages.length}` : ""}</h2>
+              <h2>Conversation{visibleMessages.length > 0 ? ` · ${visibleMessages.length}` : ""}</h2>
             </div>
             <div className="card-body">
               <MessageThread
                 orderId={order.id}
                 canPost={canMessage}
-                messages={order.messages.map((m) => ({
+                viewerRole={viewerThreadRole}
+                messages={visibleMessages.map((m) => ({
                   id: m.id,
                   senderName: m.senderName,
                   senderRole: m.senderRole,
                   body: m.body,
                   createdAt: m.createdAt.toISOString(),
+                  visibility: m.visibility,
                 }))}
               />
             </div>

@@ -72,6 +72,13 @@ enum SupplierMemberRole {
   VIEWER
 }
 
+enum MessageVisibility {
+  PUBLIC
+  SUPPLIER_INTERNAL
+  BUYER_INTERNAL
+  ADMIN_ONLY
+}
+
 model User {
   id                         String                    @id @default(cuid())
   email                      String                    @unique
@@ -691,6 +698,7 @@ model Message {
   body               String
   createdAt          DateTime      @default(now())
   inboundFingerprint String?       @unique
+  visibility         MessageVisibility @default(PUBLIC)
 
   @@index([orderId])
   @@index([quoteId])
