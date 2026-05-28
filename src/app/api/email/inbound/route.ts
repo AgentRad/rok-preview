@@ -17,6 +17,7 @@ import {
   resolveSupplierThreadRecipients,
   userHasAccessToSupplier,
 } from "@/lib/supplier-access";
+import { resolveDirectMessageRecipients } from "@/lib/dm-permissions";
 
 export const runtime = "nodejs";
 
@@ -139,7 +140,7 @@ async function persistInboundAttachments(args: {
   messageId: string;
   refs: InboundAttachmentRef[];
   actor: { id: string; email: string };
-  targetType: "Order" | "QuoteRequest";
+  targetType: "Order" | "QuoteRequest" | "DirectMessageThread";
   targetId: string;
 }): Promise<number> {
   if (args.refs.length === 0) return 0;
@@ -609,11 +610,18 @@ async function handleInbound(req: Request) {
       const url =
         target.kind === "order"
           ? siteUrl(`/orders/${target.id}`)
-          : siteUrl(`/quotes/${target.id}`);
+          : target.kind === "quote"
+            ? siteUrl(`/quotes/${target.id}`)
+            : siteUrl(`/messages/${target.id}`);
       await sendThreadMessage({
         to: senderEmail,
         senderName: "PartsPort",
-        subjectPrefix: target.kind === "order" ? "Order reply" : "RFQ reply",
+        subjectPrefix:
+          target.kind === "order"
+            ? "Order reply"
+            : target.kind === "quote"
+              ? "RFQ reply"
+              : "Direct message reply",
         body:
           "We couldn't match your email to a PartsPort account, so your reply was not posted to the thread. Sign in and reply on PartsPort at the link below, or reply from the email address that received the original message.",
         threadUrl: url,
@@ -631,6 +639,135 @@ async function handleInbound(req: Request) {
   const cleaned = stripQuotedReply(raw).slice(0, MAX_STORED_BODY);
   if (!cleaned) {
     return NextResponse.json({ ok: true, ignored: "empty body" });
+  }
+
+  // PLH-3q P3: direct message thread inbound branch.
+  if (target.kind === "direct") {
+    const dmThread = await prisma.directMessageThread.findUnique({
+      where: { id: target.id },
+      include: {
+        participants: {
+          select: { userId: true, joinedAt: true },
+        },
+      },
+    });
+    if (!dmThread) {
+      return NextResponse.json({ ok: true, ignored: "dm missing" });
+    }
+    const me = dmThread.participants.find((p) => p.userId === user.id);
+    if (!me) {
+      return NextResponse.json({ ok: true, ignored: "not on thread" });
+    }
+    const dmFingerprint = crypto
+      .createHash("sha256")
+      .update(`${user.id}|d|${dmThread.id}|${cleaned.trim()}`)
+      .digest("hex");
+    let createdDmId = "";
+    try {
+      const created = await prisma.message.create({
+        data: {
+          directThreadId: dmThread.id,
+          senderId: user.id,
+          senderName: user.name,
+          senderEmail: user.email,
+          senderRole: user.role,
+          body: cleaned,
+          inboundFingerprint: dmFingerprint,
+        },
+      });
+      createdDmId = created.id;
+      await prisma.directMessageThread.update({
+        where: { id: dmThread.id },
+        data: { lastMessageAt: created.createdAt },
+      });
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code;
+      if (code === "P2002") {
+        return NextResponse.json({ ok: true, ignored: "duplicate" });
+      }
+      throw err;
+    }
+    const dmAttachmentRefs =
+      provider === "resend" ? parseResendAttachments(rawBody) : [];
+    const dmAttachmentCount = await persistInboundAttachments({
+      messageId: createdDmId,
+      refs: dmAttachmentRefs,
+      actor: { id: user.id, email: user.email },
+      targetType: "DirectMessageThread",
+      targetId: dmThread.id,
+    });
+    const prevDmRow = await prisma.message.findFirst({
+      where: { directThreadId: dmThread.id, NOT: { id: createdDmId } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        senderName: true,
+        senderEmail: true,
+        body: true,
+        createdAt: true,
+      },
+    });
+    const prevDmMessage = prevDmRow
+      ? {
+          senderName: prevDmRow.senderName,
+          senderEmail: prevDmRow.senderEmail,
+          body: prevDmRow.body,
+          createdAt: prevDmRow.createdAt,
+        }
+      : null;
+    const dmRecipients = await resolveDirectMessageRecipients(
+      dmThread.id,
+      user.id
+    );
+    await writeAuditLog({
+      actor: { id: user.id, email: user.email },
+      action: "INBOUND_FAN_OUT_OK",
+      targetType: "DirectMessageThread",
+      targetId: dmThread.id,
+      summary: `Inbound fan-out queued to ${dmRecipients.length} recipient(s)`,
+      metadata: {
+        threadKind: "direct",
+        threadId: dmThread.id,
+        recipientCount: dmRecipients.length,
+      },
+    });
+    after(async () => {
+      for (const r of dmRecipients) {
+        try {
+          await sendThreadMessage({
+            to: r.email,
+            senderName: user.name,
+            subjectPrefix: `DM ${dmThread.subject.slice(0, 40)}`,
+            body: cleaned,
+            threadUrl: siteUrl(`/messages/${dmThread.id}`),
+            threadKind: "direct",
+            threadId: dmThread.id,
+            recipientUserId: r.userId,
+            prevMessage: prevDmMessage,
+            attachmentCount: dmAttachmentCount,
+          });
+        } catch (err) {
+          captureError(err, {
+            subsystem: "email",
+            op: "inbound-fan-out",
+            to: r.email,
+          });
+          await writeAuditLog({
+            actor: { id: user.id, email: user.email },
+            action: "INBOUND_FAN_OUT_FAILED",
+            targetType: "DirectMessageThread",
+            targetId: dmThread.id,
+            summary: `Inbound fan-out failed to ${r.email}`,
+            metadata: {
+              threadKind: "direct",
+              threadId: dmThread.id,
+              to: r.email,
+              error: String(err),
+            },
+          });
+        }
+      }
+    });
+    return NextResponse.json({ ok: true, posted: "direct", id: dmThread.id });
   }
 
   // Confirm the user is actually on this thread (buyer / supplier / admin).

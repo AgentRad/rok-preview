@@ -116,6 +116,28 @@ async function oemIsApproved(userId: string): Promise<boolean> {
   return app?.status === "APPROVED";
 }
 
+/**
+ * PLH-3q P3: returns the email + userId of every current participant on a
+ * DM thread except the excluded user (typically the just-posted sender).
+ * Used by the inbound webhook and /api/messages POST to fan out a thread
+ * message to every other participant.
+ */
+export async function resolveDirectMessageRecipients(
+  threadId: string,
+  excludeUserId: string
+): Promise<{ email: string; userId: string }[]> {
+  const parts = await prisma.directMessageParticipant.findMany({
+    where: { threadId, userId: { not: excludeUserId } },
+    select: {
+      userId: true,
+      user: { select: { email: true } },
+    },
+  });
+  return parts
+    .filter((p) => !!p.user.email)
+    .map((p) => ({ email: p.user.email.toLowerCase(), userId: p.userId }));
+}
+
 export async function canStartDirectMessage(
   senderUserId: string,
   recipientUserId: string
