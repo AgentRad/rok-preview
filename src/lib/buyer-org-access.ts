@@ -28,6 +28,14 @@ export function canPlaceOrgOrders(role: BuyerOrgRole): boolean {
   return role === "ADMIN" || role === "APPROVER" || role === "BUYER";
 }
 
+// PLH-3y-2: who may charge the org's centralized card under HYBRID billing.
+// Same set that may place orders: a VIEWER cannot pay at all, and everyone
+// else who can place an order may opt to bill the org card. (A finer-grained
+// per-member spend permission can layer on in a later round.)
+export function canChargeOrgCard(role: BuyerOrgRole): boolean {
+  return canPlaceOrgOrders(role);
+}
+
 /** Every buyer org the user belongs to, OWNER-style ordering (ADMIN first). */
 export async function listBuyerOrgsForUser(
   userId: string

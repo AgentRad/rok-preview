@@ -93,6 +93,16 @@ enum BuyerOrgRole {
   VIEWER
 }
 
+// PLH-3y-2: how an org's orders are paid for. MEMBER_PAYS is the default and
+// the current behavior (each member pays with their own card). HYBRID adds an
+// optional org-level Stripe Customer so an org can centralize payment; the
+// member can still pay with their own card, but a permitted member may choose
+// to charge the org card at checkout.
+enum BuyerOrgBillingMode {
+  MEMBER_PAYS
+  HYBRID
+}
+
 enum MessageVisibility {
   PUBLIC
   SUPPLIER_INTERNAL
@@ -438,9 +448,53 @@ model BuyerOrg {
   name            String
   createdByUserId String?
   createdAt       DateTime         @default(now())
+  // PLH-3y-2: billing mode + optional centralized payment. billingMode
+  // defaults to MEMBER_PAYS (each member uses their own card). HYBRID adds an
+  // org-level Stripe Customer (stripeCustomerId) so a permitted member can
+  // charge the org card at checkout. The customer is created lazily by an
+  // admin when HYBRID is turned on.
+  billingMode             BuyerOrgBillingMode @default(MEMBER_PAYS)
+  stripeCustomerId        String?
+  // PLH-3y-2: org-level tax-exempt cert. Lifted from the per-Address cert
+  // (PLH-3j P4) so a single org cert applies to every member's orders.
+  // Member-level certs still work; the org cert is an additional source.
+  // taxExemptStatus mirrors the Address values ("PENDING" | "APPROVED" |
+  // "REJECTED" | null); checkout only waives tax on APPROVED + not-expired.
+  taxExemptCertificateUrl String?
+  taxExemptStatus         String?
+  taxExemptExpiresAt      DateTime?
   members         BuyerOrgMember[]
   invites         BuyerOrgInvite[]
+  addresses       BuyerOrgAddress[]
   activeForUsers  User[]           @relation("ActiveBuyerOrg")
+}
+
+// PLH-3y-2: org-level shared shipping addresses. Any member can select one of
+// these as the ship-to at checkout; ADMIN manages them. Kept as a separate
+// model (not an extension of Address) so the personal address book's per-user
+// 25-cap, soft-delete, and per-address tax-exempt logic stay untouched. Org
+// tax-exempt lives on BuyerOrg, not here, since an org has one cert.
+model BuyerOrgAddress {
+  id         String    @id @default(cuid())
+  buyerOrg   BuyerOrg  @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  buyerOrgId String
+  label      String    @default("")
+  recipient  String
+  company    String    @default("")
+  line1      String
+  line2      String    @default("")
+  city       String
+  region     String
+  postalCode String
+  country    String    @default("US")
+  phone      String    @default("")
+  addedByUserId String?
+  createdAt  DateTime  @default(now())
+  // Soft-delete so historical Order ship-to denorm is not lost when an admin
+  // removes the row. Read paths filter deletedAt IS NULL.
+  deletedAt  DateTime?
+
+  @@index([buyerOrgId, deletedAt])
 }
 
 model BuyerOrgMember {
