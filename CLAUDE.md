@@ -1890,3 +1890,51 @@ Org-scope spend visibility is membership-based (no `Order.buyerOrgId` column
 this round); a member leaving an org removes their orders from the admin view.
 No new dependencies, no new crons. Migration
 `20260703000000_add_buyer_org_shared_resources`.
+
+## PLH-3y-3: Domain auto-join + DNS verification (round 3 of 6)
+
+Third round of the SSO + buyer-orgs + approvals initiative. Lands org email
+domain claims, DNS TXT verification, and auto-join on register. NOT SSO, NOT
+approvals (rounds 4 through 6). 5 commits, each `npx next build` clean, zero
+em dashes.
+
+- **Schema:** new `BuyerOrgDomain` model (domain unique, verificationToken,
+  status PENDING/VERIFIED/FAILED via new `BuyerOrgDomainStatus` enum,
+  verifiedAt, txtLastCheckedAt, autoJoinEnabled default false, autoJoinRole
+  default VIEWER) + `BuyerOrg.domains` relation. Migration
+  `20260704000000_add_buyer_org_domain`. New `src/lib/free-email-domains.ts`
+  (free/disposable provider blocklist + `emailDomain` extractor +
+  `normalizeDomainClaim`). Six new audit actions: `BUYER_ORG_DOMAIN_CLAIMED`,
+  `_VERIFIED`, `_FAILED`, `_REMOVED`, `_AUTOJOIN_UPDATED`, `_AUTOJOINED`.
+- **Domain claim + manage (org ADMIN).** `/api/buyer-org/domains` GET (list,
+  any member) + POST (claim; rejects free-email providers and
+  already-claimed domains, mints a 16-byte hex verificationToken).
+  `/api/buyer-org/domains/[id]` PATCH (toggle autoJoinEnabled + autoJoinRole,
+  blocked until status VERIFIED) + DELETE (remove claim). Org-home
+  `/buyer-org` "Email domains" card shows per-domain status, the DNS TXT
+  record to add (`_partsport.<domain>` = `partsport-verify=<token>`), a
+  verified-only auto-join toggle with a VIEWER/BUYER/APPROVER role select
+  (ADMIN deliberately not offered as an auto-join role), and a remove button.
+- **Verification cron.** `/api/cron/verify-org-domains` resolves TXT on
+  `_partsport.<domain>` via `node:dns/promises` `resolveTxt`. PENDING+found
+  to VERIFIED (audit on transition); PENDING past a 7-day window to FAILED;
+  VERIFIED whose record disappeared to FAILED + autoJoinEnabled forced off.
+  MAX_PER_RUN=200, ASC by txtLastCheckedAt nulls-first, `hasMore`. Scheduled
+  06:30 UTC in `vercel.json`.
+- **Attention card for misconfig.** The org-home page renders a red attention
+  banner naming any FAILED domains (record disappeared or never verified), so
+  the org admin knows auto-join is paused and the TXT record needs fixing.
+- **Auto-join on register.** `autoJoinByEmailDomain(user)` in
+  `buyer-org-access.ts` matches a verified email's domain against a VERIFIED +
+  autoJoinEnabled org domain, adds the user as a member with the domain's
+  autoJoinRole, sets activeBuyerOrgId when unset, audits
+  `BUYER_ORG_DOMAIN_AUTOJOINED`. Idempotent, free-email belt, never throws
+  into auth. Called from `/api/auth/verify` after the token is consumed (the
+  verified email proves domain control); a successful join redirects to
+  `/buyer-org?joined=<name>` with a welcome banner. Forward-compatible: the
+  PLH-3y-4 SSO JIT path will call the same helper.
+
+Locked decisions honored: auto-join OFF by default per domain (admin opts in
+after verification), default auto-join role VIEWER, free-email providers
+blocked from being claimed. No new dependencies. New cron slot 06:30 UTC.
+Migration `20260704000000_add_buyer_org_domain`.
