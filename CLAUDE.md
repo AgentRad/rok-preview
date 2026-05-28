@@ -1072,6 +1072,81 @@ PLH-3o thread-email rebuild, PLH-3p threading parity, and PLH-3s
 three targeted AI actions (draft invoice, summarize RFQs, draft
 RFQ reply).**
 
+**PLH-3x (2026-05-27).** Enterprise procurement security and legal docs. 1
+commit, docs-only. No schema or API changes.
+- New `/legal/dpa` page: GDPR + CCPA compliant Data Processing Addendum
+  template with parties/scope, definitions, processing scope, instructions,
+  sub-processors, data subject rights, security measures, breach
+  notification (24-hour target), return/deletion on termination, audits,
+  international transfers (SCCs Module 2/3 + UK IDTA), CCPA service
+  provider terms, governing law, and signature. Footnote discloses
+  AI-drafted from industry-standard examples, attorney review pending
+  before signature.
+- New `/legal/security` page: one-page security posture summary covering
+  encryption (TLS 1.3 in transit, AES-256 at rest via Neon and Vercel
+  Blob), authentication (bcrypt + optional TOTP 2FA + server-side session
+  invalidation), authorization (role-based + audit logged),
+  infrastructure (Vercel US-East, Neon US-East, all data in US),
+  vulnerability management (Sentry, Dependabot, build-gated review),
+  incident response (24-hour notification target, account isolation),
+  compliance status (explicitly: working toward SOC 2 Type II readiness,
+  NO current SOC 2 / ISO 27001 / third-party audit claims), retention
+  (90-day audit logs, 7-year financial records per IRS), and vulnerability
+  reporting channel.
+- New `/legal/subprocessors` page: bulleted list of 10 subprocessors
+  (Vercel, Neon, Stripe, Resend, Anthropic, Upstash, Shippo, Intuit
+  QuickBooks, Cloudflare, Sentry), each with purpose, US processing
+  location, and link to provider privacy/security docs. 30-day prior
+  notice commitment for additions/replacements.
+- New `docs/security-questionnaire-response.md`: reference Q&A covering
+  35 common SIG/CAIQ/HECVAT questions across data classification, access
+  controls, encryption, BCP/DR, incident response, vulnerability
+  management, network security, employee security, vendor management,
+  compliance, and retention. Each answer 1-3 sentences, factual against
+  PartsPort's actual setup. Honest "no" on SSO/SAML, penetration tests,
+  SOC 2, and ISO 27001. Honest in-development on BCP/DR runbook, annual
+  awareness training, quarterly restore drill, and SAST/DAST rollout.
+- Three new pages linked from `LegalLayout` nav (alongside the existing
+  5 legal docs) and from `SiteFooter` (DPA, Security, Subprocessors).
+- `CookieConsent` banner now references the DPA below the Privacy Policy
+  link for procurement teams reading the consent prompt.
+- ALL three pages and the questionnaire doc are AI-drafted templates
+  and require attorney review before going public. Voice is conservative
+  throughout: nothing claims SOC 2 certified, ISO 27001 certified, current
+  third-party audit, or completed penetration testing. The /legal/security
+  page explicitly states "PartsPort does not hold a current SOC 2
+  attestation and does not hold an ISO 27001 certificate. PartsPort has
+  not engaged a third-party auditor."
+- `npx next build` clean. Zero em dashes.
+
+**PLH-3v (2026-05-27).** PO numbers on orders for enterprise buyers. 1
+commit. New `Order.purchaseOrderNumber` column (nullable, 64-char cap
+enforced in the API layer, indexed for substring search). Migration
+`20260630000000_add_order_purchase_order_number`.
+- Checkout: optional "Purchase order number (optional)" input in
+  `CheckoutClient` with helper "Enter your company's PO number for
+  invoice reference." 64-char client cap matches the server.
+- POST `/api/orders` and POST `/api/checkout-from-quote/[id]` both
+  accept `purchaseOrderNumber` (trimmed + sliced to 64). The quote
+  path also updates the PO on the re-submit branch.
+- `/orders/[id]` renders "PO #: <number>" below the order ref when
+  set; admins see an inline `AdminEditPurchaseOrder` editor that
+  POSTs `{ action: "po", purchaseOrderNumber }` to
+  `/api/ops/orders/[id]`. Edit writes an `ORDER_PO_UPDATED` audit
+  row with before/after values.
+- `/orders/[id]/invoice` renders "Purchase Order: <number>" in the
+  invoice meta header.
+- `sendOrderConfirmation` subject suffix appends ` [PO <number>]`
+  when set. `OrderLite.purchaseOrderNumber` carries the value.
+- `/account` order history table renders a PO column only when at
+  least one visible row has a value. Adds a search input that
+  re-queries `/api/account/orders?q=<substring>` for case-insensitive
+  `contains` matching on `purchaseOrderNumber`. Load-more carries
+  the active query.
+
+New audit action: `ORDER_PO_UPDATED`. No new dependencies, no new
+crons. `npx next build` clean. Zero em dashes.
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no

@@ -18,6 +18,9 @@ const NAV: { href: string; label: string }[] = [
   { href: "/legal/acceptable-use", label: "Acceptable Use" },
   { href: "/legal/returns", label: "Returns and Refunds" },
   { href: "/legal/supplier-agreement", label: "Supplier Agreement" },
+  { href: "/legal/dpa", label: "Data Processing Addendum" },
+  { href: "/legal/security", label: "Security Posture" },
+  { href: "/legal/subprocessors", label: "Subprocessors" },
 ];
 
 /**

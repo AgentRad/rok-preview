@@ -57,7 +57,8 @@ export default function CookieConsent() {
         cookieless first-party analytics to understand site performance.
         See the{" "}
         <Link href="/legal/privacy#cookies">Privacy Policy</Link> for the
-        full list.
+        full list. Procurement teams: see the{" "}
+        <Link href="/legal/dpa">Data Processing Addendum</Link>.
       </div>
       <div className="cookie-consent-actions">
         <button

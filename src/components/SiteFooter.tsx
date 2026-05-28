@@ -58,6 +58,12 @@ export default function SiteFooter() {
             <Link href="/legal/returns">Returns</Link>
             <span aria-hidden="true">·</span>
             <Link href="/legal/supplier-agreement">Supplier Agreement</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/legal/dpa">DPA</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/legal/security">Security</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/legal/subprocessors">Subprocessors</Link>
           </span>
         </div>
       </div>
