@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export type ThreadVisibility =
@@ -72,6 +72,21 @@ export default function MessageThread({
 
   const showSupplierToggle = viewerRole === "supplier" || viewerRole === "admin";
   const showAdminOption = viewerRole === "admin";
+
+  // PLH-3p F4: clear the unread badge for this thread once it has been
+  // opened. Fire-and-forget; the route 401/403s anonymous and unrelated
+  // users by itself so it is safe to call regardless of viewerRole.
+  useEffect(() => {
+    if (viewerRole === "none") return;
+    const threadKind = orderId ? "order" : quoteId ? "quote" : null;
+    const threadId = orderId || quoteId;
+    if (!threadKind || !threadId) return;
+    fetch("/api/messages/mark-read", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ threadKind, threadId }),
+    }).catch(() => {});
+  }, [orderId, quoteId, viewerRole]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();

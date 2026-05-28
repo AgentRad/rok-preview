@@ -150,6 +150,7 @@ model User {
   // PLH-3i P1: QuickBooks Online Customer id, cached after the first
   // ensureCustomer sync so subsequent invoices reuse the same QBO row.
   qboCustomerId              String?
+  threadLastReads            ThreadLastRead[]
 }
 
 /**
@@ -702,6 +703,21 @@ model Message {
 
   @@index([orderId])
   @@index([quoteId])
+}
+
+// PLH-3p F4: per-user "last read" pointer for a message thread. One row per
+// (user, kind, threadId). Absence of a row is treated as "all messages on
+// the thread are unread" so badges light up on first inbound message.
+model ThreadLastRead {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  threadKind String
+  threadId   String
+  lastReadAt DateTime @default(now())
+
+  @@unique([userId, threadKind, threadId])
+  @@index([userId])
 }
 
 model AuditLog {

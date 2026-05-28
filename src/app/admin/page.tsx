@@ -11,6 +11,9 @@ import SupplierDocsReview from "@/components/SupplierDocsReview";
 import { getAdminAttention } from "@/lib/attention";
 import { formatCents } from "@/lib/money";
 import { computeReadiness } from "@/lib/supplier-access";
+import { getUnreadCounts } from "@/lib/messages";
+import { getCurrentUser } from "@/lib/auth";
+import UnreadBadge from "@/components/UnreadBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +38,13 @@ const STATUS_CLASS: Record<string, string> = {
 
 export default async function AdminConsole() {
   await requireRole("ADMIN");
+  // PLH-3p F4: surface unread thread-message count on the Fulfillment
+  // ops entry so admins notice new buyer/supplier replies from the
+  // console without having to open each thread.
+  const currentAdmin = await getCurrentUser();
+  const adminUnread = currentAdmin
+    ? (await getUnreadCounts(currentAdmin.id)).total
+    : 0;
 
   const [orders, paidAgg, applications, suppliers, productCount, quotes, invoices, returns, taxExemptAddresses, supplierDocs, attention] =
     await Promise.all([
@@ -113,6 +123,7 @@ export default async function AdminConsole() {
           <p className="page-sub">
             <Link href="/ops" style={{ color: "var(--blue)", fontWeight: 600 }}>
               Fulfillment ops →
+              <UnreadBadge count={adminUnread} />
             </Link>{" "}
             ·{" "}
             <Link

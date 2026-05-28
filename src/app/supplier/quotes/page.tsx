@@ -12,6 +12,7 @@ import ActingAsBanner from "@/components/ActingAsBanner";
 import Link from "next/link";
 import { loadSupplierQuotes } from "@/components/supplier/data";
 import QuoteRequestsTable from "@/components/supplier/QuoteRequestsTable";
+import { getUnreadCounts } from "@/lib/messages";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,14 @@ export default async function SupplierQuotesPage() {
   if (!canViewQuotes(role)) redirect("/supplier");
   const canRespond = canRespondToQuotes(role);
   const quotes = ctx ? await loadSupplierQuotes(ctx.supplier.id) : [];
+  // PLH-3p F4: small red dot next to RFQ rows with unread messages.
+  const unread = await getUnreadCounts(user.id);
+  const unreadByQuoteId: Record<string, number> = {};
+  for (const [key, n] of unread.byThread) {
+    if (key.startsWith("quote:")) {
+      unreadByQuoteId[key.slice("quote:".length)] = n;
+    }
+  }
 
   return (
     <>
@@ -41,7 +50,11 @@ export default async function SupplierQuotesPage() {
           <h1 className="page-title">Quote requests</h1>
           <p className="page-sub">Respond to buyer RFQs.</p>
           {ctx ? (
-            <QuoteRequestsTable quotes={quotes} canRespond={canRespond} />
+            <QuoteRequestsTable
+              quotes={quotes}
+              canRespond={canRespond}
+              unreadByQuoteId={unreadByQuoteId}
+            />
           ) : (
             <div className="alert alert-info" style={{ marginTop: 16 }}>
               No supplier profile is linked to this account.

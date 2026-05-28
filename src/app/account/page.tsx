@@ -8,6 +8,7 @@ import AddressBook from "@/components/AddressBook";
 import OrderHistoryTable from "@/components/OrderHistoryTable";
 import AttentionFeed from "@/components/AttentionFeed";
 import { getBuyerAttention } from "@/lib/attention";
+import { getUnreadCounts } from "@/lib/messages";
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage({
@@ -28,7 +29,7 @@ export default async function AccountPage({
   // OrderHistoryTable client fetches subsequent pages via
   // /api/account/orders?page=N.
   const PAGE_SIZE = 25;
-  const [orders, totalOrderCount, attention, addresses] = await Promise.all([
+  const [orders, totalOrderCount, attention, addresses, unread] = await Promise.all([
     prisma.order.findMany({
       where: { buyerId: user.id },
       include: { items: true },
@@ -43,7 +44,18 @@ export default async function AccountPage({
           orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
         })
       : Promise.resolve([]),
+    getUnreadCounts(user.id),
   ]);
+
+  // PLH-3p F4: feed per-order unread counts into the table so each row
+  // can light up a small red dot. byThread keys are `order:<id>` or
+  // `quote:<id>`; we only need the order subset here.
+  const unreadByOrderId: Record<string, number> = {};
+  for (const [key, n] of unread.byThread) {
+    if (key.startsWith("order:")) {
+      unreadByOrderId[key.slice("order:".length)] = n;
+    }
+  }
 
   return (
     <>
@@ -105,6 +117,7 @@ export default async function AccountPage({
               }))}
               totalCount={totalOrderCount}
               pageSize={PAGE_SIZE}
+              unreadByOrderId={unreadByOrderId}
             />
           </div>
 

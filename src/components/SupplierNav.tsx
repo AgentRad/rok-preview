@@ -1,4 +1,7 @@
 import Link from "next/link";
+import UnreadBadge from "./UnreadBadge";
+import { getCurrentUser } from "@/lib/auth";
+import { getUnreadCounts } from "@/lib/messages";
 
 export type SupplierNavKey =
   | "dashboard"
@@ -18,13 +21,23 @@ const TABS: { key: SupplierNavKey; label: string; href: string }[] = [
 // PLH-3l: supplier dashboard IA split. Five tabs max. Active state is set
 // from the server parent via the `active` prop so this stays a server
 // component and doesn't pull in usePathname() at the leaf.
-export default function SupplierNav({
+export default async function SupplierNav({
   active,
   sticky = false,
 }: {
   active: SupplierNavKey;
   sticky?: boolean;
 }) {
+  // PLH-3p F4: badge the Dashboard tab with the supplier's unread thread
+  // message count. Computed here so every supplier sub-route surface
+  // (dashboard, products, payouts, quotes, settings) picks it up
+  // without each page having to thread the prop through.
+  const user = await getCurrentUser();
+  let unreadCount = 0;
+  if (user && (user.role === "SUPPLIER" || user.role === "ADMIN")) {
+    const counts = await getUnreadCounts(user.id);
+    unreadCount = counts.total;
+  }
   return (
     <nav
       aria-label="Supplier"
@@ -66,6 +79,9 @@ export default function SupplierNav({
               }}
             >
               {t.label}
+              {t.key === "dashboard" && (
+                <UnreadBadge count={unreadCount} />
+              )}
             </Link>
           );
         })}

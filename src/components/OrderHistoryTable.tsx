@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import ReorderButton from "@/components/ReorderButton";
+import UnreadBadge from "@/components/UnreadBadge";
 import { formatCents } from "@/lib/money";
 
 const STATUS_CLASS: Record<string, string> = {
@@ -29,10 +30,14 @@ export default function OrderHistoryTable({
   initial,
   totalCount,
   pageSize,
+  unreadByOrderId,
 }: {
   initial: OrderRow[];
   totalCount: number;
   pageSize: number;
+  /** PLH-3p F4: optional unread message count per order id. Renders a
+   *  small red dot next to the reference when > 0. */
+  unreadByOrderId?: Record<string, number>;
 }) {
   const [rows, setRows] = useState<OrderRow[]>(initial);
   const [page, setPage] = useState(1);
@@ -87,7 +92,14 @@ export default function OrderHistoryTable({
               const isPaid = o.status === "PAID" || o.status === "FULFILLED";
               return (
                 <tr key={o.id}>
-                  <td style={{ fontWeight: 700 }}>{o.reference}</td>
+                  <td style={{ fontWeight: 700 }}>
+                    {o.reference}
+                    <UnreadBadge
+                      count={unreadByOrderId?.[o.id] ?? 0}
+                      variant="dot"
+                      ariaLabel="Unread messages"
+                    />
+                  </td>
                   <td>{new Date(o.createdAt).toLocaleDateString()}</td>
                   <td>{`${o.qtyTotal} item${o.qtyTotal === 1 ? "" : "s"}`}</td>
                   <td>

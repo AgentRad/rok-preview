@@ -1,5 +1,6 @@
 import Link from "next/link";
 import QuoteResponder from "@/components/QuoteResponder";
+import UnreadBadge from "@/components/UnreadBadge";
 import { formatCents } from "@/lib/money";
 import type { loadSupplierQuotes } from "./data";
 
@@ -16,9 +17,11 @@ const STATUS_CLASS: Record<string, string> = {
 export default function QuoteRequestsTable({
   quotes,
   canRespond,
+  unreadByQuoteId,
 }: {
   quotes: Quotes;
   canRespond: boolean;
+  unreadByQuoteId?: Record<string, number>;
 }) {
   const openQuotes = quotes.filter((q) => q.status === "OPEN").length;
   return (
@@ -60,6 +63,11 @@ export default function QuoteRequestsTable({
                     >
                       {q.reference}
                     </Link>
+                    <UnreadBadge
+                      count={unreadByQuoteId?.[q.id] ?? 0}
+                      variant="dot"
+                      ariaLabel="Unread messages"
+                    />
                   </td>
                   <td style={{ fontSize: 13 }}>{q.product.name}</td>
                   <td>

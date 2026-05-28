@@ -1,4 +1,5 @@
 import FulfillButton from "@/components/FulfillButton";
+import UnreadBadge from "@/components/UnreadBadge";
 import { formatCents } from "@/lib/money";
 import type { loadSupplierOrders } from "./data";
 
@@ -11,10 +12,12 @@ export default function IncomingOrdersTable({
   orders,
   supplierId,
   canFulfill,
+  unreadByOrderId,
 }: {
   orders: Orders;
   supplierId: string;
   canFulfill: boolean;
+  unreadByOrderId?: Record<string, number>;
 }) {
   return (
     <div className="card">
@@ -53,7 +56,14 @@ export default function IncomingOrdersTable({
                 const slotStage = slot?.shipmentStage ?? "Pending";
                 return (
                   <tr key={o.id}>
-                    <td style={{ fontWeight: 700 }}>{o.reference}</td>
+                    <td style={{ fontWeight: 700 }}>
+                      {o.reference}
+                      <UnreadBadge
+                        count={unreadByOrderId?.[o.id] ?? 0}
+                        variant="dot"
+                        ariaLabel="Unread messages"
+                      />
+                    </td>
                     <td>{o.createdAt.toLocaleDateString()}</td>
                     <td>
                       {mine.map((i) => (

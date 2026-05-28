@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Brand from "./Brand";
+import UnreadBadge from "./UnreadBadge";
 import { cartCount, onCartChange } from "@/lib/cart";
 
 type NavUser = { name: string; role: string } | null;
@@ -18,12 +19,16 @@ const DASHBOARD: Record<string, { href: string; label: string }> = {
 export default function HeaderNav({
   user,
   showSearch = true,
+  unreadCount = 0,
 }: {
   user: NavUser;
   /** When false, the in-nav parts search bar is hidden. Used on supplier,
    *  manufacturer, and admin contexts where searching the parts catalog
    *  from a dashboard makes no sense. */
   showSearch?: boolean;
+  /** PLH-3p F4: unread thread-message count for this user. Badges the
+   *  dashboard link (and admin Fulfillment ops entry) when > 0. */
+  unreadCount?: number;
 }) {
   const router = useRouter();
   const [count, setCount] = useState(0);
@@ -152,6 +157,7 @@ export default function HeaderNav({
           {dash && (
             <Link href={dash.href} onClick={() => setMobileOpen(false)}>
               {dash.label}
+              <UnreadBadge count={unreadCount} />
             </Link>
           )}
           {/* Cart is for buyers and anonymous shoppers. Suppliers, OEMs,
