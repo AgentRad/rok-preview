@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
 import { getUnreadCounts } from "@/lib/messages";
+import { listBuyerOrgsForUser, getActiveBuyerOrgContext } from "@/lib/buyer-org-access";
 import HeaderNav from "./HeaderNav";
 import TopBar from "./TopBar";
 import UnverifiedEmailBanner from "./UnverifiedEmailBanner";
@@ -16,10 +17,20 @@ export default async function SiteHeader() {
   // can be DM participants even though they have no order/quote threads).
   let dashboardUnread = 0;
   let directUnread = 0;
+  // PLH-3y-1: buyer org switcher data. Only rendered when the user belongs to
+  // one or more orgs.
+  let buyerOrgs: { id: string; name: string }[] = [];
+  let activeBuyerOrgId: string | null = null;
   if (user) {
     const counts = await getUnreadCounts(user.id);
     dashboardUnread = counts.orderUnread + counts.quoteUnread;
     directUnread = counts.directUnread;
+    const orgs = await listBuyerOrgsForUser(user.id);
+    if (orgs.length > 0) {
+      buyerOrgs = orgs.map((o) => ({ id: o.org.id, name: o.org.name }));
+      const active = await getActiveBuyerOrgContext(user);
+      activeBuyerOrgId = active?.org.id ?? null;
+    }
   }
   return (
     <>
@@ -29,6 +40,8 @@ export default async function SiteHeader() {
         showSearch={isBuyerContext}
         unreadCount={dashboardUnread}
         directUnread={directUnread}
+        buyerOrgs={buyerOrgs}
+        activeBuyerOrgId={activeBuyerOrgId}
       />
       {user && !user.emailVerified && (
         <UnverifiedEmailBanner email={user.email} />

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Brand from "./Brand";
 import UnreadBadge from "./UnreadBadge";
+import BuyerOrgSwitcher from "./BuyerOrgSwitcher";
 import { cartCount, onCartChange } from "@/lib/cart";
 
 type NavUser = { name: string; role: string } | null;
@@ -21,6 +22,8 @@ export default function HeaderNav({
   showSearch = true,
   unreadCount = 0,
   directUnread = 0,
+  buyerOrgs = [],
+  activeBuyerOrgId = null,
 }: {
   user: NavUser;
   showSearch?: boolean;
@@ -28,6 +31,10 @@ export default function HeaderNav({
   unreadCount?: number;
   /** PLH-3q P4: direct-message unread total. Badges the /messages link. */
   directUnread?: number;
+  /** PLH-3y-1: buyer orgs the user belongs to. Empty hides the switcher. */
+  buyerOrgs?: { id: string; name: string }[];
+  /** PLH-3y-1: the user's currently-active buyer org id. */
+  activeBuyerOrgId?: string | null;
 }) {
   const router = useRouter();
   const [count, setCount] = useState(0);
@@ -179,6 +186,10 @@ export default function HeaderNav({
               Cart
               {count > 0 && <span className="cart-count">{count}</span>}
             </Link>
+          )}
+
+          {user && buyerOrgs.length > 0 && (
+            <BuyerOrgSwitcher orgs={buyerOrgs} activeId={activeBuyerOrgId} />
           )}
 
           {user ? (
