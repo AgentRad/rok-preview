@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/tax-exempt-expiry",
       "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/verify-org-domains",
+      "schedule": "30 6 * * *"
     }
   ]
 }
