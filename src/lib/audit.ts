@@ -144,6 +144,11 @@ export const AUDIT_ACTIONS = [
   // suppressing the enforcement interstitial so the user can re-enroll.
   // Heavily audited since it is a security-control bypass.
   "USER_2FA_ADMIN_OVERRIDE",
+  // PLH-3w P3: a user reported a message for abuse.
+  "MESSAGE_REPORTED",
+  // PLH-3w P3: an admin dismissed a reported message (no action against
+  // the sender).
+  "MESSAGE_REPORT_DISMISSED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -161,7 +166,8 @@ export type AuditTargetType =
   | "Product"
   | "ProductImage"
   | "IntegrationCredential"
-  | "DirectMessageThread";
+  | "DirectMessageThread"
+  | "Message";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

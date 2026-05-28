@@ -743,10 +743,20 @@ model Message {
   inboundFingerprint String?       @unique
   visibility         MessageVisibility @default(PUBLIC)
   attachments        MessageAttachment[]
+  // PLH-3w P3: abuse reporting. A user flags a message; an admin reviews it
+  // at /admin/reported-messages and either dismisses or suspends the sender.
+  reportedAt         DateTime?
+  reportedByUserId   String?
+  reportReason       String?
+  reviewedAt         DateTime?
+  reviewedByUserId   String?
 
   @@index([orderId])
   @@index([quoteId])
   @@index([directThreadId])
+  // PLH-3w P3: drives the admin review queue (pending = reported, not yet
+  // reviewed). Partial-ish ordering handled in the query.
+  @@index([reportedAt])
 }
 
 /// PLH-3q: standalone direct-message thread, not tied to an Order or

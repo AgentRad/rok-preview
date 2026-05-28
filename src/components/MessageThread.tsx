@@ -87,6 +87,45 @@ export default function MessageThread({
   const [pending, setPending] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // PLH-3w P3: abuse reporting. reportingId is the message whose report
+  // form is open; reportedIds collects ids reported this session so the
+  // control flips to "Reported" without a full reload.
+  const [reportingId, setReportingId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState("Spam");
+  const [reportDetail, setReportDetail] = useState("");
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
+  const canReport = viewerRole !== "none";
+
+  function openReport(id: string) {
+    setReportingId(id);
+    setReportReason("Spam");
+    setReportDetail("");
+    setReportError("");
+  }
+
+  async function submitReport(messageId: string) {
+    setReportBusy(true);
+    setReportError("");
+    try {
+      const res = await fetch(`/api/messages/${messageId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reportReason, detail: reportDetail }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setReportError(data.error || "Could not submit the report.");
+        return;
+      }
+      setReportedIds((prev) => new Set(prev).add(messageId));
+      setReportingId(null);
+    } finally {
+      setReportBusy(false);
+    }
+  }
+
   // PLH-3q P4: DM threads always send PUBLIC and never expose the visibility
   // toggle. Order/quote threads keep the per-role toggle behaviour.
   const showSupplierToggle =
@@ -292,6 +331,87 @@ export default function MessageThread({
                         </span>
                       </a>
                     ))}
+                  </div>
+                )}
+                {canReport && (
+                  <div style={{ marginTop: 6 }}>
+                    {reportedIds.has(m.id) ? (
+                      <span className="muted-text" style={{ fontSize: 11.5 }}>
+                        Reported. An admin will review it.
+                      </span>
+                    ) : reportingId === m.id ? (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          padding: 10,
+                          border: "1px solid var(--line, #e2dfd7)",
+                          borderRadius: 8,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 8,
+                          maxWidth: 360,
+                        }}
+                      >
+                        <label style={{ fontSize: 12.5, display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span className="muted-text">Reason</span>
+                          <select
+                            value={reportReason}
+                            onChange={(e) => setReportReason(e.target.value)}
+                            disabled={reportBusy}
+                          >
+                            <option value="Spam">Spam</option>
+                            <option value="Abusive">Abusive</option>
+                            <option value="Off-topic">Off-topic</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </label>
+                        <textarea
+                          value={reportDetail}
+                          onChange={(e) => setReportDetail(e.target.value)}
+                          placeholder="Add detail (optional)"
+                          maxLength={500}
+                          rows={2}
+                          disabled={reportBusy}
+                        />
+                        {reportError && (
+                          <div className="alert alert-error">{reportError}</div>
+                        )}
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-danger"
+                            disabled={reportBusy}
+                            onClick={() => submitReport(m.id)}
+                          >
+                            {reportBusy ? "Submitting…" : "Submit report"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            disabled={reportBusy}
+                            onClick={() => setReportingId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="link-button muted-text"
+                        style={{
+                          fontSize: 11.5,
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                        }}
+                        onClick={() => openReport(m.id)}
+                      >
+                        Report
+                      </button>
+                    )}
                   </div>
                 )}
               </li>
