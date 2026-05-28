@@ -35,8 +35,18 @@ export default function AddToCart({
     <div>
       {!inStock && (
         <p className="muted-text" style={{ marginBottom: 12, fontSize: 12.5 }}>
-          This part is on backorder. Use the request-a-quote flow on the
-          supplier page for a confirmed ETA.
+          This part is on backorder. Need it sooner?{" "}
+          <a
+            href={`mailto:rad@agentgaming.gg?subject=${encodeURIComponent(
+              `RFQ for backordered SKU ${sku}`
+            )}&body=${encodeURIComponent(
+              `I'd like a quote for SKU ${sku} (currently on backorder).\n\nQuantity:\nDelivery location:\nRequired by:\nNotes:\n`
+            )}`}
+            style={{ color: "var(--blue)", fontWeight: 600 }}
+          >
+            Request a quote for this part instead
+          </a>{" "}
+          and a supplier will confirm an ETA.
         </p>
       )}
       <div className="qty-row">

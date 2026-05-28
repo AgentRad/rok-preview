@@ -32,8 +32,36 @@ export default function CatalogEditor({
   manufacturers: string[];
   showExports: boolean;
 }) {
+  const isEmpty = products.length === 0;
   return (
     <>
+      {isEmpty && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-head">
+            <h2>Upload your first catalog in 5 minutes</h2>
+            <Link
+              href="/supplier/catalog-import"
+              className="btn btn-primary btn-sm"
+            >
+              Open AI import
+            </Link>
+          </div>
+          <div className="card-body">
+            <p style={{ margin: 0, fontSize: 14 }}>
+              The AI import will map your columns to PartsPort fields. Paste
+              any sheet (CSV, TSV, or .xlsx), refine the mapping, then click
+              Import.
+            </p>
+            <p
+              className="muted-text"
+              style={{ fontSize: 12.5, marginTop: 10, marginBottom: 0 }}
+            >
+              Suppliers with 10+ SKUs receive RFQs within 7 days on average.
+            </p>
+          </div>
+        </div>
+      )}
+
       <SupplierProductManager products={products} manufacturers={manufacturers} />
 
       <div className="card" style={{ marginBottom: 16 }}>

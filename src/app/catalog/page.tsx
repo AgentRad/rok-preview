@@ -356,9 +356,33 @@ export default async function CatalogPage({
               <div className="empty-block">
                 <h2>No parts match your filters</h2>
                 <p>
-                  Try a different category, manufacturer, or{" "}
-                  <Link href="/suppliers">request a part we don&rsquo;t list</Link>.
+                  Try a different category or manufacturer, or open a quote
+                  request and our supplier network will source it for you.
                 </p>
+                <div style={{ marginTop: 14 }}>
+                  <a
+                    className="btn btn-primary"
+                    href={`mailto:rad@agentgaming.gg?subject=${encodeURIComponent(
+                      `RFQ: ${q || "part not in catalog"}`
+                    )}&body=${encodeURIComponent(
+                      `I am looking for: ${q || "[describe the part]"}\n\nQuantity:\nDelivery location:\nRequired by:\nNotes:\n`
+                    )}`}
+                  >
+                    Open an RFQ instead
+                  </a>
+                </div>
+                {q && /^(?=.*[a-zA-Z])(?=.*\d)[A-Za-z0-9._\-\/]{4,30}$/.test(q) && (
+                  <p
+                    className="muted-text"
+                    style={{ fontSize: 12.5, marginTop: 12 }}
+                  >
+                    Looking for a specific part number?{" "}
+                    <Link href={`/catalog?q=${encodeURIComponent(q)}`}>
+                      AI search may find it
+                    </Link>
+                    .
+                  </p>
+                )}
               </div>
             ) : (
               <>

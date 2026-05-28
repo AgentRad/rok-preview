@@ -162,7 +162,26 @@ export default async function SupplierDashboard() {
 
           <SupplierAIAssistant enabled={Boolean(process.env.ANTHROPIC_API_KEY)} />
 
-          <AttentionPanel items={attention} />
+          <AttentionPanel
+            items={attention}
+            nextAction={(() => {
+              if (supplier.products.length < 10)
+                return { label: "Upload more SKUs", href: "/supplier/products" };
+              if (openQuotes > 0)
+                return { label: "Respond to new RFQs", href: "/supplier/quotes" };
+              if (shipQueueCount > 0)
+                return {
+                  label: "Confirm pending shipments",
+                  href: "/supplier/products",
+                };
+              if (payoutsDueCents > 0)
+                return {
+                  label: "Review pending payouts",
+                  href: "/supplier/payouts",
+                };
+              return { label: "Browse your catalog", href: "/supplier/products" };
+            })()}
+          />
 
           {/* PLH-3l P5: hide the readiness checklist when 10/10 and live.
               Full checklist still renders on /supplier/settings so veterans

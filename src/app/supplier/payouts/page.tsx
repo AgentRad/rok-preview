@@ -51,7 +51,26 @@ export default async function SupplierPayoutsPage() {
                 reservePercent={supplier.reservePercent}
                 reserveTxns={await loadSupplierReserveTxns(supplier.id)}
               />
-              <PayoutsTable payouts={await loadSupplierPayouts(supplier.id)} />
+              {await (async () => {
+                const payouts = await loadSupplierPayouts(supplier.id);
+                return (
+                  <>
+                    {payouts.length === 0 && (
+                      <div
+                        className="alert alert-info"
+                        style={{ marginTop: 16 }}
+                      >
+                        Payouts run every Friday for orders fulfilled the prior
+                        week. PartsPort holds a 5% reserve against returns and
+                        chargebacks; the reserve releases after the
+                        30-day return window closes. Your first payout appears
+                        here once your first paid order ships.
+                      </div>
+                    )}
+                    <PayoutsTable payouts={payouts} />
+                  </>
+                );
+              })()}
             </>
           ) : (
             <div className="alert alert-info" style={{ marginTop: 16 }}>
