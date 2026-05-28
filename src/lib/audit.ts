@@ -149,6 +149,12 @@ export const AUDIT_ACTIONS = [
   // PLH-3w P3: an admin dismissed a reported message (no action against
   // the sender).
   "MESSAGE_REPORT_DISMISSED",
+  // PLH-3y-1: buyer organization foundation lifecycle.
+  "BUYER_ORG_CREATED",
+  "BUYER_ORG_MEMBER_ADDED",
+  "BUYER_ORG_MEMBER_REMOVED",
+  "BUYER_ORG_INVITE_SENT",
+  "BUYER_ORG_INVITE_ACCEPTED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -167,7 +173,8 @@ export type AuditTargetType =
   | "ProductImage"
   | "IntegrationCredential"
   | "DirectMessageThread"
-  | "Message";
+  | "Message"
+  | "BuyerOrg";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

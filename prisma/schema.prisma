@@ -82,6 +82,17 @@ enum SupplierMemberRole {
   VIEWER
 }
 
+// PLH-3y-1: buyer organization role. ADMIN manages members + settings and
+// sees all org orders. APPROVER is a stub this round (treated like BUYER;
+// real approval workflows land in PLH-3y-6). BUYER can place orders and see
+// their own. VIEWER is read-only and cannot place orders.
+enum BuyerOrgRole {
+  ADMIN
+  APPROVER
+  BUYER
+  VIEWER
+}
+
 enum MessageVisibility {
   PUBLIC
   SUPPLIER_INTERNAL
@@ -160,6 +171,12 @@ model User {
   addresses                  Address[]
   messages                   Message[]
   supplierMemberships        SupplierMember[]
+  // PLH-3y-1: buyer org membership + the currently-selected org. The
+  // switcher writes activeBuyerOrgId; later rounds read it to scope orders,
+  // shared resources, and approvals to the active org.
+  buyerOrgMemberships        BuyerOrgMember[]
+  activeBuyerOrg             BuyerOrg?                 @relation("ActiveBuyerOrg", fields: [activeBuyerOrgId], references: [id])
+  activeBuyerOrgId           String?
   // PLH-2 Phase 4d (D1): CAN-SPAM opt-out gates for non-transactional
   // mail. Transactional emails (auth, password reset, order
   // confirmation, payment receipt, refund, return, payout failure,
@@ -410,6 +427,52 @@ model SupplierInvite {
   createdAt   DateTime           @default(now())
 
   @@index([supplierId])
+  @@index([email])
+}
+
+// PLH-3y-1: buyer organization foundation. Admin-managed only this round
+// (no self-serve creation). Members are grouped under an org so a later
+// round can layer shared resources, billing, SSO, and approvals on top.
+model BuyerOrg {
+  id              String           @id @default(cuid())
+  name            String
+  createdByUserId String?
+  createdAt       DateTime         @default(now())
+  members         BuyerOrgMember[]
+  invites         BuyerOrgInvite[]
+  activeForUsers  User[]           @relation("ActiveBuyerOrg")
+}
+
+model BuyerOrgMember {
+  id            String       @id @default(cuid())
+  buyerOrg      BuyerOrg     @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  buyerOrgId    String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  role          BuyerOrgRole @default(BUYER)
+  joinedAt      DateTime     @default(now())
+  addedByUserId String?
+
+  @@unique([buyerOrgId, userId])
+  @@index([userId])
+}
+
+model BuyerOrgInvite {
+  id              String       @id @default(cuid())
+  buyerOrg        BuyerOrg     @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  buyerOrgId      String
+  email           String
+  role            BuyerOrgRole @default(BUYER)
+  tokenHash       String       @unique
+  invitedByUserId String?
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime     @default(now())
+
+  // Only one pending (not-yet-accepted) invite per email per org. Enforced
+  // by a partial unique index in the migration (acceptedAt IS NULL), which
+  // Prisma can't model natively.
+  @@index([buyerOrgId])
   @@index([email])
 }
 
