@@ -1028,6 +1028,50 @@ shipped by PLH-3n + PLH-3o, and the threading parity round
 (team fan-out, visibility enum, unread badges, file attachments)
 shipped by PLH-3p.**
 
+**PLH-3s (2026-05-27).** Three targeted AI actions added across the
+admin/supplier daily workflow. Reuses the existing supplier AI
+assistant pattern: Anthropic Sonnet 4.6 streaming SSE-style, the
+`ai-assistant` rate-limit bucket, system prompt cached ephemerally,
+token usage written to AuditLog. All three routes 503 when
+`ANTHROPIC_API_KEY` unset. 3 commits + docs.
+- **B1**: "Draft invoice with AI" button on `/orders/[id]`. Opens a
+  modal that streams a Markdown invoice draft from
+  `/api/ai/draft-invoice`. Visible only to admin and to supplier
+  members on the order whose `canSendMessages` permission is true.
+  Modal exposes a "Copy to clipboard" action. No PDF export this
+  round (no PDF library in `package.json`; flagged in spec as
+  copy-only fallback). Audit: `AI_DRAFT_INVOICE`.
+- **B2**: "Summarize my open RFQs" tile on `/supplier` dashboard
+  between the AI assistant card and the AttentionPanel. Opens a
+  fixed-right side panel that streams a paragraph summary plus the
+  top three RFQs ranked by urgency from
+  `/api/ai/summarize-rfqs`. Auth via `getActiveSupplierContext` so
+  the data scope is always the calling supplier. Audit:
+  `AI_SUMMARIZE_RFQS`.
+- **B3**: "Draft reply with AI" inline panel above the composer on
+  `/quotes/[id]` (RFQ thread page). Streams a brief professional
+  reply from `/api/ai/draft-rfq-reply`. System prompt mentions
+  specific specs (name/SKU/qty), MAY surface a price range when
+  comparable filled orders exist for the same product, and is
+  instructed NEVER to commit to a price. "Copy to composer" button
+  drops the text into `MessageThread.tsx` via a window CustomEvent
+  (`partsport:set-thread-draft`); no auto-send. Audit:
+  `AI_DRAFT_RFQ_REPLY`.
+
+New audit actions in PLH-3s: `AI_DRAFT_INVOICE`, `AI_SUMMARIZE_RFQS`,
+`AI_DRAFT_RFQ_REPLY`. No new dependencies. No new migrations. No
+new crons.
+
+`npx next build` clean across all 3 commits. Zero em dashes.
+
+**Cumulative across all rounds including PLH-3s: 28 CRITICAL + 62
+HIGH closed, plus PLH-3g multi-supplier refactor, PLH-3h galleries,
+PLH-3i QuickBooks OAuth, PLH-3j deferred polish, PLH-3k buyer UX
+strip-back, PLH-3l supplier IA, PLH-3m OEM/admin polish, PLH-3n +
+PLH-3o thread-email rebuild, PLH-3p threading parity, and PLH-3s
+three targeted AI actions (draft invoice, summarize RFQs, draft
+RFQ reply).**
+
 **PLH-3f (2026-05-26).** Conversational AI catalog import assistant
 at `/supplier/catalog-import`. Single feature, three commits.
 - New `src/lib/import-mapping.ts`: pure mapping primitives (no
