@@ -2026,3 +2026,116 @@ Locked decisions honored: generic SAML 2.0 (no vendor code), SSO is free (no
 tier gate), `enforced=false` by default, site-admin break-glass always
 available. New dependency `@node-saml/node-saml`. No new crons. Migration
 `20260705000000_add_sso_config`.
+
+## PLH-3y-5: OIDC + SCIM + cert rotation + SLO (round 5 of 6)
+
+Fifth round of the SSO + buyer-orgs + approvals initiative. Lands generic
+OIDC single sign-on, SCIM 2.0 user provisioning, IdP signing-cert rotation,
+and single logout. NOT approvals (round 6, the final round). 3 feature
+commits + this doc, each `npx next build` clean, zero em dashes.
+
+- **OIDC library (LOCKED choice).** Uses the existing `jose` dependency
+  (already in the tree for session JWTs), NOT `openid-client`. The
+  security-critical step (ID token signature verification against the IdP
+  JWKS plus iss / aud / exp / nonce validation) is delegated to jose's
+  `createRemoteJWKSet` + `jwtVerify`; we hand-roll none of the JWT crypto.
+  The authorization-code exchange itself is a plain OAuth2 token POST (no
+  crypto), done with `fetch`. Rationale: jose is pure-JS, already vetted and
+  bundled, and avoids openid-client v6's ESM-only / extra-dependency surface
+  on the Vercel build. Generic OIDC works with Google Workspace, Okta OIDC,
+  and Azure AD OIDC; no vendor-specific code.
+- **Schema.** `SsoConfig` gains `scimEnabled` (default false), `scimTokenHash`
+  (unique, SHA-256 hex of the bearer token), `scimTokenLast4` (UI display).
+  The OIDC columns (`oidcIssuer`, `oidcClientId`, `oidcClientSecret`) already
+  existed from the 3y-4 migration and are now wired. `BuyerOrgMember` gains
+  `deactivatedAt DateTime?` (SCIM soft-deprovision; order history preserved).
+  Migration `20260706000000_add_oidc_scim_fields`. (Note: the chip brief
+  assumed the SCIM columns already shipped in 3y-4; they did not, so this
+  round adds them.)
+- **OIDC callback (C1).** `GET /api/auth/sso/oidc/[orgId]/callback`: validates
+  the signed state (a 10-min HS256 JWT carrying orgId + nonce, no server-side
+  session store), exchanges the code, verifies the ID token, enforces the
+  domain allowlist, JIT-provisions through the shared
+  `provisionResolvedSsoUser` path (extracted in `src/lib/sso.ts` so SAML and
+  OIDC share the User + BuyerOrgMember upsert + domain auto-join), records the
+  SsoLoginEvent, and opens a session capped by `sessionMaxAgeMin`.
+  `/api/auth/sso/initiate` now routes to the OIDC `/authorize` URL when the
+  org's `idpType` is OIDC, else builds the SAML AuthnRequest as before.
+  `src/lib/oidc.ts` holds discovery (cached 10 min), JWKS caching, state
+  sign/verify, authorize-URL builder, and code exchange.
+- **SCIM 2.0 (C2).** `/api/scim/v2/[orgId]/Users` GET (list + `userName eq`
+  filter that Okta calls on every login, paginated), POST (create -> User +
+  BuyerOrgMember at `defaultRole`, 409 on an already-provisioned member).
+  `/Users/[id]` GET, PATCH (`active:false` soft-deactivates + bumps
+  `sessionsValidFrom`; `active:true` reactivates), PUT (name update +
+  active), DELETE (soft-deactivate, never hard-delete: order history). Bearer
+  token check is `sha256(token)` constant-time compared against
+  `scimTokenHash`, gated on `scimEnabled`; 401 on any mismatch.
+  `/ServiceProviderConfig` discovery doc and read-only `/Groups` (the four
+  org roles with members, for IdP debugging; the IdP cannot edit roles).
+  New `scim` rate-limit bucket at 600/min/org (Okta initial-sync burst).
+  `src/lib/scim.ts` holds token gen/hash/compare, the SCIM resource mapping,
+  filter + PATCH parsing, and the (de)activate helpers.
+- **SCIM token issuance + cert rotation + SLO (C3).** Shared action dispatcher
+  `src/lib/sso-actions.ts` backs both `/api/buyer-org/sso/actions` (org admin,
+  active-org scoped) and `/api/admin/buyer-orgs/[id]/sso/actions` (site admin,
+  path scoped): `scim-rotate` (token shown exactly once, regenerate
+  invalidates the old), `scim-disable`, `cert-stage` (save a next signing cert
+  without touching current), `cert-activate` (promote staged to current, clear
+  staging). The ACS already accepted either current or next cert from 3y-4
+  (`buildSaml` passes both to node-saml), so staging is zero-downtime.
+  `POST /api/auth/sso/slo/[orgId]` destroys the caller's own session, audits
+  `SSO_LOGOUT`, and best-effort redirects to the IdP logout (SAML `idpSloUrl`
+  or OIDC `end_session_endpoint`). `SsoConfigForm` gains an IdP-type selector,
+  OIDC fields (issuer / client id / secret, plus the redirect URI to copy), a
+  SCIM token panel, and the cert rotation stage/activate UI. A routine config
+  save no longer clobbers a staged next cert (the save path only touches
+  `idpX509CertNext` when the key is explicitly sent; staging is owned by the
+  action route).
+
+New audit actions in PLH-3y-5: `SSO_DEPROVISIONED`, `SCIM_USER_PROVISIONED`,
+`SCIM_USER_UPDATED`, `SCIM_TOKEN_ROTATED`, `SSO_CERT_STAGED`,
+`SSO_CERT_ACTIVATED`, `SSO_LOGOUT`.
+
+Owner setup to test OIDC end to end (config is per-org in the DB, no env vars):
+open `/buyer-org/sso` (org admin) or `/admin/buyer-orgs/[id]/sso` (site admin),
+switch Protocol to OIDC, copy the displayed Redirect URI into a new OIDC web
+app at the IdP (Google Cloud Console OAuth client, or an Okta/Azure OIDC app),
+paste the Issuer URL, Client ID, and Client secret back, set the domain
+allowlist, Save. Then visit
+`/api/auth/sso/initiate?orgId=<orgId>` (or `?email=<you@allowed-domain>`) to
+round-trip a Google/Okta/Azure login.
+
+Owner setup to test SCIM (Okta example): after SSO is configured, click
+Generate SCIM token, copy the token (shown once). In Okta -> the app ->
+Provisioning -> Integration, set SCIM base URL to the displayed
+`/api/scim/v2/<orgId>` and the bearer token, enable Create/Update/Deactivate.
+Okta test-credentials calls `GET /ServiceProviderConfig` then
+`GET /Users?filter=userName eq "..."`; assigning/unassigning a user drives
+POST and PATCH active=false.
+
+Security caveats worth a careful smoke test: (1) an OIDC ID token with a bad
+signature, wrong audience, expired exp, or mismatched nonce must be rejected
+(lands FAILED_SIG in SsoLoginEvent, no session); (2) a SCIM request with a
+wrong/blank bearer token must 401, and the compare is constant-time on the
+hash; (3) deactivate (PATCH active=false / DELETE) must bump
+`sessionsValidFrom` so the user's live cookies die immediately, while order
+history rows survive; (4) confirm a routine SSO config save does not wipe a
+staged rotation cert.
+
+Deviations: (1) the OIDC library is `jose`, not the spec's `openid-client`
+(rationale above; both are vetted, jose avoids the extra dependency). (2) The
+optional `/api/cron/sso-session-refresh` introspection cron (for OIDC refresh
+tokens when `honorIdpSessionExpiry`) is out of scope this round; SAML has no
+introspection and OIDC sessions rely on `sessionMaxAgeMin` + SCIM deprovision,
+matching the SAML posture. (3) A SCIM-deprovisioned member who later completes
+a fresh SSO login is not auto-reactivated by the login path; reactivation is
+SCIM-driven (PATCH active=true). (4) Org-admin SSO actions live under
+`/api/buyer-org/sso/actions` (active-org context) to match the rest of the
+`/buyer-org` surface rather than a `[id]`-scoped path.
+
+Locked decisions honored: generic OIDC (no vendor code), SSO + SCIM free (no
+tax tier), SCIM tokens shown once and stored hashed. No new dependencies (jose
+was already present). No new crons. Migration
+`20260706000000_add_oidc_scim_fields`. Round 5 of 6; approvals (PLH-3y-6) is
+the final round.
