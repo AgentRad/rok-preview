@@ -1144,6 +1144,62 @@ PLH-3l supplier IA, PLH-3m OEM/admin polish, PLH-3n + PLH-3o
 thread-email rebuild, PLH-3p threading parity, PLH-3s three AI actions,
 and PLH-3u fresh-POV onboarding + empty states + first-use surfacing.**
 
+**PLH-3q (2026-05-27).** Cross-role direct messages. 4 commits, P1..P4.
+Adds a generic DM layer on top of the existing per-order / per-quote
+thread plumbing so any buyer, supplier, OEM, or admin can start a
+conversation not tied to a specific order or RFQ.
+- **P1 (c2d268a):** `DirectMessageThread` + `DirectMessageParticipant`
+  Prisma models. `Message.directThreadId` nullable FK so the existing
+  Message table carries DM posts without a parallel table. New
+  `canStartDirectMessage` / `canAddParticipant` helpers in
+  `src/lib/dm-permissions.ts` enforcing the role pair rules (buyer can
+  DM any vetted supplier or admin, suppliers can DM any buyer with a
+  shared order or any admin, admins can DM anyone, OEMs can DM admin
+  only for now).
+- **P2 (c8c79c1):** `POST /api/dm/threads` (create, subject required,
+  1..9 recipients, each checked via `canStartDirectMessage`),
+  `GET /api/dm/threads` (caller's own threads, lastMessageAt DESC,
+  page-25), `GET /api/dm/threads/[id]` (thread + participants +
+  messages from joinedAt onward, role-visibility filtered),
+  `POST /api/dm/threads/[id]/participants` (add up to 10 total via
+  `canAddParticipant`). Existing `POST /api/messages` already accepted
+  `directThreadId`; mark-read extended to `direct` kind.
+- **P3 (673f29e):** email fan-out for DM posts via the existing
+  `sendThreadMessage` plumbing, per-thread Reply-To
+  `reply+d.<threadId>.<sig>` so inbound replies land on the right DM
+  thread (mirrors the order/quote pattern from PLH-3n). Respects
+  `shouldSendToUser(userId, "order")` opt-out (PLH-2 4d, PLH-3b F1).
+- **P4 (9b656d2):** UI. New `/messages` inbox + `/messages/[id]`
+  thread page rendered by `MessagesClient.tsx`. Two-column layout
+  (thread list left, selected thread right) with a "New conversation"
+  modal (recipient search via the existing `GET /api/dm/can-dm`
+  hardened in fefcd04), participant chips with an "Add people" modal,
+  and a composer that reuses `MessageThread.tsx` (extended to take
+  `directThreadId`, no visibility toggle in DM context). Mark-read
+  fires on mount via the `threadKind: "direct"` branch. Per-user
+  unread badge on `/messages` uses
+  `getUnreadCounts(userId).directUnread`; the order/quote unread
+  badge stays on the dashboard tab. Messages link wired into
+  `HeaderNav` (buyer/supplier/admin), `SupplierNav` (top-right
+  tail), and `AdminHeader` (rightmost). OEMs remain DM-able by
+  admin only (no `/messages` link, redirected to `/oem`).
+
+Deferred to a future round: a participant cannot currently leave or
+be removed from a DM thread; "Joined X" system notices render when
+participants are added but there is no matching "Left X" path yet.
+
+No new migrations in P4 (P1 added them). No new dependencies. Every
+`npx next build` between commits compiled clean. Zero em dashes
+throughout PLH-3q.
+
+**Cumulative across all rounds including PLH-3q: 28 CRITICAL + 62 HIGH
+closed, plus PLH-3g multi-supplier refactor, PLH-3h galleries, PLH-3i
+QuickBooks OAuth, PLH-3j deferred polish, PLH-3k buyer UX strip-back,
+PLH-3l supplier IA, PLH-3m OEM/admin polish, PLH-3n + PLH-3o
+thread-email rebuild, PLH-3p threading parity, PLH-3s three AI actions,
+PLH-3u fresh-POV onboarding + empty states + first-use surfacing, and
+PLH-3q cross-role direct messages.**
+
 **PLH-3x (2026-05-27).** Enterprise procurement security and legal docs. 1
 commit, docs-only. No schema or API changes.
 - New `/legal/dpa` page: GDPR + CCPA compliant Data Processing Addendum
