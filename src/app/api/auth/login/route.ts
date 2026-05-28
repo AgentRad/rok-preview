@@ -9,6 +9,8 @@ import {
 } from "@/lib/account-tokens";
 import { sendDeletedAccountSignInAttempt } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
+import { findEnforcedSsoForEmail } from "@/lib/sso";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -86,6 +88,51 @@ export async function POST(req: Request) {
       },
       { status: 403 }
     );
+  }
+
+  // PLH-3y-4: SSO domain lock. When the user's email domain belongs to an org
+  // that enforces SSO, password login is disabled. Two break-glass paths stay
+  // open: a platform admin (Role=ADMIN) always keeps password access, and a
+  // member explicitly granted emergencyPasswordAccess on that org may sign in.
+  // Both are audited as EMERGENCY_PASSWORD_LOGIN. Otherwise we return 403 with
+  // an ssoInitiateUrl the login page redirects to.
+  const enforced = await findEnforcedSsoForEmail(normalized);
+  if (enforced) {
+    const isPlatformAdmin = user.role === "ADMIN";
+    const breakGlassMember = isPlatformAdmin
+      ? null
+      : await prisma.buyerOrgMember.findUnique({
+          where: {
+            buyerOrgId_userId: {
+              buyerOrgId: enforced.buyerOrgId,
+              userId: user.id,
+            },
+          },
+          select: { emergencyPasswordAccess: true },
+        });
+    const allowBreakGlass =
+      isPlatformAdmin || breakGlassMember?.emergencyPasswordAccess === true;
+    if (!allowBreakGlass) {
+      return NextResponse.json(
+        {
+          error: "Your organization requires single sign-on.",
+          ssoInitiateUrl: `/api/auth/sso/initiate?email=${encodeURIComponent(
+            normalized
+          )}`,
+        },
+        { status: 403 }
+      );
+    }
+    await writeAuditLog({
+      actor: user,
+      action: "EMERGENCY_PASSWORD_LOGIN",
+      targetType: "User",
+      targetId: user.id,
+      summary: `Break-glass password login by ${normalized} into an SSO-enforced domain (${
+        isPlatformAdmin ? "platform admin" : "org emergency access"
+      }).`,
+      metadata: { buyerOrgId: enforced.buyerOrgId, isPlatformAdmin },
+    });
   }
 
   // 2FA gate. Password was right, but we don't drop the session cookie yet.

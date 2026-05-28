@@ -49,7 +49,24 @@ export function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
 }
 
-export async function createSession(userId: string): Promise<void> {
+const DEFAULT_SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 30; // 30 days
+
+/**
+ * PLH-3y-4: optional SSO session shaping. When a user signs in through an org's
+ * SSO, the session is capped at min(30d, SsoConfig.sessionMaxAgeMin) and carries
+ * `sso`/`org` claims so middleware and later rounds can re-enforce. Password
+ * logins pass no opts and keep the 30-day default.
+ */
+export type SessionOptions = {
+  maxAgeSec?: number;
+  sso?: boolean;
+  org?: string;
+};
+
+export async function createSession(
+  userId: string,
+  opts: SessionOptions = {}
+): Promise<void> {
   // PLH-1: stamp the session with the user's current sessionsValidFrom so
   // password changes, 2FA disable, email change, and account deletion can
   // invalidate every outstanding cookie by bumping that field.
@@ -58,10 +75,17 @@ export async function createSession(userId: string): Promise<void> {
     select: { sessionsValidFrom: true },
   });
   const svf = user?.sessionsValidFrom?.getTime() ?? Date.now();
-  const token = await new SignJWT({ uid: userId, svf })
+  const maxAgeSec = Math.min(
+    DEFAULT_SESSION_MAX_AGE_SEC,
+    Math.max(60, opts.maxAgeSec ?? DEFAULT_SESSION_MAX_AGE_SEC)
+  );
+  const claims: Record<string, unknown> = { uid: userId, svf };
+  if (opts.sso) claims.sso = true;
+  if (opts.org) claims.org = opts.org;
+  const token = await new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("30d")
+    .setExpirationTime(`${maxAgeSec}s`)
     .sign(resolveSessionSecret());
 
   const store = await cookies();
@@ -70,7 +94,7 @@ export async function createSession(userId: string): Promise<void> {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: maxAgeSec,
   });
 }
 
