@@ -30,9 +30,20 @@ export default async function OemDashboard() {
             <h1 className="page-title">Manufacturer dashboard</h1>
             {app.status === "PENDING" ? (
               <div className="alert alert-info" style={{ marginTop: 16 }}>
-                Your brand claim for <strong>{app.manufacturerName}</strong> is
-                pending admin review. Your storefront stays hidden until it is
-                approved. We will email you when the review is complete.
+                <p style={{ margin: 0 }}>
+                  Your brand claim for <strong>{app.manufacturerName}</strong>{" "}
+                  is pending admin review. Submitted on{" "}
+                  {app.submittedAt.toLocaleDateString()}. Your storefront stays
+                  hidden until it is approved. We will email you when the
+                  review is complete.
+                </p>
+                <p
+                  className="muted-text"
+                  style={{ marginTop: 10, marginBottom: 0, fontSize: 12.5 }}
+                >
+                  Most applications reviewed within 2 business days. Questions?
+                  Email <a href="mailto:rad@agentgaming.gg">rad@agentgaming.gg</a>.
+                </p>
               </div>
             ) : (
               <div className="alert alert-error" style={{ marginTop: 16 }}>
@@ -58,9 +69,18 @@ export default async function OemDashboard() {
           <div className="page-pad narrow">
             <h1 className="page-title">Manufacturer dashboard</h1>
             <div className="alert alert-info" style={{ marginTop: 16 }}>
-              No brand is linked to this account yet. Once an admin approves
-              your manufacturer listing, your storefront and demand dashboard
-              appear here.
+              <p style={{ margin: 0 }}>
+                No brand is linked to this account yet. Claim your brand to
+                unlock your demand dashboard and public storefront.
+              </p>
+              <p style={{ marginTop: 10, marginBottom: 0 }}>
+                <a
+                  className="btn btn-primary btn-sm"
+                  href="/manufacturers#apply"
+                >
+                  Claim your brand
+                </a>
+              </p>
             </div>
           </div>
         </main>

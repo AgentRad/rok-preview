@@ -16,7 +16,12 @@ export default function GoLiveReadiness({
   hideWhenComplete?: boolean;
 }) {
   if (hideWhenComplete && readiness.ready && publicVisible) {
-    return null;
+    // PLH-3u P1: confirm the milestone instead of rendering nothing.
+    return (
+      <div className="alert alert-ok" style={{ marginTop: 16 }}>
+        You are live, accepting orders.
+      </div>
+    );
   }
   return (
     <GoLiveGauge readiness={readiness} publicVisible={publicVisible} />
