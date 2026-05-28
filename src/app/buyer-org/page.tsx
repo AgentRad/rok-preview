@@ -16,7 +16,12 @@ export const dynamic = "force-dynamic";
  * (ADMIN can add/remove), the org tax-exempt cert, and billing mode. Members
  * who belong to no org are redirected to their account.
  */
-export default async function BuyerOrgPage() {
+export default async function BuyerOrgPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ joined?: string }>;
+}) {
+  const { joined } = await searchParams;
   const user = await requireUser();
   if (user.role === "SUPPLIER") redirect("/supplier");
   if (user.role === "MANUFACTURER") redirect("/oem");
@@ -40,6 +45,12 @@ export default async function BuyerOrgPage() {
       <SiteHeader />
       <main id="main" className="app-page">
         <div className="page-pad narrow">
+          {joined && (
+            <div className="alert alert-success">
+              You have joined {joined}. Your role and shared org resources are
+              shown below.
+            </div>
+          )}
           <h1 className="page-title">{ctx.org.name}</h1>
           <p className="page-sub">
             Your role: {ctx.role.toLowerCase()}.{" "}

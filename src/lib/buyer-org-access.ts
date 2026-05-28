@@ -1,6 +1,8 @@
 import "server-only";
 import type { BuyerOrg, BuyerOrgRole, User } from "@prisma/client";
 import { prisma } from "./db";
+import { writeAuditLog } from "./audit";
+import { emailDomain, isFreeEmailDomain } from "./free-email-domains";
 
 export type BuyerOrgContext = {
   org: BuyerOrg;
@@ -69,4 +71,68 @@ export async function getActiveBuyerOrgContext(
     });
   }
   return orgs[0];
+}
+
+/**
+ * PLH-3y-3: domain auto-join. Given a freshly-verified (or freshly-SSO'd) user,
+ * checks whether their email domain matches a VERIFIED + autoJoinEnabled org
+ * domain and, if so, adds them as a member with the domain's autoJoinRole and
+ * sets activeBuyerOrgId when they have none.
+ *
+ * Forward-compatible with the SSO JIT path in PLH-3y-4: that flow will call
+ * this same helper after provisioning a user from an IdP assertion, so the
+ * domain-to-org mapping lives in one place.
+ *
+ * Idempotent: returns null when the user already belongs to the matched org,
+ * when no domain matches, or when the domain is a public provider (belt: a
+ * public domain can never have a VERIFIED row, but the check is cheap).
+ * Best-effort and never throws back to the caller; auth must not fail because
+ * an auto-join did.
+ */
+export async function autoJoinByEmailDomain(
+  user: Pick<User, "id" | "email" | "activeBuyerOrgId">
+): Promise<BuyerOrgContext | null> {
+  try {
+    const domain = emailDomain(user.email);
+    if (!domain || isFreeEmailDomain(domain)) return null;
+
+    const match = await prisma.buyerOrgDomain.findFirst({
+      where: { domain, status: "VERIFIED", autoJoinEnabled: true },
+      include: { buyerOrg: true },
+    });
+    if (!match) return null;
+
+    const already = await prisma.buyerOrgMember.findUnique({
+      where: { buyerOrgId_userId: { buyerOrgId: match.buyerOrgId, userId: user.id } },
+    });
+    if (already) return null;
+
+    await prisma.buyerOrgMember.create({
+      data: {
+        buyerOrgId: match.buyerOrgId,
+        userId: user.id,
+        role: match.autoJoinRole,
+      },
+    });
+    if (!user.activeBuyerOrgId) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { activeBuyerOrgId: match.buyerOrgId },
+      });
+    }
+
+    await writeAuditLog({
+      actor: { id: user.id, email: user.email },
+      action: "BUYER_ORG_DOMAIN_AUTOJOINED",
+      targetType: "BuyerOrg",
+      targetId: match.buyerOrgId,
+      summary: `${user.email} auto-joined ${match.buyerOrg.name} as ${match.autoJoinRole} via domain ${domain}.`,
+      metadata: { domain, role: match.autoJoinRole, domainId: match.id },
+    });
+
+    return { org: match.buyerOrg, role: match.autoJoinRole };
+  } catch {
+    // Never let an auto-join failure break the auth flow.
+    return null;
+  }
 }

@@ -5,6 +5,7 @@ import { siteUrl } from "@/lib/site-url";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { hashEmailVerificationToken } from "@/lib/email-verification";
 import { prisma } from "@/lib/db";
+import { autoJoinByEmailDomain } from "@/lib/buyer-org-access";
 
 export const runtime = "nodejs";
 
@@ -60,9 +61,19 @@ async function handle(req: Request, method: "GET" | "POST") {
       status: 303,
     });
   }
+  // PLH-3y-3: domain auto-join. Now that the email is verified (proving the
+  // user controls the address), check whether the domain matches a VERIFIED +
+  // autoJoinEnabled org and join them. Best-effort: never blocks verification.
+  const joined = await autoJoinByEmailDomain(user);
   // Clear any prior cookie before issuing a fresh one for the verified user.
   await destroySession();
   await createSession(user.id);
+  if (joined) {
+    return NextResponse.redirect(
+      siteUrl(`/buyer-org?joined=${encodeURIComponent(joined.org.name)}`),
+      { status: 303 }
+    );
+  }
   return NextResponse.redirect(siteUrl("/account?verified=1"), { status: 303 });
 }
 
