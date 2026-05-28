@@ -19,6 +19,8 @@ import { verifyOrderViewToken } from "@/lib/order-link";
 import WriteReview from "@/components/WriteReview";
 import DraftInvoiceWithAI from "@/components/DraftInvoiceWithAI";
 import AdminEditPurchaseOrder from "@/components/AdminEditPurchaseOrder";
+import ApprovalPokeButton from "@/components/ApprovalPokeButton";
+import ApprovalBypassButton from "@/components/ApprovalBypassButton";
 
 function rateLabelForOrder(order: { feeRateBps: number }): string {
   return `${(order.feeRateBps / 100).toFixed(order.feeRateBps % 100 === 0 ? 0 : 1)}%`;
@@ -175,6 +177,18 @@ export default async function OrderPage({
               This order has been submitted for review by your organization&apos;s approver.
               You will be notified once a decision is made.
               {" "}<a href="/buyer-org/approvals" style={{ color: "var(--blue)", textDecoration: "underline" }}>View approval queue</a>
+              {isBuyer && (
+                <span>
+                  {" "}
+                  <ApprovalPokeButton orderId={order.id} />
+                </span>
+              )}
+              {isAdmin && (
+                <span>
+                  {" "}
+                  <ApprovalBypassButton orderId={order.id} />
+                </span>
+              )}
             </div>
           )}
           {order.approvalStatus === "REJECTED" && (
