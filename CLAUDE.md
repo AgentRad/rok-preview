@@ -1938,3 +1938,91 @@ Locked decisions honored: auto-join OFF by default per domain (admin opts in
 after verification), default auto-join role VIEWER, free-email providers
 blocked from being claimed. No new dependencies. New cron slot 06:30 UTC.
 Migration `20260704000000_add_buyer_org_domain`.
+
+## PLH-3y-4: SAML SSO + JIT provisioning (round 4 of 6)
+
+Fourth round of the SSO + buyer-orgs + approvals initiative. Lands generic
+SAML 2.0 single sign-on with just-in-time provisioning. NOT OIDC, NOT SCIM
+(both round 5), NOT approvals (round 6). 4 feature commits + this doc, each
+`npx next build` clean, zero em dashes.
+
+- **SAML library (LOCKED).** Uses `@node-saml/node-saml` v5 (the maintained
+  successor to passport-saml's core). All XML signature verification,
+  assertion condition validation (NotBefore / NotOnOrAfter / audience), and
+  canonicalization are delegated to it. PartsPort hand-rolls none of the
+  crypto. Pure-JS dependency tree (xml-crypto / @xmldom/xmldom), no native
+  deps, so the Vercel build is unaffected. The 3 `npm audit` advisories on the
+  tree are pre-existing Next.js + postcss items, not introduced this round.
+- **Schema (C1).** `SsoIdpType` enum (SAML | OIDC). `SsoConfig` model (one per
+  org, `buyerOrgId` unique): SAML fields (`idpEntityId`, `idpSsoUrl`,
+  `idpSloUrl`, `idpX509Cert`, `idpX509CertNext` for zero-downtime rotation),
+  OIDC fields present but unused until 3y-5, `domainAllowlist`,
+  `groupAttributeName`, `groupRoleMap`, `defaultRole`, `enforced` (default
+  false), `sessionMaxAgeMin` (default 480), `honorIdpSessionExpiry` (default
+  true). `SsoLoginEvent` high-volume per-login audit table (outcome SUCCESS |
+  FAILED_SIG | FAILED_NOTAFTER | FAILED_DOMAIN | FAILED_AUDIENCE, hashed IP).
+  `BuyerOrgMember.emergencyPasswordAccess` per-member break-glass flag.
+  Migration `20260705000000_add_sso_config`. New audit actions
+  `SSO_INITIATED`, `SSO_LOGIN_SUCCESS`, `SSO_LOGIN_FAILED`, `SSO_PROVISIONED`,
+  `SSO_CONFIG_UPDATED`, `SSO_CONFIG_REMOVED`, `SSO_CERT_ROTATED`,
+  `EMERGENCY_PASSWORD_LOGIN`. New `AuditTargetType` value `SsoConfig`.
+- **Core lib + login gate (C2).** `src/lib/sso.ts` wraps node-saml: SP entity
+  id / ACS URL helpers, `buildSaml` (accepts current + next cert so a rotation
+  is zero-downtime, `wantAssertionsSigned`), `generateSpMetadata`, config
+  resolvers (by orgId / by allowlisted email domain / enforced-only),
+  `classifySamlError` (maps library throws to the FAILED_* outcomes),
+  `provisionSsoUser` (JIT: creates User role BUYER + empty passwordHash +
+  emailVerified=now, creates/updates the BuyerOrgMember role from the
+  group map, reuses `autoJoinByEmailDomain`), `recordSsoEvent`, and
+  `ssoSessionMaxAgeSec`. Group-to-role: highest-privilege mapped group wins
+  (ADMIN > APPROVER > BUYER > VIEWER), else defaultRole. `createSession` in
+  `auth.ts` gained optional `{ sso, org, maxAgeSec }` so SSO sessions carry
+  `sso`/`org` JWT claims and a policy-capped lifetime; password logins keep
+  the 30-day default. The login route now enforces the domain lock: when the
+  email's domain belongs to an `enforced` org, password login returns 403 with
+  an `ssoInitiateUrl`, EXCEPT a platform admin (Role=ADMIN) or a member with
+  `emergencyPasswordAccess` (both audited `EMERGENCY_PASSWORD_LOGIN`).
+- **Routes (C3).** `GET /api/auth/sso/initiate` (`?email=` or `?orgId=`,
+  builds the AuthnRequest, 303s to the IdP). `POST /api/auth/sso/saml/[orgId]/acs`
+  (node-saml verifies the signed assertion, enforces the domain allowlist,
+  JIT-provisions, opens a session capped by `sessionMaxAgeMin` and, when
+  `honorIdpSessionExpiry`, by any SessionNotOnOrAfter; writes the SsoLoginEvent
+  outcome). `GET /api/auth/sso/saml/[orgId]/metadata` (SP metadata XML, served
+  even before the IdP fields are filled in).
+- **Admin UI (C4).** Shared `src/lib/sso-config-admin.ts` (validates the group
+  map JSON + role values, normalizes the domain allowlist, detects a
+  signing-cert change and stamps `rotatedCertAt` + `SSO_CERT_ROTATED`).
+  Org-admin backend `/api/buyer-org/sso` (active-org scoped) and site-admin
+  `/api/admin/buyer-orgs/[id]/sso` (Role=ADMIN, path-scoped), both GET/PUT/
+  DELETE. One `SsoConfigForm` client renders the SP metadata URL / entity id /
+  ACS URL to copy, the IdP fields, provisioning policy, and the enforce toggle.
+  Pages `/buyer-org/sso` (org admin) and `/admin/buyer-orgs/[id]/sso` (site
+  admin), linked from the org-home and admin org-detail pages.
+
+Deviations: (1) the org-admin SSO page lives at `/buyer-org/sso` (active-org
+context) rather than the spec's `/buyer-org/[id]/sso`, matching the rest of
+the `/buyer-org` surface. (2) SLO endpoint, SCIM, OIDC, and the dry-run test
+route are explicitly out of scope (3y-5 / 3y-6). (3) The spec's "force 2FA when
+emergencyPasswordAccess is toggled on" nuance is not wired this round; the flag
+is honored at login and exposed via schema, but the team-page toggle + 2FA
+coupling is deferred.
+
+Owner setup to test SAML end to end (no env vars needed; config is per-org in
+the DB): create or pick a BuyerOrg, open `/admin/buyer-orgs/[id]/sso` (or the
+org admin opens `/buyer-org/sso`), copy the SP metadata URL / Entity ID / ACS
+URL into an IdP (Okta or Azure AD dev tenant), paste back the IdP Entity ID,
+SSO URL, and signing certificate (PEM), set the domain allowlist, Save. Then
+visit `/api/auth/sso/initiate?email=<you@allowed-domain>` to round-trip a
+login. Flip "Enforce SSO" only after a successful test login, since it disables
+password login for that domain (platform admin keeps break-glass).
+
+Security smoke test worth a careful pass: confirm a tampered/unsigned
+SAMLResponse to the ACS endpoint is rejected (lands FAILED_SIG in
+SsoLoginEvent, no session), an expired assertion lands FAILED_NOTAFTER, and an
+email outside the allowlist lands FAILED_DOMAIN. None should create a session
+or a User.
+
+Locked decisions honored: generic SAML 2.0 (no vendor code), SSO is free (no
+tier gate), `enforced=false` by default, site-admin break-glass always
+available. New dependency `@node-saml/node-saml`. No new crons. Migration
+`20260705000000_add_sso_config`.
