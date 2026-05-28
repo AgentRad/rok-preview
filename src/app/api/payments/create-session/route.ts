@@ -40,6 +40,21 @@ export async function POST(req: Request) {
     );
   }
 
+  // PLH-3y-6: block Stripe checkout while the order is in the approval queue
+  // or has been rejected. NONE / AUTO_APPROVED / APPROVED all proceed normally.
+  if (order.approvalStatus === "PENDING") {
+    return NextResponse.json(
+      { error: "This order is awaiting approval before payment can proceed.", code: "APPROVAL_PENDING" },
+      { status: 400 }
+    );
+  }
+  if (order.approvalStatus === "REJECTED") {
+    return NextResponse.json(
+      { error: "This order was not approved.", code: "APPROVAL_REJECTED" },
+      { status: 400 }
+    );
+  }
+
   // Tax-exemption check: if the buyer has any APPROVED tax-exempt cert on
   // a saved address, skip Stripe Tax computation entirely. Buyer-wide for
   // now; tighten to per-shipping-address once Order.shippingAddressId

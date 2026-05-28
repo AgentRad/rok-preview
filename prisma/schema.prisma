@@ -490,6 +490,7 @@ model BuyerOrg {
   activeForUsers  User[]           @relation("ActiveBuyerOrg")
   // PLH-3y-6: orders permanently bound to this org.
   orders          Order[]          @relation("BuyerOrgOrders")
+  approvalRules   ApprovalRule[]
 }
 
 // PLH-3y-4: per-org single sign-on configuration. SAML 2.0 ships this round;
@@ -636,6 +637,12 @@ model BuyerOrgMember {
   // suspends the membership: the user can no longer act in the org. Re-activate
   // by clearing it (SCIM PATCH active=true).
   deactivatedAt DateTime?
+  // PLH-3y-6: approver out-of-office delegation. When oooUntil is in the
+  // future, approval routing sends this member's approvals to
+  // delegateToMemberId instead. The original approver still appears in the
+  // OrderApproval audit trail.
+  oooUntil           DateTime?
+  delegateToMemberId String?
 
   @@unique([buyerOrgId, userId])
   @@index([userId])
@@ -658,6 +665,62 @@ model BuyerOrgInvite {
   // Prisma can't model natively.
   @@index([buyerOrgId])
   @@index([email])
+}
+
+// PLH-3y-6: a threshold-based approval rule for a buyer org. ALL set filter
+// conditions must match for the rule to apply to an order. Rules with the same
+// chainGroup execute sequentially in chainOrder; an order is fully APPROVED
+// only when every chain step completes. Orgs ship with NO rules (approvals off)
+// until an admin adds one.
+model ApprovalRule {
+  id                String       @id @default(cuid())
+  buyerOrgId        String
+  buyerOrg          BuyerOrg     @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  name              String
+  // Filter conditions. A null field means "no constraint on this dimension".
+  minTotalCents     Int?
+  maxTotalCents     Int?
+  category          String?      // matches Product.category on any order item
+  supplierId        String?      // matches any order item's supplier
+  placedByMemberId  String?      // route only when this member places the order
+  // Action: who must approve. approverMemberId pins a specific member;
+  // approverRole routes to any member with this role (typically APPROVER).
+  approverMemberId  String?
+  approverRole      BuyerOrgRole?
+  // Chaining: rules sharing a chainGroup execute in ascending chainOrder.
+  chainGroup        String?
+  chainOrder        Int          @default(0)
+  // Auto-escalate when an approval sits PENDING longer than this many hours.
+  escalateAfterHours Int?
+  escalateToMemberId String?
+  // Auto-approve when the order matches a recent approved order from the same
+  // member (same supplier + product set, within 25% of total, last 90d).
+  autoApproveIfHistoricalMatch Boolean @default(false)
+  enabled           Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+
+  @@index([buyerOrgId, enabled])
+}
+
+// PLH-3y-6: one row per approval decision (or pending step) on an order.
+// outcome PENDING marks an open step assigned to approverMemberId; the other
+// outcomes record a terminal decision (or an ESCALATED reassignment event).
+model OrderApproval {
+  id                String   @id @default(cuid())
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ruleId            String?  // null for emergency bypass + auto-approve
+  approverMemberId  String?  // null for AUTO_APPROVED / BYPASSED
+  // PENDING | APPROVED | REJECTED | AUTO_APPROVED | ESCALATED | BYPASSED
+  outcome           String   @default("PENDING")
+  chainOrder        Int      @default(0)
+  reason            String   @default("")
+  createdAt         DateTime @default(now())
+  decidedAt         DateTime?
+
+  @@index([orderId])
+  @@index([approverMemberId, outcome])
+  @@index([outcome, createdAt])
 }
 
 model Product {
@@ -900,6 +963,16 @@ model Order {
   // falls back to current-membership for legacy null-buyerOrgId orders.
   buyerOrgId            String?
   buyerOrg              BuyerOrg?           @relation("BuyerOrgOrders", fields: [buyerOrgId], references: [id])
+  // PLH-3y-6: approval workflow state. approvalStatus composes with `status`
+  // (the payment/fulfillment lifecycle): an order with approvalStatus=PENDING
+  // cannot transition status to PAID (server-enforced in create-session).
+  // NONE = no approval needed / non-org order. PENDING = awaiting an approver.
+  // APPROVED / AUTO_APPROVED / BYPASSED all clear the gate. REJECTED is
+  // terminal (status moves to CANCELLED). approvedByMemberId records the final
+  // deciding member for APPROVED/BYPASSED.
+  approvalStatus        String              @default("NONE")
+  approvedByMemberId    String?
+  approvals             OrderApproval[]
   items                 OrderItem[]
   invoice               Invoice?
   returns               ReturnRequest[]

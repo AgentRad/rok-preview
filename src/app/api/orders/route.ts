@@ -10,6 +10,7 @@ import { getActiveBuyerOrgContext } from "@/lib/buyer-org-access";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { captureError } from "@/lib/observability";
 import { writeAuditLog } from "@/lib/audit";
+import { evaluateAndApplyApproval } from "@/lib/approval";
 import {
   surchargeCents,
   type FreightShipment,
@@ -583,6 +584,12 @@ export async function POST(req: Request) {
     },
   });
 
+  // PLH-3y-6: evaluate approval rules for org buyers. Best-effort: a failure
+  // returns NONE so checkout is never blocked by a logging hiccup. PENDING
+  // result is surfaced to the client so the UI can redirect to the holding
+  // page instead of proceeding directly to Stripe Checkout.
+  const approvalStatus = await evaluateAndApplyApproval(order.id);
+
   // Next 15 `after()` keeps the serverless function alive until the email
   // actually sends, so a Vercel cold-start kill can't drop it. Replaces
   // the previous fire-and-forget `.catch(...)` which broke on serverless.
@@ -632,5 +639,10 @@ export async function POST(req: Request) {
     taxCents: totals.taxCents,
     totalCents: orderTotalCents,
     supplierCount: slots.length,
+    approvalStatus,
+    // Convenience flag: true when the order is now in the approval queue
+    // and the client should redirect to /orders/[id]?pending-approval=1
+    // rather than proceeding to Stripe Checkout.
+    pendingApproval: approvalStatus === "PENDING",
   });
 }

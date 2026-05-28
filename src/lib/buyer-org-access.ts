@@ -38,6 +38,18 @@ export function canChargeOrgCard(role: BuyerOrgRole): boolean {
   return canPlaceOrgOrders(role);
 }
 
+// PLH-3y-6: who may act on the approval queue (view pending, approve/reject,
+// bulk approve, manage rules). ADMIN and APPROVER. (ADMIN also gets emergency
+// bypass; rule management is ADMIN-only, gated separately.)
+export function canApproveOrders(role: BuyerOrgRole): boolean {
+  return role === "ADMIN" || role === "APPROVER";
+}
+
+// PLH-3y-6: who may manage approval rules + emergency-bypass an order.
+export function canManageApprovalRules(role: BuyerOrgRole): boolean {
+  return role === "ADMIN";
+}
+
 /** Every buyer org the user belongs to, OWNER-style ordering (ADMIN first). */
 export async function listBuyerOrgsForUser(
   userId: string

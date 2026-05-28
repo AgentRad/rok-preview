@@ -194,6 +194,19 @@ export const AUDIT_ACTIONS = [
   "SSO_CERT_ACTIVATED",
   // SLO: a session was destroyed via the single-logout endpoint.
   "SSO_LOGOUT",
+  // PLH-3y-6: approval workflows (final round).
+  "APPROVAL_RULE_CREATED",
+  "APPROVAL_RULE_UPDATED",
+  "APPROVAL_RULE_DELETED",
+  "APPROVAL_REQUESTED",
+  "ORDER_APPROVED",
+  "ORDER_REJECTED",
+  "ORDER_AUTO_APPROVED",
+  "APPROVAL_ESCALATED",
+  "EMERGENCY_APPROVAL_BYPASS",
+  "APPROVAL_ORPHANED_REASSIGNED",
+  "APPROVAL_DELEGATION_UPDATED",
+  "APPROVAL_POKED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -214,7 +227,8 @@ export type AuditTargetType =
   | "DirectMessageThread"
   | "Message"
   | "BuyerOrg"
-  | "SsoConfig";
+  | "SsoConfig"
+  | "ApprovalRule";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

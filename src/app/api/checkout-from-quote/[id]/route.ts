@@ -10,6 +10,7 @@ import { getProvider, type CheckoutLineItem } from "@/lib/payments";
 import { lookupTaxExemption } from "@/lib/stripe-tax";
 import { getActiveBuyerOrgContext } from "@/lib/buyer-org-access";
 import { captureError } from "@/lib/observability";
+import { evaluateAndApplyApproval } from "@/lib/approval";
 
 export const runtime = "nodejs";
 
@@ -294,6 +295,18 @@ export async function POST(
         freightCarrier,
         freightService,
       },
+    });
+  }
+
+  // PLH-3y-6: evaluate approval rules for org buyers. When PENDING the buyer
+  // is redirected to the order page to wait; they proceed to Stripe only once
+  // the order reaches APPROVED or AUTO_APPROVED.
+  const approvalStatus = await evaluateAndApplyApproval(order.id);
+  if (approvalStatus === "PENDING") {
+    return NextResponse.json({
+      ok: true,
+      orderId: order.id,
+      pendingApproval: true,
     });
   }
 
