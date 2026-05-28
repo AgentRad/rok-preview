@@ -120,6 +120,10 @@ export const AUDIT_ACTIONS = [
   // PLH-3p F2: an inbound Resend email attachment could not be fetched,
   // was oversized, or had an unsupported MIME. The message still posts.
   "INBOUND_ATTACHMENT_FAILED",
+  // PLH-3q: cross-role direct message thread created.
+  "DM_THREAD_CREATED",
+  // PLH-3q: one or more participants added to a direct message thread.
+  "DM_PARTICIPANT_ADDED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -136,7 +140,8 @@ export type AuditTargetType =
   | "ManufacturerApplication"
   | "Product"
   | "ProductImage"
-  | "IntegrationCredential";
+  | "IntegrationCredential"
+  | "DirectMessageThread";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

@@ -31,7 +31,12 @@ export async function PATCH(req: Request) {
   const threadKind = body?.threadKind;
   const threadId =
     typeof body?.threadId === "string" ? body.threadId.trim() : "";
-  if ((threadKind !== "order" && threadKind !== "quote") || !threadId) {
+  if (
+    (threadKind !== "order" &&
+      threadKind !== "quote" &&
+      threadKind !== "direct") ||
+    !threadId
+  ) {
     return NextResponse.json(
       { error: "threadKind and threadId are required." },
       { status: 400 }
@@ -41,7 +46,15 @@ export async function PATCH(req: Request) {
   const isAdmin = user.role === "ADMIN";
   let authorized = isAdmin;
 
-  if (threadKind === "order") {
+  if (threadKind === "direct") {
+    const participant = await prisma.directMessageParticipant.findUnique({
+      where: {
+        threadId_userId: { threadId, userId: user.id },
+      },
+      select: { id: true },
+    });
+    if (participant) authorized = true;
+  } else if (threadKind === "order") {
     const order = await prisma.order.findUnique({
       where: { id: threadId },
       select: {

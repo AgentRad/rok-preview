@@ -25,10 +25,18 @@ export { stripQuotedReply };
  * against forgery for a short-lived per-thread token.
  */
 
-export type ThreadKind = "order" | "quote";
+export type ThreadKind = "order" | "quote" | "direct";
 
-const KIND_CODE: Record<ThreadKind, string> = { order: "o", quote: "q" };
-const KIND_FROM_CODE: Record<string, ThreadKind> = { o: "order", q: "quote" };
+const KIND_CODE: Record<ThreadKind, string> = {
+  order: "o",
+  quote: "q",
+  direct: "d",
+};
+const KIND_FROM_CODE: Record<string, ThreadKind> = {
+  o: "order",
+  q: "quote",
+  d: "direct",
+};
 
 function secret(): string | null {
   const s = process.env.INBOUND_REPLY_SECRET;

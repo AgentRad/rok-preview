@@ -34,15 +34,25 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const orderId = body.orderId ? String(body.orderId) : "";
   const quoteId = body.quoteId ? String(body.quoteId) : "";
+  const directThreadId = body.directThreadId ? String(body.directThreadId) : "";
   const text = String(body.body || "").trim().slice(0, 4000);
   const requestedVisibility = body.visibility;
 
   if (!text) {
     return NextResponse.json({ error: "Message body is required." }, { status: 400 });
   }
-  if ((!orderId && !quoteId) || (orderId && quoteId)) {
+  const targetCount = [orderId, quoteId, directThreadId].filter(Boolean).length;
+  if (targetCount !== 1) {
     return NextResponse.json(
-      { error: "Exactly one of orderId or quoteId is required." },
+      { error: "Exactly one of orderId, quoteId, or directThreadId is required." },
+      { status: 400 }
+    );
+  }
+  // PLH-3q: DM threads only support PUBLIC visibility. SUPPLIER_INTERNAL
+  // does not make sense on a cross-role DM and is rejected.
+  if (directThreadId && requestedVisibility && requestedVisibility !== "PUBLIC") {
+    return NextResponse.json(
+      { error: "Direct message threads only support PUBLIC visibility." },
       { status: 400 }
     );
   }
@@ -54,7 +64,41 @@ export async function POST(req: Request) {
   let viewerRole: ViewerRole = "none";
   let visibility: ReturnType<typeof resolveOutgoingVisibility> = "PUBLIC";
 
-  if (orderId) {
+  if (directThreadId) {
+    const thread = await prisma.directMessageThread.findUnique({
+      where: { id: directThreadId },
+      include: {
+        participants: {
+          include: { user: { select: { id: true, email: true } } },
+        },
+      },
+    });
+    if (!thread) {
+      return NextResponse.json({ error: "Thread not found." }, { status: 404 });
+    }
+    const me = thread.participants.find((p) => p.userId === user.id);
+    if (!me) {
+      return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+    }
+    viewerRole =
+      user.role === "ADMIN"
+        ? "admin"
+        : user.role === "SUPPLIER"
+          ? "supplier"
+          : "buyer";
+    visibility = "PUBLIC";
+    for (const p of thread.participants) {
+      if (p.userId === user.id) continue;
+      const key = p.user.email.toLowerCase();
+      if (!key) continue;
+      recipients.add(key);
+      if (!recipientUserIds.has(key)) {
+        recipientUserIds.set(key, p.userId);
+      }
+    }
+    subjectPrefix = `DM ${thread.subject.slice(0, 40)}`;
+    threadUrl = siteUrl(`/messages/${thread.id}`);
+  } else if (orderId) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: { items: { include: { product: { include: { supplier: true } } } } },
@@ -157,6 +201,7 @@ export async function POST(req: Request) {
     data: {
       orderId: orderId || null,
       quoteId: quoteId || null,
+      directThreadId: directThreadId || null,
       senderId: user.id,
       senderName: user.name,
       senderEmail: user.email,
@@ -165,21 +210,33 @@ export async function POST(req: Request) {
       visibility,
     },
   });
+  if (directThreadId) {
+    await prisma.directMessageThread.update({
+      where: { id: directThreadId },
+      data: { lastMessageAt: created.createdAt },
+    });
+  }
 
   // PLH-3p F1: never email the posting user themselves.
   recipients.delete(user.email.toLowerCase());
 
-  const threadKind = orderId ? "order" : "quote";
-  const threadId = orderId || quoteId;
+  const threadKind: "order" | "quote" | "direct" = directThreadId
+    ? "direct"
+    : orderId
+      ? "order"
+      : "quote";
+  const threadId = orderId || quoteId || directThreadId;
 
   // PLH-3o: hand the most recent prior message on this thread to the
   // email lib so it can render a standard "On <Date>, <Name> wrote:"
   // quoted block under the new message. Single prior message only;
   // Gmail collapses deeper history on its own.
   const prevRow = await prisma.message.findFirst({
-    where: orderId
-      ? { orderId, NOT: { id: created.id } }
-      : { quoteId, NOT: { id: created.id } },
+    where: directThreadId
+      ? { directThreadId, NOT: { id: created.id } }
+      : orderId
+        ? { orderId, NOT: { id: created.id } }
+        : { quoteId, NOT: { id: created.id } },
     orderBy: { createdAt: "desc" },
     select: {
       senderName: true,

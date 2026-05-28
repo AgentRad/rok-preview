@@ -140,7 +140,7 @@ export async function getUnreadCounts(
 /** Upsert the read-pointer to now for (user, kind, threadId). */
 export async function markThreadRead(
   userId: string,
-  threadKind: "order" | "quote",
+  threadKind: "order" | "quote" | "direct",
   threadId: string
 ): Promise<void> {
   const now = new Date();
