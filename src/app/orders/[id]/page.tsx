@@ -60,6 +60,16 @@ export default async function OrderPage({
     supplierSlots: {
       include: { supplier: { select: { id: true, name: true, logoUrl: true } } },
     },
+    approvals: {
+      orderBy: { chainOrder: "asc" as const },
+      select: {
+        id: true,
+        outcome: true,
+        chainOrder: true,
+        reason: true,
+        decidedAt: true,
+      },
+    },
   };
   const initial = await prisma.order.findUnique({
     where: { id },
@@ -158,7 +168,22 @@ export default async function OrderPage({
               confirmed and routed to the supplier.
             </div>
           )}
-          {!paid && order.status === "PENDING" && (
+          {/* PLH-3y-6: approval status banners */}
+          {order.approvalStatus === "PENDING" && (
+            <div className="alert alert-info">
+              <strong>Awaiting approval.</strong>{" "}
+              This order has been submitted for review by your organization&apos;s approver.
+              You will be notified once a decision is made.
+              {" "}<a href="/buyer-org/approvals" style={{ color: "var(--blue)", textDecoration: "underline" }}>View approval queue</a>
+            </div>
+          )}
+          {order.approvalStatus === "REJECTED" && (
+            <div className="alert alert-error">
+              <strong>Order not approved.</strong>{" "}
+              {order.approvals.find((a) => a.outcome === "REJECTED")?.reason || "This order was not approved by your organization."}
+            </div>
+          )}
+          {!paid && order.status === "PENDING" && order.approvalStatus !== "PENDING" && order.approvalStatus !== "REJECTED" && (
             <div className="alert alert-info">
               <strong>Order {order.reference} is awaiting payment.</strong>
               {" "}
