@@ -135,8 +135,15 @@ export async function upsertSsoConfig(
     Math.max(5, Math.round(Number(body.sessionMaxAgeMin) || 480))
   );
   const newCert = str(body.idpX509Cert);
-  const newCertNext = str(body.idpX509CertNext);
   const certRotated = !!existing && !!newCert && existing.idpX509Cert !== newCert;
+  // Staging the next cert is owned by the cert-rotation action, not this save
+  // path. Only touch idpX509CertNext when the caller explicitly sends the key,
+  // so a routine config save never wipes a staged rotation cert.
+  const certNextProvided = Object.prototype.hasOwnProperty.call(
+    body,
+    "idpX509CertNext"
+  );
+  const newCertNext = str(body.idpX509CertNext);
 
   const idpTypeRaw = String(body.idpType ?? "SAML").toUpperCase();
   const idpType = (idpTypeRaw === "OIDC" ? "OIDC" : "SAML") as
@@ -152,7 +159,7 @@ export async function upsertSsoConfig(
     idpSsoUrl: str(body.idpSsoUrl) || null,
     idpSloUrl: str(body.idpSloUrl) || null,
     idpX509Cert: newCert || null,
-    idpX509CertNext: newCertNext || null,
+    ...(certNextProvided ? { idpX509CertNext: newCertNext || null } : {}),
     oidcIssuer: str(body.oidcIssuer) || null,
     oidcClientId: str(body.oidcClientId) || null,
     ...(submittedSecret ? { oidcClientSecret: submittedSecret } : {}),
