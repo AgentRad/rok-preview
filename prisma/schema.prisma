@@ -151,6 +151,8 @@ model User {
   // ensureCustomer sync so subsequent invoices reuse the same QBO row.
   qboCustomerId              String?
   threadLastReads            ThreadLastRead[]
+  directMessageThreadsCreated DirectMessageThread[]      @relation("DirectMessageThreadsCreated")
+  directMessageParticipations DirectMessageParticipant[]
 }
 
 /**
@@ -691,6 +693,11 @@ model Message {
   orderId            String?
   quote              QuoteRequest? @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   quoteId            String?
+  // PLH-3q: cross-role direct message thread. Exactly one of (orderId,
+  // quoteId, directThreadId) is set per row. Enforced at the API
+  // boundary, not via a CHECK constraint (Prisma cannot model the OR).
+  directThread       DirectMessageThread? @relation(fields: [directThreadId], references: [id], onDelete: Cascade)
+  directThreadId     String?
   sender             User?         @relation(fields: [senderId], references: [id], onDelete: SetNull)
   senderId           String?
   senderName         String
@@ -704,6 +711,36 @@ model Message {
 
   @@index([orderId])
   @@index([quoteId])
+  @@index([directThreadId])
+}
+
+/// PLH-3q: standalone direct-message thread, not tied to an Order or
+/// QuoteRequest. Any user can start one (subject to permission rules in
+/// src/lib/dm-permissions.ts). Threads support CC and group chat up to
+/// 10 participants total. Email semantics: added participants see
+/// messages from joinedAt forward, not prior history.
+model DirectMessageThread {
+  id            String                      @id @default(cuid())
+  subject       String
+  createdById   String
+  createdBy     User                        @relation("DirectMessageThreadsCreated", fields: [createdById], references: [id])
+  createdAt     DateTime                    @default(now())
+  lastMessageAt DateTime                    @default(now())
+  participants  DirectMessageParticipant[]
+  messages      Message[]
+}
+
+model DirectMessageParticipant {
+  id            String              @id @default(cuid())
+  thread        DirectMessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId      String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  joinedAt      DateTime            @default(now())
+  addedByUserId String
+
+  @@unique([threadId, userId])
+  @@index([userId, joinedAt])
 }
 
 // PLH-3p F2: file attachments on a Message. Files live in Vercel Blob;
