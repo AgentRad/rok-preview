@@ -103,6 +103,15 @@ enum BuyerOrgBillingMode {
   HYBRID
 }
 
+// PLH-3y-3: lifecycle of a claimed org email domain. PENDING is awaiting the
+// DNS TXT record; VERIFIED means the cron found the token; FAILED means the
+// record disappeared or never showed up within the verification window.
+enum BuyerOrgDomainStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
 enum MessageVisibility {
   PUBLIC
   SUPPLIER_INTERNAL
@@ -466,7 +475,34 @@ model BuyerOrg {
   members         BuyerOrgMember[]
   invites         BuyerOrgInvite[]
   addresses       BuyerOrgAddress[]
+  domains         BuyerOrgDomain[]
   activeForUsers  User[]           @relation("ActiveBuyerOrg")
+}
+
+// PLH-3y-3: a claimed email domain for an org. An admin claims a domain, the
+// system mints a verificationToken, the admin adds a DNS TXT record, and a
+// cron (verify-org-domains) confirms the record exists and flips status to
+// VERIFIED. Once verified AND autoJoinEnabled is true, a new user registering
+// with an email at this domain is auto-added as a member with autoJoinRole.
+// autoJoinEnabled defaults false: the admin must turn it on explicitly per
+// domain after verification (LOCKED DECISION). Free-email providers are
+// blocked from being claimed at the API layer.
+model BuyerOrgDomain {
+  id                String               @id @default(cuid())
+  buyerOrg          BuyerOrg             @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  buyerOrgId        String
+  domain            String               @unique
+  verificationToken String
+  status            BuyerOrgDomainStatus @default(PENDING)
+  verifiedAt        DateTime?
+  txtLastCheckedAt  DateTime?
+  autoJoinEnabled   Boolean              @default(false)
+  autoJoinRole      BuyerOrgRole         @default(VIEWER)
+  createdByUserId   String?
+  createdAt         DateTime             @default(now())
+
+  @@index([buyerOrgId])
+  @@index([status])
 }
 
 // PLH-3y-2: org-level shared shipping addresses. Any member can select one of
