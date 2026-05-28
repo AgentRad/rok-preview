@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export type ThreadVisibility =
@@ -11,6 +11,14 @@ export type ThreadVisibility =
 
 export type ThreadViewerRole = "admin" | "buyer" | "supplier" | "none";
 
+export type ThreadAttachment = {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  blobUrl: string;
+};
+
 export type ThreadMessage = {
   id: string;
   senderName: string;
@@ -18,6 +26,7 @@ export type ThreadMessage = {
   body: string;
   createdAt: string;
   visibility: ThreadVisibility;
+  attachments?: ThreadAttachment[];
 };
 
 type Props = {
@@ -28,6 +37,9 @@ type Props = {
   viewerRole?: ThreadViewerRole;
 };
 
+const MAX_ATTACHMENTS = 5;
+const MAX_BYTES = 5 * 1024 * 1024;
+
 function visibilityStyle(v: ThreadVisibility): React.CSSProperties {
   if (v === "SUPPLIER_INTERNAL") {
     return {
@@ -36,16 +48,10 @@ function visibilityStyle(v: ThreadVisibility): React.CSSProperties {
     };
   }
   if (v === "ADMIN_ONLY") {
-    return {
-      borderLeft: "3px solid #6b7280",
-      paddingLeft: 10,
-    };
+    return { borderLeft: "3px solid #6b7280", paddingLeft: 10 };
   }
   if (v === "BUYER_INTERNAL") {
-    return {
-      borderLeft: "3px solid #6b7280",
-      paddingLeft: 10,
-    };
+    return { borderLeft: "3px solid #6b7280", paddingLeft: 10 };
   }
   return {};
 }
@@ -55,6 +61,12 @@ function visibilityLabel(v: ThreadVisibility): string | null {
   if (v === "ADMIN_ONLY") return "Admin only";
   if (v === "BUYER_INTERNAL") return "Internal, buyer only";
   return null;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export default function MessageThread({
@@ -69,6 +81,8 @@ export default function MessageThread({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [visibility, setVisibility] = useState<ThreadVisibility>("PUBLIC");
+  const [pending, setPending] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const showSupplierToggle = viewerRole === "supplier" || viewerRole === "admin";
   const showAdminOption = viewerRole === "admin";
@@ -88,6 +102,33 @@ export default function MessageThread({
     }).catch(() => {});
   }, [orderId, quoteId, viewerRole]);
 
+  function onFilesPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const list = e.target.files;
+    if (!list) return;
+    const incoming = Array.from(list);
+    setError("");
+    setPending((prev) => {
+      const merged = [...prev];
+      for (const f of incoming) {
+        if (merged.length >= MAX_ATTACHMENTS) {
+          setError(`Max ${MAX_ATTACHMENTS} files per message.`);
+          break;
+        }
+        if (f.size > MAX_BYTES) {
+          setError(`${f.name}: too large (max 5 MB).`);
+          continue;
+        }
+        merged.push(f);
+      }
+      return merged;
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removePending(i: number) {
+    setPending((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!body.trim()) return;
@@ -104,8 +145,32 @@ export default function MessageThread({
         setError(data.error || "Could not send the message.");
         return;
       }
+      const newId: string | undefined = data?.message?.id;
+      if (newId && pending.length > 0) {
+        const failures: string[] = [];
+        for (const file of pending) {
+          const fd = new FormData();
+          fd.append("file", file);
+          try {
+            const up = await fetch(`/api/messages/${newId}/attachments`, {
+              method: "POST",
+              body: fd,
+            });
+            if (!up.ok) {
+              const ud = await up.json().catch(() => ({}));
+              failures.push(`${file.name}: ${ud.error || up.statusText}`);
+            }
+          } catch (err) {
+            failures.push(`${file.name}: ${(err as Error).message}`);
+          }
+        }
+        if (failures.length > 0) {
+          setError(`Some files did not upload: ${failures.join("; ")}`);
+        }
+      }
       setBody("");
       setVisibility("PUBLIC");
+      setPending([]);
       router.refresh();
     } finally {
       setBusy(false);
@@ -123,8 +188,13 @@ export default function MessageThread({
         <ul className="thread-list">
           {messages.map((m) => {
             const label = visibilityLabel(m.visibility);
+            const atts = m.attachments ?? [];
             return (
-              <li key={m.id} className="thread-message" style={visibilityStyle(m.visibility)}>
+              <li
+                key={m.id}
+                className="thread-message"
+                style={visibilityStyle(m.visibility)}
+              >
                 <div className="thread-meta">
                   <strong style={{ fontSize: 13.5 }}>{m.senderName}</strong>
                   <span
@@ -153,6 +223,43 @@ export default function MessageThread({
                   )}
                 </div>
                 <div className="thread-body">{m.body}</div>
+                {atts.length > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      marginTop: 8,
+                    }}
+                  >
+                    {atts.map((a) => (
+                      <a
+                        key={a.id}
+                        href={a.blobUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "4px 10px",
+                          borderRadius: 14,
+                          background: "#f3f1eb",
+                          color: "#1a1916",
+                          fontSize: 12.5,
+                          textDecoration: "none",
+                          border: "1px solid #e2dfd7",
+                        }}
+                      >
+                        <span aria-hidden>📎</span>
+                        <span>{a.fileName}</span>
+                        <span style={{ color: "#6f6d64" }}>
+                          {formatBytes(a.fileSize)}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                )}
               </li>
             );
           })}
@@ -168,6 +275,67 @@ export default function MessageThread({
             maxLength={4000}
             rows={4}
           />
+          <div style={{ marginTop: 8, fontSize: 13 }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".png,.jpg,.jpeg,.pdf,.docx,image/png,image/jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={onFilesPicked}
+              disabled={busy || pending.length >= MAX_ATTACHMENTS}
+            />
+            <span className="muted-text" style={{ fontSize: 12, marginLeft: 8 }}>
+              PNG, JPEG, PDF, DOCX. Up to {MAX_ATTACHMENTS} files, 5 MB each.
+            </span>
+          </div>
+          {pending.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                marginTop: 6,
+              }}
+            >
+              {pending.map((f, i) => (
+                <span
+                  key={`${f.name}-${i}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 10px",
+                    borderRadius: 14,
+                    background: "#f3f1eb",
+                    fontSize: 12.5,
+                    border: "1px solid #e2dfd7",
+                  }}
+                >
+                  <span aria-hidden>📎</span>
+                  <span>{f.name}</span>
+                  <span style={{ color: "#6f6d64" }}>
+                    {formatBytes(f.size)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removePending(i)}
+                    disabled={busy}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#6f6d64",
+                      cursor: "pointer",
+                      padding: 0,
+                      fontSize: 14,
+                    }}
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           {(showSupplierToggle || showAdminOption) && (
             <div
               className="row-gap"
@@ -195,8 +363,15 @@ export default function MessageThread({
           )}
           {error && <div className="alert alert-error">{error}</div>}
           <div className="row-gap" style={{ marginTop: 8 }}>
-            <button className="btn btn-primary btn-sm" disabled={busy || !body.trim()}>
-              {busy ? "Sending…" : "Send message"}
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={busy || !body.trim()}
+            >
+              {busy
+                ? pending.length > 0
+                  ? "Sending and uploading…"
+                  : "Sending…"
+                : "Send message"}
             </button>
           </div>
         </form>

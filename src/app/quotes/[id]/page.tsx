@@ -30,7 +30,10 @@ export default async function QuotePage({
     where: { id },
     include: {
       product: { include: { supplier: true } },
-      messages: { orderBy: { createdAt: "asc" } },
+      messages: {
+        orderBy: { createdAt: "asc" },
+        include: { attachments: { orderBy: { createdAt: "asc" } } },
+      },
     },
   });
   if (!quote) notFound();
@@ -217,6 +220,13 @@ export default async function QuotePage({
                   body: m.body,
                   createdAt: m.createdAt.toISOString(),
                   visibility: m.visibility,
+                  attachments: m.attachments.map((a) => ({
+                    id: a.id,
+                    fileName: a.fileName,
+                    fileSize: a.fileSize,
+                    mimeType: a.mimeType,
+                    blobUrl: a.blobUrl,
+                  })),
                 }))}
               />
             </div>

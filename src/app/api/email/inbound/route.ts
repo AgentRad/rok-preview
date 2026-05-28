@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import crypto from "node:crypto";
+import { put } from "@vercel/blob";
 import { prisma } from "@/lib/db";
 import {
   inboundProvider,
@@ -49,6 +50,202 @@ type ParsedInbound = {
   text: string;
   html: string;
 };
+
+// PLH-3p F2: Resend `email.received` payloads include an `attachments[]`
+// array of { filename, content_type, download_url }. Bytes are fetched
+// via a separate authenticated GET; this is the parsed shape we hand to
+// the upload helper.
+type InboundAttachmentRef = {
+  fileName: string;
+  contentType: string;
+  downloadUrl: string;
+};
+
+const INBOUND_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+const INBOUND_ATTACHMENT_MAX_PER_MESSAGE = 5;
+
+function detectAttachmentMimeFromBytes(
+  buf: Uint8Array,
+  fileName: string
+): string | null {
+  if (buf.length < 4) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  if (
+    buf[0] === 0x25 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x44 &&
+    buf[3] === 0x46
+  ) {
+    return "application/pdf";
+  }
+  if (
+    buf[0] === 0x50 &&
+    buf[1] === 0x4b &&
+    buf[2] === 0x03 &&
+    buf[3] === 0x04 &&
+    fileName.toLowerCase().endsWith(".docx")
+  ) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+  return null;
+}
+
+function parseResendAttachments(rawBody: string): InboundAttachmentRef[] {
+  try {
+    const parsed = JSON.parse(rawBody) as {
+      data?: { attachments?: unknown };
+      attachments?: unknown;
+    };
+    const list =
+      parsed?.data?.attachments ?? parsed?.attachments ?? [];
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") return null;
+        const e = entry as Record<string, unknown>;
+        const downloadUrl =
+          typeof e.download_url === "string" ? e.download_url : "";
+        const fileName =
+          typeof e.filename === "string" && e.filename
+            ? e.filename
+            : "attachment";
+        const contentType =
+          typeof e.content_type === "string" ? e.content_type : "";
+        if (!downloadUrl) return null;
+        return { downloadUrl, fileName, contentType };
+      })
+      .filter((v): v is InboundAttachmentRef => v !== null);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * PLH-3p F2: fetch each Resend inbound attachment via its signed
+ * `download_url`, magic-byte-check the bytes, upload to Vercel Blob, and
+ * create one MessageAttachment row per success. Failures (fetch error,
+ * oversized, unsupported MIME) are captured + audit-logged so the message
+ * itself still posts.
+ */
+async function persistInboundAttachments(args: {
+  messageId: string;
+  refs: InboundAttachmentRef[];
+  actor: { id: string; email: string };
+  targetType: "Order" | "QuoteRequest";
+  targetId: string;
+}): Promise<number> {
+  if (args.refs.length === 0) return 0;
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    await writeAuditLog({
+      actor: args.actor,
+      action: "INBOUND_ATTACHMENT_FAILED",
+      targetType: args.targetType,
+      targetId: args.targetId,
+      summary: `Inbound attachments skipped, Vercel Blob not configured (${args.refs.length} file(s))`,
+      metadata: { messageId: args.messageId, reason: "blob-not-configured" },
+    });
+    return 0;
+  }
+  const apiKey = process.env.RESEND_API_KEY;
+  let saved = 0;
+  const refs = args.refs.slice(0, INBOUND_ATTACHMENT_MAX_PER_MESSAGE);
+  for (const ref of refs) {
+    try {
+      const r = await fetch(ref.downloadUrl, {
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      });
+      if (!r.ok) {
+        throw new Error(`HTTP ${r.status}`);
+      }
+      const ab = await r.arrayBuffer();
+      const bytes = new Uint8Array(ab);
+      if (bytes.byteLength > INBOUND_ATTACHMENT_MAX_BYTES) {
+        await writeAuditLog({
+          actor: args.actor,
+          action: "INBOUND_ATTACHMENT_FAILED",
+          targetType: args.targetType,
+          targetId: args.targetId,
+          summary: `Inbound attachment ${ref.fileName} oversized (${bytes.byteLength} bytes)`,
+          metadata: {
+            messageId: args.messageId,
+            fileName: ref.fileName,
+            bytes: bytes.byteLength,
+            reason: "oversized",
+          },
+        });
+        continue;
+      }
+      const mime = detectAttachmentMimeFromBytes(
+        bytes.slice(0, 16),
+        ref.fileName
+      );
+      if (!mime) {
+        await writeAuditLog({
+          actor: args.actor,
+          action: "INBOUND_ATTACHMENT_FAILED",
+          targetType: args.targetType,
+          targetId: args.targetId,
+          summary: `Inbound attachment ${ref.fileName} unsupported MIME`,
+          metadata: {
+            messageId: args.messageId,
+            fileName: ref.fileName,
+            declaredType: ref.contentType,
+            reason: "unsupported-mime",
+          },
+        });
+        continue;
+      }
+      const suffix = crypto.randomBytes(8).toString("hex");
+      const safeName =
+        ref.fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) ||
+        "attachment";
+      const blobPath = `messages/${args.messageId}/${suffix}-${safeName}`;
+      const blob = await put(blobPath, Buffer.from(bytes), {
+        access: "public",
+        contentType: mime,
+      });
+      await prisma.messageAttachment.create({
+        data: {
+          messageId: args.messageId,
+          fileName: ref.fileName.slice(0, 200) || safeName,
+          fileSize: bytes.byteLength,
+          mimeType: mime,
+          blobUrl: blob.url,
+        },
+      });
+      saved++;
+    } catch (err) {
+      captureError(err, {
+        subsystem: "email",
+        op: "inbound-attachment-fetch",
+        messageId: args.messageId,
+        fileName: ref.fileName,
+      });
+      await writeAuditLog({
+        actor: args.actor,
+        action: "INBOUND_ATTACHMENT_FAILED",
+        targetType: args.targetType,
+        targetId: args.targetId,
+        summary: `Inbound attachment ${ref.fileName} fetch/upload failed`,
+        metadata: {
+          messageId: args.messageId,
+          fileName: ref.fileName,
+          error: String(err),
+          reason: "fetch-failed",
+        },
+      });
+    }
+  }
+  return saved;
+}
 
 /** Cap on what we'll save into the database, regardless of payload size. */
 const MAX_STORED_BODY = 4000;
@@ -501,6 +698,18 @@ async function handleInbound(req: Request) {
       }
       throw err;
     }
+    // PLH-3p F2: persist Resend inbound attachments (best-effort, never
+    // fails the message itself).
+    const orderAttachmentRefs =
+      provider === "resend" ? parseResendAttachments(rawBody) : [];
+    const orderAttachmentCount = await persistInboundAttachments({
+      messageId: createdId,
+      refs: orderAttachmentRefs,
+      actor: { id: user.id, email: user.email },
+      targetType: "Order",
+      targetId: order.id,
+    });
+
     const prevRow = await prisma.message.findFirst({
       where: { orderId: order.id, NOT: { id: createdId } },
       orderBy: { createdAt: "desc" },
@@ -570,6 +779,7 @@ async function handleInbound(req: Request) {
             threadId: order.id,
             recipientUserId: recipientUserIds.get(to) ?? null,
             prevMessage,
+            attachmentCount: orderAttachmentCount,
           });
         } catch (err) {
           captureError(err, { subsystem: "email", op: "inbound-fan-out", to });
@@ -662,6 +872,17 @@ async function handleInbound(req: Request) {
     }
     throw err;
   }
+  // PLH-3p F2: persist Resend inbound attachments on the quote thread.
+  const quoteAttachmentRefs =
+    provider === "resend" ? parseResendAttachments(rawBody) : [];
+  const quoteAttachmentCount = await persistInboundAttachments({
+    messageId: createdQuoteMsgId,
+    refs: quoteAttachmentRefs,
+    actor: { id: user.id, email: user.email },
+    targetType: "QuoteRequest",
+    targetId: quote.id,
+  });
+
   const prevQuoteRow = await prisma.message.findFirst({
     where: { quoteId: quote.id, NOT: { id: createdQuoteMsgId } },
     orderBy: { createdAt: "desc" },
@@ -725,6 +946,7 @@ async function handleInbound(req: Request) {
           threadId: quote.id,
           recipientUserId: recipientUserIds.get(to) ?? null,
           prevMessage: prevQuoteMessage,
+          attachmentCount: quoteAttachmentCount,
         });
       } catch (err) {
         captureError(err, { subsystem: "email", op: "inbound-fan-out", to });

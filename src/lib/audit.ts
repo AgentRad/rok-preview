@@ -115,6 +115,11 @@ export const AUDIT_ACTIONS = [
   "ADDRESS_SOFT_DELETED",
   // PLH-3j P4: tax-exempt cert expiry reminder cron sent an email.
   "TAX_EXEMPT_EXPIRY_NOTICE",
+  // PLH-3p F2: a file was attached to a thread Message (UI upload).
+  "MESSAGE_ATTACHMENT_UPLOADED",
+  // PLH-3p F2: an inbound Resend email attachment could not be fetched,
+  // was oversized, or had an unsupported MIME. The message still posts.
+  "INBOUND_ATTACHMENT_FAILED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

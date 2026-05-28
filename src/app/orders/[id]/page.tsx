@@ -43,7 +43,10 @@ export default async function OrderPage({
   const orderInclude = {
     items: { include: { product: { include: { supplier: true } } } },
     returns: { orderBy: { createdAt: "desc" as const } },
-    messages: { orderBy: { createdAt: "asc" as const } },
+    messages: {
+      orderBy: { createdAt: "asc" as const },
+      include: { attachments: { orderBy: { createdAt: "asc" as const } } },
+    },
     reviews: { select: { productId: true, rating: true, createdAt: true } },
     // PLH-3j P8: pull the most recent Refund row so the totals breakdown
     // can render "Refunded: $X.XX on <date>" below the Total line.
@@ -682,6 +685,13 @@ export default async function OrderPage({
                   body: m.body,
                   createdAt: m.createdAt.toISOString(),
                   visibility: m.visibility,
+                  attachments: m.attachments.map((a) => ({
+                    id: a.id,
+                    fileName: a.fileName,
+                    fileSize: a.fileSize,
+                    mimeType: a.mimeType,
+                    blobUrl: a.blobUrl,
+                  })),
                 }))}
               />
             </div>

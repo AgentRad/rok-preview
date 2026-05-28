@@ -733,6 +733,10 @@ export async function sendThreadMessage(args: {
     body: string;
     createdAt: Date;
   } | null;
+  // PLH-3p F2: count of files attached to this Message. We never include the
+  // bytes in the outbound email (size + spam reasons); instead a single
+  // muted line points the recipient back to the thread URL.
+  attachmentCount?: number;
 }): Promise<void> {
   if (args.recipientUserId) {
     const ok = await shouldSendToUser(args.recipientUserId, "order");
@@ -779,10 +783,22 @@ export async function sendThreadMessage(args: {
       )
     : `mailto:unsubscribe@partsport.agentgaming.gg?subject=unsubscribe%20${encodeURIComponent(args.to)}`;
 
+  const attachmentCount = args.attachmentCount ?? 0;
+  const attachmentNoun = attachmentCount === 1 ? "attachment" : "attachments";
+  const attachmentHtml =
+    attachmentCount > 0
+      ? `<p style="margin:16px 0 0;font-size:13px;color:#6f6d64;">📎 ${attachmentCount} ${attachmentNoun} - <a href="${args.threadUrl}" style="color:#6f6d64;">view in PartsPort</a></p>`
+      : "";
+  const attachmentText =
+    attachmentCount > 0
+      ? `\n\n📎 ${attachmentCount} ${attachmentNoun} - view in PartsPort: ${args.threadUrl}`
+      : "";
+
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:20px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#1a1916;">
     ${paragraphs(args.body)}
+    ${attachmentHtml}
     ${quotedHtml}
     <p style="margin:28px 0 4px;font-size:12px;color:#9b988d;">
       <a href="${args.threadUrl}" style="color:#9b988d;text-decoration:none;">Open thread on PartsPort &rarr;</a>
@@ -793,7 +809,7 @@ export async function sendThreadMessage(args: {
   </body>
 </html>`;
 
-  const text = `${args.body}${quotedText}\n\nOpen thread: ${args.threadUrl}`;
+  const text = `${args.body}${attachmentText}${quotedText}\n\nOpen thread: ${args.threadUrl}`;
 
   await send({
     to: args.to,

@@ -700,9 +700,27 @@ model Message {
   createdAt          DateTime      @default(now())
   inboundFingerprint String?       @unique
   visibility         MessageVisibility @default(PUBLIC)
+  attachments        MessageAttachment[]
 
   @@index([orderId])
   @@index([quoteId])
+}
+
+// PLH-3p F2: file attachments on a Message. Files live in Vercel Blob;
+// the row stores the public URL plus size/mime so the UI renders chips
+// without re-fetching the blob. Cap is 5 per message, 5 MB each, types
+// limited to PNG/JPEG/PDF/DOCX (magic-byte checked at upload time).
+model MessageAttachment {
+  id        String   @id @default(cuid())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId String
+  fileName  String
+  fileSize  Int
+  mimeType  String
+  blobUrl   String
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
 }
 
 // PLH-3p F4: per-user "last read" pointer for a message thread. One row per

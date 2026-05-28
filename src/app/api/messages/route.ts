@@ -198,6 +198,14 @@ export async function POST(req: Request) {
     : null;
 
   after(async () => {
+    // PLH-3p F2: attachments are uploaded in a follow-up call from the
+    // client AFTER POST /api/messages returns. Count them here inside the
+    // after() block, which runs after the HTTP response, so the outbound
+    // email's "N attachments" line is usually accurate. If the client is
+    // still uploading when we send, the link in the email still works.
+    const attachmentCount = await prisma.messageAttachment.count({
+      where: { messageId: created.id },
+    });
     for (const to of recipients) {
       try {
         await sendThreadMessage({
@@ -210,6 +218,7 @@ export async function POST(req: Request) {
           threadId,
           recipientUserId: recipientUserIds.get(to) ?? null,
           prevMessage,
+          attachmentCount,
         });
       } catch (err) {
         captureError(err, { subsystem: "email", op: "thread-message", to });
@@ -217,5 +226,10 @@ export async function POST(req: Request) {
     }
   });
 
-  return NextResponse.json({ ok: true, message: created });
+  // PLH-3p F2: hand back an empty attachments array so the client knows it
+  // can immediately POST follow-up uploads to /api/messages/[id]/attachments.
+  return NextResponse.json({
+    ok: true,
+    message: { ...created, attachments: [] },
+  });
 }
