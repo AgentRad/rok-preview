@@ -124,6 +124,11 @@ export const AUDIT_ACTIONS = [
   "DM_THREAD_CREATED",
   // PLH-3q: one or more participants added to a direct message thread.
   "DM_PARTICIPANT_ADDED",
+  // PLH-3s: targeted AI actions (draft invoice from an order, summarize the
+  // calling supplier's open RFQs, draft a supplier reply to an RFQ).
+  "AI_DRAFT_INVOICE",
+  "AI_SUMMARIZE_RFQS",
+  "AI_DRAFT_RFQ_REPLY",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

@@ -100,6 +100,11 @@ async function loadMessage(messageId: string) {
         },
       },
       quote: { include: { product: { select: { supplierId: true } } } },
+      directThread: {
+        include: {
+          participants: { select: { userId: true } },
+        },
+      },
     },
   });
 }
@@ -147,6 +152,18 @@ async function authorize(
       return { ok: false, status: 403, error: "Not authorized." };
     }
     viewerRole = isAdmin ? "admin" : isQuoteSupplier ? "supplier" : "buyer";
+  } else if (message.directThreadId && message.directThread) {
+    const onThread = message.directThread.participants.some(
+      (p) => p.userId === user.id
+    );
+    if (!onThread && !isAdmin) {
+      return { ok: false, status: 403, error: "Not authorized." };
+    }
+    viewerRole = isAdmin
+      ? "admin"
+      : user.role === "SUPPLIER"
+        ? "supplier"
+        : "buyer";
   } else {
     return { ok: false, status: 404, error: "Message thread not found." };
   }

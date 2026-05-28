@@ -17,6 +17,7 @@ import { trackingLink } from "@/lib/tracking";
 import { isPaymentsConfigured, reconcileOrderFromStripe } from "@/lib/payments";
 import { verifyOrderViewToken } from "@/lib/order-link";
 import WriteReview from "@/components/WriteReview";
+import DraftInvoiceWithAI from "@/components/DraftInvoiceWithAI";
 
 function rateLabelForOrder(order: { feeRateBps: number }): string {
   return `${(order.feeRateBps / 100).toFixed(order.feeRateBps % 100 === 0 ? 0 : 1)}%`;
@@ -92,8 +93,11 @@ export default async function OrderPage({
   const isBuyer = !!viewer && !!order.buyerId && viewer.id === order.buyerId;
   const isAdmin = viewer?.role === "ADMIN";
   let isOrderSupplier = false;
+  let canDraftInvoice = false;
   if (viewer?.role === "SUPPLIER") {
-    const { userHasAccessToSupplier } = await import("@/lib/supplier-access");
+    const { userHasAccessToSupplier, canSendMessages } = await import(
+      "@/lib/supplier-access"
+    );
     const supplierIds = Array.from(
       new Set(order.items.map((it) => it.product.supplierId))
     );
@@ -101,7 +105,9 @@ export default async function OrderPage({
       supplierIds.map((id) => userHasAccessToSupplier(viewer.id, id))
     );
     isOrderSupplier = checks.some((c) => c.ok);
+    canDraftInvoice = checks.some((c) => c.ok && canSendMessages(c.role));
   }
+  if (isAdmin) canDraftInvoice = true;
   const guestToken = typeof sp.t === "string" ? sp.t : "";
   const isGuestViaToken = guestToken
     ? verifyOrderViewToken(order.id, order.buyerEmail, guestToken)
@@ -657,6 +663,9 @@ export default async function OrderPage({
             </Link>
             {paid && isBuyer && <ReorderButton orderId={order.id} />}
             {cancellable && <CancelOrderButton orderId={order.id} />}
+            {canDraftInvoice && process.env.ANTHROPIC_API_KEY && (
+              <DraftInvoiceWithAI orderId={order.id} />
+            )}
           </div>
 
           {order.status === "CANCELLED" && (

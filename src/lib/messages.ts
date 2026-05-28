@@ -6,11 +6,15 @@ import {
   type ViewerRole,
 } from "@/lib/message-visibility";
 
-export type ThreadKey = `order:${string}` | `quote:${string}`;
+export type ThreadKey =
+  | `order:${string}`
+  | `quote:${string}`
+  | `direct:${string}`;
 
 export type UnreadCounts = {
   orderUnread: number;
   quoteUnread: number;
+  directUnread: number;
   total: number;
   byThread: Map<ThreadKey, number>;
 };
@@ -18,6 +22,7 @@ export type UnreadCounts = {
 const EMPTY: UnreadCounts = {
   orderUnread: 0,
   quoteUnread: 0,
+  directUnread: 0,
   total: 0,
   byThread: new Map(),
 };
@@ -60,6 +65,8 @@ export async function getUnreadCounts(
     visibility: { in: allowed },
   };
 
+  let skipOrderQuote = false;
+
   if (viewer !== "admin") {
     const supplierIds: string[] = [];
     if (viewer === "supplier") {
@@ -68,7 +75,6 @@ export async function getUnreadCounts(
         select: { supplierId: true },
       });
       for (const m of memberships) supplierIds.push(m.supplierId);
-      // Legacy single-owner supplier rows.
       const legacy = await prisma.supplier.findMany({
         where: { userId },
         select: { id: true },
@@ -83,25 +89,59 @@ export async function getUnreadCounts(
       threadOr.push({ order: { buyerId: userId } });
       threadOr.push({ quote: { buyerId: userId } });
     } else if (viewer === "supplier") {
-      if (supplierIds.length === 0) return EMPTY;
-      threadOr.push({
-        order: {
-          items: { some: { product: { supplierId: { in: supplierIds } } } },
-        },
-      });
-      threadOr.push({
-        quote: { product: { supplierId: { in: supplierIds } } },
-      });
+      if (supplierIds.length === 0) {
+        skipOrderQuote = true;
+      } else {
+        threadOr.push({
+          order: {
+            items: { some: { product: { supplierId: { in: supplierIds } } } },
+          },
+        });
+        threadOr.push({
+          quote: { product: { supplierId: { in: supplierIds } } },
+        });
+      }
     }
-    if (threadOr.length === 0) return EMPTY;
-    messageWhere.OR = threadOr;
+    if (!skipOrderQuote && threadOr.length === 0) skipOrderQuote = true;
+    if (!skipOrderQuote) messageWhere.OR = threadOr;
   }
 
-  const [messages, lastReads] = await Promise.all([
-    prisma.message.findMany({
-      where: messageWhere,
-      select: { orderId: true, quoteId: true, createdAt: true },
-    }),
+  // PLH-3q P4: direct-message participations the viewer is on. Each row
+  // bounds the unread query (createdAt >= joinedAt) since participants
+  // only see messages from when they joined forward.
+  const dmParticipations = await prisma.directMessageParticipant.findMany({
+    where: { userId },
+    select: { threadId: true, joinedAt: true },
+  });
+
+  const [messages, dmMessages, lastReads] = await Promise.all([
+    skipOrderQuote
+      ? Promise.resolve(
+          [] as {
+            orderId: string | null;
+            quoteId: string | null;
+            createdAt: Date;
+          }[]
+        )
+      : prisma.message.findMany({
+          where: messageWhere,
+          select: { orderId: true, quoteId: true, createdAt: true },
+        }),
+    dmParticipations.length === 0
+      ? Promise.resolve(
+          [] as { directThreadId: string | null; createdAt: Date }[]
+        )
+      : prisma.message.findMany({
+          where: {
+            senderId: { not: userId },
+            visibility: "PUBLIC",
+            OR: dmParticipations.map((p) => ({
+              directThreadId: p.threadId,
+              createdAt: { gte: p.joinedAt },
+            })),
+          },
+          select: { directThreadId: true, createdAt: true },
+        }),
     prisma.threadLastRead.findMany({
       where: { userId },
       select: { threadKind: true, threadId: true, lastReadAt: true },
@@ -129,10 +169,21 @@ export async function getUnreadCounts(
     else quoteUnread++;
   }
 
+  let directUnread = 0;
+  for (const m of dmMessages) {
+    if (!m.directThreadId) continue;
+    const key = `direct:${m.directThreadId}` as ThreadKey;
+    const last = lastReadByKey.get(key);
+    if (last && m.createdAt <= last) continue;
+    byThread.set(key, (byThread.get(key) ?? 0) + 1);
+    directUnread++;
+  }
+
   return {
     orderUnread,
     quoteUnread,
-    total: orderUnread + quoteUnread,
+    directUnread,
+    total: orderUnread + quoteUnread + directUnread,
     byThread,
   };
 }
