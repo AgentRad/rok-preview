@@ -2897,3 +2897,29 @@ tampered-assertion reject, approval pause/approve, net-30 ACH + dunning + auto-s
 demo-pay-503-in-prod, iPhone Safari) which catch the env/webhook/mobile class code
 review cannot; (3) entity/bank -> Stripe live keys, Sentry DSN, demo-data wipe,
 attorney glance at legal pages.
+
+## CI automated test layer (2026-05-29). The post-build QA protocol's "automated tests" step, in place and green.
+
+`.github/workflows/e2e.yml` runs on every push + PR, two jobs:
+- **unit**: the pure logic/guard suites via `node --experimental-strip-types --test`
+  (route-guards 93, net-terms-tax 14, unsubscribe-token 16, strip-quoted-reply 10 =
+  133), on Node 24.
+- **e2e**: spins an ephemeral Postgres 16 service, runs the real build
+  (`prisma migrate deploy` + seed + `next build`), boots `next start`, and drives
+  headless Chromium (the already-installed `playwright` core package + `node --test`,
+  no `@playwright/test` dep) through `e2e/smoke.test.mjs` (14 tests): homepage +
+  categories, catalog lists seeded products, product detail, login + register forms,
+  marketing pages, buyer/supplier/admin login round-trips reaching their gated
+  dashboards + sub-pages, wrong-password grants no session, search results, all 8
+  legal pages, 404, and add-to-cart -> cart -> guest checkout (localStorage-verified).
+- The app boots with payments/SSO/email UNCONFIGURED (demo mode), so no real
+  Stripe/IdP/inbox is needed; those live paths stay as the owner smoke tests in
+  docs/OWNER_SMOKE_TESTS.md. The RFQ/quote path is not covered (no seeded
+  quoteOnly product); it is an owner smoke test.
+- One narrow, clearly-commented test seam in `src/lib/auth.ts`: `ALLOW_INSECURE_COOKIES=1`
+  relaxes the session-cookie Secure flag ONLY for the CI e2e job (serves the prod
+  build over http://localhost). It requires NODE_ENV=production to matter and Vercel
+  never sets it, so real production cookies are always Secure.
+- Status: unit + e2e both GREEN. This is the regression net for every future deploy.
+
+## STATE OF PLAY (2026-05-29). Platform is feature-complete, security-hardened (audit + 2 re-audits + convergence, all clean), net-terms tax shipped, and covered by a green unit + real-app-e2e CI suite. All remaining work to launch is OWNER-SIDE: confirm the deploy/migration, run the 5 live smoke tests (docs/OWNER_SMOKE_TESTS.md), entity -> bank -> Stripe live keys, Sentry DSN, demo-data wipe, attorney review, real catalog import (UltraTech), and finally the THRADD rebrand (name + logo, deferred by Conrad to last). No autonomous code/test work remains open.
