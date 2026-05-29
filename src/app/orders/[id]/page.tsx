@@ -19,6 +19,7 @@ import { verifyOrderViewToken } from "@/lib/order-link";
 import WriteReview from "@/components/WriteReview";
 import DraftInvoiceWithAI from "@/components/DraftInvoiceWithAI";
 import AdminEditPurchaseOrder from "@/components/AdminEditPurchaseOrder";
+import AdminRecordPayment from "@/components/AdminRecordPayment";
 import ApprovalPokeButton from "@/components/ApprovalPokeButton";
 import ApprovalBypassButton from "@/components/ApprovalBypassButton";
 
@@ -61,6 +62,16 @@ export default async function OrderPage({
     },
     supplierSlots: {
       include: { supplier: { select: { id: true, name: true, logoUrl: true } } },
+    },
+    // PLH-3z-2: pull the invoice so the admin manual mark-paid control can
+    // render for a still-DUE net-terms invoice.
+    invoice: {
+      select: {
+        id: true,
+        status: true,
+        totalCents: true,
+        partialPaidCents: true,
+      },
     },
     approvals: {
       orderBy: { chainOrder: "asc" as const },
@@ -490,6 +501,21 @@ export default async function OrderPage({
                     initial={order.purchaseOrderNumber || ""}
                   />
                 )}
+                {isAdmin &&
+                  order.invoice &&
+                  (order.invoice.status === "DUE" ||
+                    order.invoice.status === "PAST_DUE") && (
+                    <AdminRecordPayment
+                      invoiceId={order.invoice.id}
+                      balanceDueDollars={(
+                        Math.max(
+                          0,
+                          order.invoice.totalCents -
+                            order.invoice.partialPaidCents
+                        ) / 100
+                      ).toFixed(2)}
+                    />
+                  )}
               </div>
             </div>
 
