@@ -2307,3 +2307,78 @@ the net-30 epic. 4 commits, each `npx next build` clean, zero em dashes.**
   refund / transfer events). Then place a net-terms order: a Stripe Invoice is
   created and emailed; paying it via the hosted ACH page fires `invoice.paid`,
   which settles the local invoice + advances the order.
+
+**PLH-3z-3 (2026-05-28). Credit application + A/R dashboard. Round 3 of 4 of
+the net-30 epic. 4 feature commits + this doc, each `npx next build` clean,
+zero em dashes.**
+- **Schema (bf3cc12).** `CreditApplication` model (reference CA-XXXXXX unique,
+  nullable orgId, submittedByUserId, legalName/dba/ein/yearsInBusiness,
+  expectedMonthlyCents, requestedLimitCents, requestedTerms, billingAddress,
+  apContact name/email/phone, references Json, w9BlobUrl, dunsNumber, notes,
+  status PENDING/APPROVED/REJECTED, reviewedBy/reviewedAt/reviewerNote,
+  approvedLimitCents/approvedTerms). `BuyerOrg.creditApplications` relation.
+  Migration `20260711000000_add_credit_application`. New audit actions
+  `CREDIT_APP_SUBMITTED`, `CREDIT_APP_APPROVED`, `CREDIT_APP_REJECTED`. New
+  `AuditTargetType` value `CreditApplication`.
+- **Buyer form (11b2e50).** `/credit-application` page (org ADMIN only;
+  redirects suppliers/OEMs, gates non-admins and no-org users with an
+  explanatory notice). When the org already has non-PREPAID terms, shows the
+  approved banner; when a PENDING application exists, shows its status; a
+  prior REJECTED application shows the note + allows a fresh submit.
+  `CreditApplicationForm` client collects all fields + a repeatable trade-
+  reference list (up to 10). POST `/api/credit-application` validates
+  (required legal name/EIN/billing/AP contact, valid email, NET_* terms,
+  positive limit, non-negative monthly), rejects a second open application per
+  org (409), creates the PENDING row with a `CA-` reference, audits
+  `CREDIT_APP_SUBMITTED`. A "Net terms" link was added to the org-home admin
+  nav.
+- **Admin review (3ef4b07).** `/admin/credit-applications` lists PENDING apps
+  as full-detail review cards + a reviewed-history table.
+  `CreditApplicationReview` client shows every field + references + W-9 link
+  and an approve form (admin-adjustable approved terms + limit, defaulted to
+  requested) and a reject form (required note). POST
+  `/api/admin/credit-applications/[id]`: approve runs a `$transaction` that
+  re-reads the app is still PENDING (409 on a concurrent second decision),
+  sets the org's `paymentTerms` + `creditLimitCents` from the approved values,
+  flips the app APPROVED, stamps reviewer fields; reject flips REJECTED with
+  the note. Both audit and email the AP contact via new
+  `sendCreditApplicationApproved` / `sendCreditApplicationRejected`. Admin nav
+  gains "Credit apps" + "A/R" links.
+- **A/R dashboard (6d011d5).** `lib/accounts-receivable.ts` `loadArDashboard`
+  computes, over unpaid DUE/PAST_DUE invoices: total outstanding, total
+  overdue, count of orgs with A/R, avg days-to-pay over the last 90 days
+  (paidAt - issuedAt mean), total fronted-to-suppliers (disbursed PAID payouts
+  on orders whose invoice is still unpaid), aging buckets (current / 1-30 /
+  31-60 / 61-90 / 90+ from invoiceDueDate, falling back to order.invoiceDueDate),
+  a per-org rollup (terms, limit, outstanding, overdue, available credit,
+  oldest age, status) sorted outstanding-desc, and per-supplier exposure
+  (slot subtotal+freight on unpaid invoices' orders). `/admin/accounts-
+  receivable` renders the metrics, a stacked horizontal aging bar with legend,
+  the org rollup table with drilldown links, the supplier-exposure table, and
+  Outstanding/Payments CSV buttons. `/admin/accounts-receivable/[orgId]`
+  drilldown: header card (terms, limit, outstanding, available, status) +
+  outstanding invoices + paid invoices (last 12 months with days-to-pay) +
+  members + org activity (AuditLog filtered to the org). CSV exports
+  `/api/admin/ar/outstanding.csv` (every unpaid invoice with org, amounts,
+  dates, contact) and `/api/admin/ar/payments.csv` (every PaymentRecord, with
+  optional `?from=&to=` receivedAt range), both csvSafeCell-guarded per
+  PLH-2 4a.
+- **Locked decisions honored:** credit limit is admin-set on approval (no
+  D-U-N-S auto-lookup, no auto-approve); an approved application flips the org
+  to the requested (admin-adjustable) net terms + credit limit via the
+  BuyerOrg.paymentTerms/creditLimitCents fields from 3z-1; aging is computed
+  from invoiceDueDate on unpaid DUE + PAST_DUE invoices.
+- **Deviations.** (1) Org "status" reads ACTIVE everywhere on the A/R surface:
+  BuyerOrg has no status column until the 3z-4 dunning/auto-suspend round, so
+  the spec's ACTIVE/SUSPENDED column is ACTIVE-only for now. (2) The drilldown
+  renders the spec's four "tabs" (outstanding / paid / members / activity) as
+  stacked sections rather than interactive tabs. (3) The buyer flow only
+  supports applications tied to the submitter's active org (orgId always set);
+  the spec's prospect path (orgId null -> upsert BuyerOrg + add submitter as
+  member on approval) is not exercised, and approve rejects a null-org app
+  with a 400. The submitter is already an org ADMIN, so no member-add is
+  needed. (4) The two CSV routes audit via the existing
+  `BUYER_ORG_ORDERS_EXPORTED` action (targetType Invoice) rather than a new
+  A/R-specific action.
+- Deferred to 3z-4 (final round): dunning cadence + emails, auto-suspend past
+  due, BuyerOrg.status column, payout hold-vs-pay policy.
