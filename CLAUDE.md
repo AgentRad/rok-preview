@@ -2645,9 +2645,34 @@ serially: money -> auth/SSO -> acting-as -> web LOW -> final verification.
     (first login / pre-migration) is never a replay.
   - 9 new test cases (now 60). Build clean.
 
-QA2 remaining (serial): acting-as (admin impersonation bank-info edits not
-flagged in the audit trail; unsigned acting-as cookie; unsalted last4 hash),
-web LOW (unauthenticated product-image-list GET; never-expiring unsubscribe
-token), then a final verification pass against the documented smoke tests.
+- **QA2-fix3 (`9309491`).** Admin acting-as / impersonation hardening.
+  - **MEDIUM impersonated money-mutations not flagged.** Admin edits to a
+    supplier's payout bank info / Connect onboarding link while acting-as were
+    audited but indistinguishable from supplier self-edits. Fix:
+    `SUPPLIER_BANK_INFO_UPDATED` metadata now carries `actingAsAdmin` +
+    `impersonatedSupplierId` when `ctx.actingAsAdmin`. stripe-onboard wrote NO
+    audit row before; added `SUPPLIER_CONNECT_ONBOARD_LINK_CREATED` (new action
+    in audit.ts) with the same markers. Scoped to the two payout-destination
+    levers.
+  - **LOW unsigned acting-as cookie.** `pp_acting_as` stored a raw supplierId,
+    not bound to the admin who set it. Now signed: value = `${supplierId}.${sig}`,
+    sig = HMAC-SHA256(`${supplierId}.${adminUserId}`) truncated to 32 hex (the
+    order-link/approval-token pattern), secret `ACTING_AS_SECRET || SESSION_SECRET`.
+    `getActingAsSupplier(adminUserId)` recomputes with the CURRENT session admin
+    id and constant-time compares, returning the supplierId only on match, else
+    no impersonation. Both supplier-access call sites pass `user.id`. Legacy raw
+    cookies fail closed (admin re-clicks acting-as).
+  - **LOW brute-forceable last4 hash.** `sha256(last4).slice(0,8)` (10k-value
+    space, trivially reversed) replaced with `hmacLast4(last4, secret)` 8-hex
+    slice. Change-detection (prev-vs-new mismatch) preserved; digits no longer
+    recoverable without the secret.
+  - 13 new test cases (now 73): cookie verifies for the right admin, rejected
+    for a different admin / tampered supplierId / tampered sig / legacy unsigned
+    / wrong secret; hmacLast4 stable per input, differs across inputs/secrets.
+    Build clean. No schema change.
+
+QA2 remaining (serial): web LOW (unauthenticated product-image-list GET;
+never-expiring unsubscribe token), then a final verification pass against the
+documented smoke tests.
 
 MIGRATIONS pending deploy from this batch: `20260713000000_add_last_totp_step`.
