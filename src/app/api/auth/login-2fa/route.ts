@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/db";
 import { createSession, getTicketSecret } from "@/lib/auth";
-import { hashBackupCode, verifyTotp } from "@/lib/totp";
+import { hashBackupCode, verifyTotpStep } from "@/lib/totp";
+import { totpStepIsReplay } from "@/lib/route-guards";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -70,7 +71,30 @@ export async function POST(req: Request) {
     );
   }
 
-  if (verifyTotp(user.totpSecret, code)) {
+  // BUG 3 (MEDIUM): anti-replay. verifyTotpStep returns the absolute 30-second
+  // step the code matched. With window:1 a code stays valid for ~90s, so
+  // without tracking the last consumed step the SAME code could be replayed to
+  // mint a second session. Persist the accepted step and reject any code whose
+  // step is <= the last one. Enforced on the LOGIN path only: this is where a
+  // session is minted; 2fa/verify (enroll) is a one-time setup confirm that
+  // mints no session, and tracking there would risk locking a user out of
+  // enrolling. lastTotpStep is null for pre-migration / first-time users, which
+  // totpStepIsReplay treats as not-a-replay.
+  const step = verifyTotpStep(user.totpSecret, code);
+  if (step !== null) {
+    if (totpStepIsReplay(step, user.lastTotpStep)) {
+      return NextResponse.json(
+        {
+          error:
+            "That code was already used. Wait for your authenticator to show the next code.",
+        },
+        { status: 401 }
+      );
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastTotpStep: step },
+    });
     await createSession(user.id);
     return NextResponse.json({ ok: true, role: user.role });
   }

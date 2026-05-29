@@ -185,6 +185,10 @@ model User {
   // generated when 2FA is enabled (or regenerated); each is removed on
   // use at login.
   backupCodesHashed          String[]                  @default([])
+  // QA2 auth/SSO: last consumed TOTP 30-second step (counter), persisted on a
+  // successful 2FA login so the same code cannot be replayed within the
+  // window:1 (~90s) tolerance. Null until the user's first 2FA login.
+  lastTotpStep               Int?
   // PLH-3w P2: admin "2FA recovery in progress" override. When set in the
   // future, the per-role 2FA interstitial is suppressed for this user so
   // they can sign in and re-enroll. Expires after 1 hour.

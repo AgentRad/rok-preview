@@ -29,22 +29,36 @@ export function totpUrl(args: {
   return totp.toString();
 }
 
-export function verifyTotp(secret: string, code: string): boolean {
+const TOTP_PERIOD_SEC = 30;
+
+/**
+ * Verify a code and return the absolute 30-second STEP (counter) it matched, or
+ * null if it does not match. `otpauth`'s validate returns the signed delta of
+ * the matching window relative to now; the consumed step is the current counter
+ * plus that delta. The login path persists this step to reject replays of the
+ * same code within the ~90s window:1 tolerance.
+ */
+export function verifyTotpStep(secret: string, code: string): number | null {
   const normalized = code.replace(/\s+/g, "");
-  if (!/^\d{6}$/.test(normalized)) return false;
+  if (!/^\d{6}$/.test(normalized)) return null;
   try {
     const totp = new TOTP({
       issuer: ISSUER,
       algorithm: "SHA1",
       digits: 6,
-      period: 30,
+      period: TOTP_PERIOD_SEC,
       secret: Secret.fromBase32(secret),
     });
     const delta = totp.validate({ token: normalized, window: 1 });
-    return delta !== null;
+    if (delta === null) return null;
+    return Math.floor(Date.now() / 1000 / TOTP_PERIOD_SEC) + delta;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function verifyTotp(secret: string, code: string): boolean {
+  return verifyTotpStep(secret, code) !== null;
 }
 
 /** Returns 8 backup codes, each 10 characters (5+5 with dash). */

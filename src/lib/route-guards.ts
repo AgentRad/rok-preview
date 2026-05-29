@@ -233,6 +233,38 @@ export function refundWithinCap(
   );
 }
 
+// QA2 auth/SSO BUG 1. OIDC login-CSRF binding. The signed `state` only proves
+// the IdP round-trip is intact; it does NOT prove THIS browser started the
+// flow. /api/auth/sso/initiate now drops a short-lived HttpOnly cookie holding
+// the state nonce, and the OIDC callback requires that cookie to be present and
+// to equal the nonce inside the signed state. A missing or mismatched cookie
+// means the callback URL was fed to a victim's browser (classic OIDC login CSRF
+// / session fixation) and no session is minted. Both must be non-empty and
+// equal; the nonce already rides inside a signed JWT so a plain compare is
+// sufficient (this is a presence/binding check, not a secrecy check).
+export function stateNonceMatches(
+  cookieNonce: string | null | undefined,
+  stateNonce: string | null | undefined
+): boolean {
+  if (!cookieNonce || !stateNonce) return false;
+  return cookieNonce === stateNonce;
+}
+
+// QA2 auth/SSO BUG 3. TOTP replay within the validation window. verifyTotp uses
+// window:1, so a single 6-digit code is valid for ~90s (current step +/- 1).
+// With no record of the last consumed step the same code could be replayed to
+// mint a second session. The login path persists the last accepted 30-second
+// step on the User and rejects any candidate step at or below it. A null
+// lastStep (never logged in with 2FA before, or pre-migration) is never a
+// replay. Pure so it is unit-testable without otpauth or a DB.
+export function totpStepIsReplay(
+  candidateStep: number,
+  lastStep: number | null | undefined
+): boolean {
+  if (lastStep === null || lastStep === undefined) return false;
+  return candidateStep <= lastStep;
+}
+
 // QA2 BUG 3. Stripe transfer idempotency key. Each LOGICAL transfer for a
 // supplier+order must own a distinct key so Stripe does not return a cached
 // earlier transfer in place of a new one. The original payout and the

@@ -19,6 +19,8 @@ import {
   refundRemainingCents,
   refundWithinCap,
   buildTransferIdempotencyKey,
+  stateNonceMatches,
+  totpStepIsReplay,
 } from "../src/lib/route-guards.ts";
 
 const OWNER = { id: "u_owner", role: "BUYER", status: "ACTIVE" };
@@ -452,4 +454,48 @@ test("transfer key: differs per supplier and per order", () => {
     buildTransferIdempotencyKey("payout", "sup_1", "ord_1"),
     buildTransferIdempotencyKey("payout", "sup_1", "ord_2")
   );
+});
+
+// ---- QA2 auth/SSO BUG 1: OIDC state cookie binding ----
+
+test("oidc binding: matching non-empty cookie + state nonce passes", () => {
+  assert.equal(stateNonceMatches("abc123", "abc123"), true);
+});
+
+test("oidc binding: mismatched nonce is rejected (login CSRF)", () => {
+  assert.equal(stateNonceMatches("attacker", "victim"), false);
+});
+
+test("oidc binding: missing cookie is rejected", () => {
+  assert.equal(stateNonceMatches("", "abc123"), false);
+  assert.equal(stateNonceMatches(null, "abc123"), false);
+  assert.equal(stateNonceMatches(undefined, "abc123"), false);
+});
+
+test("oidc binding: missing state nonce is rejected", () => {
+  assert.equal(stateNonceMatches("abc123", ""), false);
+  assert.equal(stateNonceMatches("abc123", null), false);
+});
+
+test("oidc binding: both empty is rejected (no accidental pass)", () => {
+  assert.equal(stateNonceMatches("", ""), false);
+});
+
+// ---- QA2 auth/SSO BUG 3: TOTP replay within the validation window ----
+
+test("totp replay: equal step is a replay (reject)", () => {
+  assert.equal(totpStepIsReplay(100, 100), true);
+});
+
+test("totp replay: older step is a replay (reject)", () => {
+  assert.equal(totpStepIsReplay(99, 100), true);
+});
+
+test("totp replay: newer step is not a replay (accept)", () => {
+  assert.equal(totpStepIsReplay(101, 100), false);
+});
+
+test("totp replay: null lastStep (first 2FA login / pre-migration) is never a replay", () => {
+  assert.equal(totpStepIsReplay(100, null), false);
+  assert.equal(totpStepIsReplay(100, undefined), false);
 });

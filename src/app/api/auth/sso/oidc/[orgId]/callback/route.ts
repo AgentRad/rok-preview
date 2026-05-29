@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
   pickRole,
   provisionResolvedSsoUser,
@@ -6,7 +7,12 @@ import {
   resolveSsoConfigByOrgId,
   ssoSessionMaxAgeSec,
 } from "@/lib/sso";
-import { exchangeOidcCode, verifyOidcState } from "@/lib/oidc";
+import {
+  exchangeOidcCode,
+  verifyOidcState,
+  OIDC_STATE_COOKIE,
+} from "@/lib/oidc";
+import { stateNonceMatches } from "@/lib/route-guards";
 import { emailDomain } from "@/lib/free-email-domains";
 import { createSession } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
@@ -15,10 +21,25 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-function fail(reason: string) {
-  return NextResponse.redirect(siteUrl(`/login?sso_error=${reason}`), {
-    status: 303,
+// Clear the browser-binding cookie on every exit (success or failure) so a
+// stale nonce can't be reused on a later flow.
+function clearStateCookie(res: NextResponse): NextResponse {
+  res.cookies.set(OIDC_STATE_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
   });
+  return res;
+}
+
+function fail(reason: string) {
+  return clearStateCookie(
+    NextResponse.redirect(siteUrl(`/login?sso_error=${reason}`), {
+      status: 303,
+    })
+  );
 }
 
 /**
@@ -54,6 +75,24 @@ export async function GET(
   // The signed state binds the callback to the org that started the flow; a
   // mismatch with the path orgId means a tampered or cross-org redirect.
   if (!stateData || stateData.org !== orgId) return fail("badrequest");
+
+  // BUG 1 (MEDIUM): bind the callback to the browser that initiated the flow.
+  // The signed state proves the IdP round-trip is intact, but NOT that this
+  // browser started it. /api/auth/sso/initiate set an HttpOnly cookie holding
+  // the state nonce; require it to be present and to match the nonce in the
+  // signed state. A missing/mismatched cookie means the callback URL was fed to
+  // a victim (OIDC login CSRF / session fixation): reject, mint no session.
+  const cookieStore = await cookies();
+  const cookieNonce = cookieStore.get(OIDC_STATE_COOKIE)?.value || "";
+  if (!stateNonceMatches(cookieNonce, stateData.nonce)) {
+    await recordSsoEvent({
+      buyerOrgId: orgId,
+      email: "unknown",
+      outcome: "FAILED_SIG",
+      req,
+    });
+    return fail("badrequest");
+  }
 
   const config = await resolveSsoConfigByOrgId(orgId);
   if (!config || config.idpType !== "OIDC") return fail("unavailable");
@@ -127,5 +166,7 @@ export async function GET(
 
   const maxAgeSec = ssoSessionMaxAgeSec(config);
   await createSession(userId, { sso: true, org: orgId, maxAgeSec });
-  return NextResponse.redirect(siteUrl("/buyer-org"), { status: 303 });
+  return clearStateCookie(
+    NextResponse.redirect(siteUrl("/buyer-org"), { status: 303 })
+  );
 }

@@ -96,10 +96,15 @@ export async function verifyOidcState(
   }
 }
 
-/** Build the IdP /authorize redirect URL for an org. */
+/**
+ * Build the IdP /authorize redirect URL for an org. Returns the `nonce` too so
+ * the initiate route can bind it to a short-lived browser cookie (login-CSRF
+ * defense): the callback re-checks the cookie against the nonce in the signed
+ * state to prove THIS browser started the flow.
+ */
 export async function buildOidcAuthorizeUrl(
   config: Pick<SsoConfig, "buyerOrgId" | "oidcIssuer" | "oidcClientId">
-): Promise<string> {
+): Promise<{ url: string; nonce: string }> {
   if (!config.oidcIssuer || !config.oidcClientId) {
     throw new Error("OIDC is not fully configured for this organization.");
   }
@@ -112,8 +117,16 @@ export async function buildOidcAuthorizeUrl(
   url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
   url.searchParams.set("nonce", nonce);
-  return url.toString();
+  return { url: url.toString(), nonce };
 }
+
+/**
+ * Cookie that binds an in-flight OIDC login to the initiating browser. Holds
+ * the state nonce; the callback requires it to match the nonce in the signed
+ * `state`. 10-minute lifetime matches the signed state's expiry.
+ */
+export const OIDC_STATE_COOKIE = "pp_oidc_state";
+export const OIDC_STATE_COOKIE_MAX_AGE_SEC = 10 * 60;
 
 export type OidcClaims = {
   email: string;
