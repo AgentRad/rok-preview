@@ -1535,3 +1535,103 @@ export async function sendApprovalBypassed(args: {
     html: wrap("Your order has been approved", body),
   });
 }
+
+/**
+ * PLH-3z-4: dunning stage email. One template parametrized by stage so the
+ * ar-dunning cron sends the right tone for each cadence point (T-3 gentle,
+ * T0 due today, T+7 firm, T+30 final notice + suspend warning). The pay link
+ * is the Stripe hosted invoice URL when present (self-service ACH), else the
+ * on-platform invoice page. Corporate-professional voice, no em dashes.
+ */
+export async function sendDunningEmail(args: {
+  to: string;
+  buyerId?: string | null;
+  buyerName: string;
+  invoiceNumber: string;
+  orderId: string;
+  buyerEmail: string;
+  totalCents: number;
+  dueDate: Date | null;
+  stage: "T-3" | "T0" | "T+7" | "T+30";
+  payUrl: string;
+  suspendDate?: Date | null;
+}): Promise<void> {
+  const amount = formatCents(args.totalCents);
+  const dueStr = args.dueDate
+    ? args.dueDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : "the date on the invoice";
+  let title: string;
+  let subject: string;
+  let lead: string;
+  if (args.stage === "T-3") {
+    title = "Invoice due soon";
+    subject = `Invoice ${args.invoiceNumber} is due ${dueStr}`;
+    lead = `<p>This is a courtesy reminder that invoice <strong>${esc(args.invoiceNumber)}</strong> for <strong>${amount}</strong> is due on <strong>${esc(dueStr)}</strong>.</p>`;
+  } else if (args.stage === "T0") {
+    title = "Invoice due today";
+    subject = `Invoice ${args.invoiceNumber} is due today`;
+    lead = `<p>Invoice <strong>${esc(args.invoiceNumber)}</strong> for <strong>${amount}</strong> is due today, <strong>${esc(dueStr)}</strong>. Please remit at your earliest convenience.</p>`;
+  } else if (args.stage === "T+7") {
+    title = "Invoice past due";
+    subject = `Invoice ${args.invoiceNumber} is 7 days past due`;
+    lead = `<p>Invoice <strong>${esc(args.invoiceNumber)}</strong> for <strong>${amount}</strong> is now 7 days past due (due date ${esc(dueStr)}). Please remit at the link below, or contact support@partsport.agentgaming.gg if there is an issue with this invoice.</p>`;
+  } else {
+    const suspendStr = args.suspendDate
+      ? args.suspendDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+      : "shortly";
+    title = "Final notice: account suspension";
+    subject = `Final notice: invoice ${args.invoiceNumber} is 30 days past due`;
+    lead = `<p>Invoice <strong>${esc(args.invoiceNumber)}</strong> for <strong>${amount}</strong> is 30 days past due (due date ${esc(dueStr)}). Per our net terms, your organization's account will be suspended on <strong>${esc(suspendStr)}</strong> if this balance is not cleared, which will block new orders for all members. Please pay now to avoid interruption.</p>`;
+  }
+  const body = `
+    <p>Hi ${esc(args.buyerName)},</p>
+    ${lead}
+    <p style="margin-top:22px;">${btn(args.payUrl, "Pay invoice")}</p>
+    <p style="font-size:12px;color:#6f6d64;margin-top:18px;">If you have already paid, please disregard this notice.</p>`;
+  await send({
+    to: args.to,
+    subject,
+    html: wrap(title, body),
+    userId: args.buyerId ?? null,
+  });
+}
+
+/**
+ * PLH-3z-4: org credit suspension notice. Sent to org admins when the
+ * dunning cron flips a BuyerOrg to SUSPENDED for a 30-day past-due balance.
+ */
+export async function sendBuyerOrgSuspended(args: {
+  to: string;
+  orgName: string;
+  recipientName?: string | null;
+}): Promise<void> {
+  const body = `
+    <p>Hi ${esc(args.recipientName || "there")},</p>
+    <p>Your organization <strong>${esc(args.orgName)}</strong> has been suspended on PartsPort because of a past-due net-terms balance more than 30 days overdue. New orders are blocked for all members until the outstanding balance is cleared.</p>
+    <p>To reactivate, pay the outstanding invoices from your accounts-receivable contact, or reach support@partsport.agentgaming.gg. Your account reactivates automatically once all past-due invoices are paid.</p>`;
+  await send({
+    to: args.to,
+    subject: `Account suspended: ${args.orgName}`,
+    html: wrap("Account suspended", body),
+  });
+}
+
+/**
+ * PLH-3z-4: org reactivation notice. Sent when a previously SUSPENDED org
+ * clears its past-due balance and is flipped back to ACTIVE automatically.
+ */
+export async function sendBuyerOrgReactivated(args: {
+  to: string;
+  orgName: string;
+  recipientName?: string | null;
+}): Promise<void> {
+  const body = `
+    <p>Hi ${esc(args.recipientName || "there")},</p>
+    <p>Thank you. Your organization <strong>${esc(args.orgName)}</strong> has been reactivated on PartsPort. Your past-due balance is cleared and members can place orders again.</p>
+    <p style="margin-top:22px;">${btn(siteUrl("/catalog"), "Browse catalog")}</p>`;
+  await send({
+    to: args.to,
+    subject: `Account reactivated: ${args.orgName}`,
+    html: wrap("Account reactivated", body),
+  });
+}

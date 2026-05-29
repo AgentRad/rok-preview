@@ -269,7 +269,12 @@ export async function ensureNetTermsInvoiceForOrder(orderId: string): Promise<vo
     if (stripeInvoice) {
       await prisma.invoice.update({
         where: { orderId: order.id },
-        data: { stripeInvoiceId: stripeInvoice.id },
+        data: {
+          stripeInvoiceId: stripeInvoice.id,
+          // PLH-3z-4: capture the hosted ACH pay page so dunning emails can
+          // deep-link to self-service payment.
+          stripeHostedInvoiceUrl: stripeInvoice.hostedInvoiceUrl,
+        },
       });
     }
   } catch (err) {
