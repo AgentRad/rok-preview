@@ -10,6 +10,7 @@ import {
 import { captureError } from "@/lib/observability";
 import { writeAuditLog } from "@/lib/audit";
 import { sendQuoteDeclined } from "@/lib/email";
+import { quoteDeclineGuard } from "@/lib/route-guards";
 
 const QUOTE_VALID_DAYS = 30;
 
@@ -34,12 +35,26 @@ export async function PATCH(
   }
 
   if (b.action === "decline") {
+    // BUG 2 fix. The decline branch previously mutated the quote and emailed
+    // the buyer with NO authorization (getCurrentUser was only read for the
+    // audit actor). Require an authenticated owner / ADMIN / product-supplier
+    // before any state change. Mirrors the sibling "quote" action below.
+    const actor = await getCurrentUser();
+    let supplierAccessOk = false;
+    if (actor?.role === "SUPPLIER") {
+      const access = await userHasAccessToSupplier(actor.id, quote.product.supplierId);
+      supplierAccessOk = access.ok;
+    }
+    const guard = quoteDeclineGuard({ user: actor, quote, supplierAccessOk });
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.error }, { status: guard.status });
+    }
+
     const updated = await prisma.quoteRequest.update({
       where: { id },
       data: { status: "DECLINED" },
       include: { product: { include: { supplier: true } } },
     });
-    const actor = await getCurrentUser();
     await writeAuditLog({
       actor: { id: actor?.id || "system", email: actor?.email || "system@partsport" },
       action: "QUOTE_DECLINED",
