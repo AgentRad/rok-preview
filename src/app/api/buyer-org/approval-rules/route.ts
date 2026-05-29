@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getActiveBuyerOrgContext, canManageApprovalRules } from "@/lib/buyer-org-access";
+import { getActiveBuyerOrgContext, canManageApprovalRules, validateApprovalRuleApprovers } from "@/lib/buyer-org-access";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -36,6 +36,9 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const name = String(body.name || "").trim().slice(0, 120);
   if (!name) return NextResponse.json({ error: "name is required." }, { status: 400 });
+
+  const approverError = await validateApprovalRuleApprovers(body, ctx.org.id);
+  if (approverError) return NextResponse.json({ error: approverError }, { status: 400 });
 
   const rule = await prisma.approvalRule.create({
     data: {

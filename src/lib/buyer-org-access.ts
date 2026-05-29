@@ -50,6 +50,54 @@ export function canManageApprovalRules(role: BuyerOrgRole): boolean {
   return role === "ADMIN";
 }
 
+// QA-re-audit FIX 2: validate a member referenced by an approval rule (the
+// direct approverMemberId or the escalateToMemberId) exists in the org AND
+// holds an approver-capable role. Stops a rule from assigning or escalating to a
+// VIEWER/BUYER (which advanceApproval's single-source gate would then reject at
+// decision time, leaving the order stuck PENDING). Returns false for a missing
+// or cross-org member id.
+export async function memberCanApproveInOrg(
+  memberId: string,
+  orgId: string
+): Promise<boolean> {
+  const m = await prisma.buyerOrgMember.findFirst({
+    where: { id: memberId, buyerOrgId: orgId },
+    select: { role: true },
+  });
+  return !!m && canApproveOrders(m.role);
+}
+
+const VALID_BUYER_ORG_ROLES: BuyerOrgRole[] = ["ADMIN", "APPROVER", "BUYER", "VIEWER"];
+
+// QA-re-audit FIX 2: an approval rule must not assign or escalate to a member or
+// role that cannot approve orders, otherwise the rule routes an order to an
+// approver the single-source advanceApproval gate then rejects (order stuck
+// PENDING). Validates the approver-by-member fields (approverMemberId,
+// escalateToMemberId) and the approver-by-role field (approverRole) against the
+// rule's create/update body. Returns an error string on the first violation, or
+// null when clean. Only validates fields that are present + non-empty, so a
+// PATCH that does not touch these fields passes.
+export async function validateApprovalRuleApprovers(
+  body: Record<string, unknown>,
+  orgId: string
+): Promise<string | null> {
+  const approverMemberId = typeof body.approverMemberId === "string" ? body.approverMemberId.trim() : "";
+  if (approverMemberId && !(await memberCanApproveInOrg(approverMemberId, orgId))) {
+    return "The approver must be a member of this organization with an approver-capable role (APPROVER or ADMIN).";
+  }
+  const escalateToMemberId = typeof body.escalateToMemberId === "string" ? body.escalateToMemberId.trim() : "";
+  if (escalateToMemberId && !(await memberCanApproveInOrg(escalateToMemberId, orgId))) {
+    return "The escalation target must be a member of this organization with an approver-capable role (APPROVER or ADMIN).";
+  }
+  const approverRole = typeof body.approverRole === "string" ? body.approverRole.trim() : "";
+  if (approverRole) {
+    if (!VALID_BUYER_ORG_ROLES.includes(approverRole as BuyerOrgRole) || !canApproveOrders(approverRole as BuyerOrgRole)) {
+      return "approverRole must be an approver-capable role (APPROVER or ADMIN).";
+    }
+  }
+  return null;
+}
+
 /** Every buyer org the user belongs to, OWNER-style ordering (ADMIN first). */
 export async function listBuyerOrgsForUser(
   userId: string

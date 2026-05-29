@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getActiveBuyerOrgContext, canManageApprovalRules } from "@/lib/buyer-org-access";
+import { getActiveBuyerOrgContext, canManageApprovalRules, validateApprovalRuleApprovers } from "@/lib/buyer-org-access";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -34,6 +34,9 @@ export async function PATCH(
   if (!rule) return NextResponse.json({ error: "Rule not found." }, { status: 404 });
 
   const body = await req.json().catch(() => ({}));
+
+  const approverError = await validateApprovalRuleApprovers(body, ctx.org.id);
+  if (approverError) return NextResponse.json({ error: approverError }, { status: 400 });
 
   const updated = await prisma.approvalRule.update({
     where: { id },

@@ -193,6 +193,23 @@ export function canDecideApproval(input: {
 // canApproveOrders(role) helper and passes the boolean here, so the role set
 // stays single-sourced in buyer-org-access.ts and this gate stays pure +
 // testable.
+// QA-re-audit (single-source approver role gate): a member acting as the
+// assigned approver in advanceApproval must hold a role that can actually
+// approve orders. The caller computes canApproveOrders(role) and passes the
+// boolean, so the role set stays single-sourced in buyer-org-access.ts and this
+// gate stays pure + testable (same pattern as delegateApprovalGuard). Applies to
+// both APPROVE and REJECT: a non-approver role has no authority either way.
+export function approverRoleGuard(input: { roleCanApprove: boolean }): GuardResult {
+  if (!input.roleCanApprove) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Your organization role cannot approve or reject orders.",
+    };
+  }
+  return { ok: true };
+}
+
 export function delegateApprovalGuard(input: { delegateCanApprove: boolean }): GuardResult {
   if (!input.delegateCanApprove) {
     return {

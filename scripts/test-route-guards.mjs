@@ -15,6 +15,7 @@ import {
   validateSsoDomainTrust,
   canDecideApproval,
   delegateApprovalGuard,
+  approverRoleGuard,
   clearsInvoice,
   refundRemainingCents,
   refundWithinCap,
@@ -355,6 +356,43 @@ test("delegate: a delegate who cannot approve (VIEWER/BUYER) is rejected", () =>
 test("delegate: a delegate who can approve (APPROVER/ADMIN) is allowed", () => {
   const r = delegateApprovalGuard({ delegateCanApprove: true });
   assert.equal(r.ok, true);
+});
+
+// ---- QA-re-audit: single-source approver role gate in advanceApproval ----
+// The engine computes canApproveOrders(decider.role) and passes the boolean to
+// approverRoleGuard (same boolean pattern as delegateApprovalGuard). This mirror
+// of the canonical canApproveOrders role set lets the test drive the full
+// role -> outcome chain that advanceApproval applies to BOTH approve and reject.
+const roleCanApprove = (role) => role === "ADMIN" || role === "APPROVER";
+
+test("approver-role gate: a VIEWER decider is rejected", () => {
+  const r = approverRoleGuard({ roleCanApprove: roleCanApprove("VIEWER") });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+  assert.match(r.error, /approve or reject/i);
+});
+
+test("approver-role gate: a BUYER decider is rejected", () => {
+  const r = approverRoleGuard({ roleCanApprove: roleCanApprove("BUYER") });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+});
+
+test("approver-role gate: an APPROVER member is allowed", () => {
+  assert.equal(approverRoleGuard({ roleCanApprove: roleCanApprove("APPROVER") }).ok, true);
+});
+
+test("approver-role gate: an ADMIN member (the admin short-circuit) is allowed", () => {
+  // A buyer-org ADMIN satisfies canApproveOrders, so the isAdmin short-circuit
+  // in advanceApproval passes this gate unchanged.
+  assert.equal(approverRoleGuard({ roleCanApprove: roleCanApprove("ADMIN") }).ok, true);
+});
+
+test("approver-role gate: rejection applies regardless of decision (false boolean always rejects)", () => {
+  // advanceApproval calls the gate before splitting on APPROVE vs REJECT, so a
+  // non-approver is blocked on both paths.
+  assert.equal(approverRoleGuard({ roleCanApprove: false }).ok, false);
+  assert.equal(approverRoleGuard({ roleCanApprove: true }).ok, true);
 });
 
 // ---- QA2 BUG 1: invoice clears only at full payment ----

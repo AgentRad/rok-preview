@@ -3,7 +3,8 @@ import { after } from "next/server";
 import { prisma } from "./db";
 import { writeAuditLog } from "./audit";
 import { captureError } from "./observability";
-import { canDecideApproval } from "./route-guards";
+import { canDecideApproval, approverRoleGuard } from "./route-guards";
+import { canApproveOrders } from "./buyer-org-access";
 
 // ---------------------------------------------------------------------------
 // PLH-3y-6: approval engine
@@ -347,6 +348,22 @@ export async function advanceApproval(args: {
     const isAdmin = decider.role === "ADMIN";
     const isAssigned = pendingStep.approverMemberId === args.deciderMemberId;
     if (!isAdmin && !isAssigned) return null;
+
+    // QA-re-audit (single-source role gate): the deciding member's buyer-org
+    // role must actually be able to approve orders. Before this check the engine
+    // authorized purely on isAdmin || isAssigned, so a VIEWER (or any
+    // non-approver role) made the active approver via the escalation cron, a
+    // rule's escalateToMemberId, or OOO delegation could approve OR reject an
+    // over-limit order, defeating the spend control. A buyer-org ADMIN satisfies
+    // canApproveOrders, so the isAdmin short-circuit below is unaffected; this
+    // rejects VIEWER/BUYER. It runs for BOTH APPROVE and REJECT (a member with no
+    // approval authority has no business resolving the step either way) and
+    // BEFORE the admin short-circuit. The platform-admin emergency path is the
+    // separate /approval/bypass route (sets BYPASSED, never calls advanceApproval)
+    // and is unaffected. The self-approval (canDecideApproval) gate below stays
+    // intact; this is an additional gate.
+    const roleGate = approverRoleGuard({ roleCanApprove: canApproveOrders(decider.role) });
+    if (!roleGate.ok) return { error: roleGate.error };
 
     const isReject = args.decision === "REJECT";
     const reason = args.reason?.trim().slice(0, 500) ?? "";

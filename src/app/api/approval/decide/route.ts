@@ -76,6 +76,14 @@ async function handleDecide(req: Request) {
       decision: "REJECT",
       reason,
     });
+    // FIX 3: advanceApproval can now return an { error } object on the REJECT
+    // path too (the single-source role gate rejects a VIEWER/non-approver trying
+    // to reject; canDecideApproval still allows a placer's self-reject). Handle
+    // the widened shape the same way the approve branch and the buyer-org routes
+    // do, before the generic "already resolved" null check.
+    if (outcome && typeof outcome === "object" && "error" in outcome) {
+      return NextResponse.json({ error: outcome.error }, { status: 400 });
+    }
     if (!outcome) {
       return NextResponse.json({ error: "This step has already been resolved." }, { status: 400 });
     }
