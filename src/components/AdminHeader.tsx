@@ -39,6 +39,8 @@ export default async function AdminHeader() {
             <Link href="/admin#invoices">Invoices</Link>
             <Link href="/admin/users">Users</Link>
             <Link href="/admin/buyer-orgs">Buyer orgs</Link>
+            <Link href="/admin/credit-applications">Credit apps</Link>
+            <Link href="/admin/accounts-receivable">A/R</Link>
             <Link href="/admin/reported-messages">Reports</Link>
             <Link href="/admin/supplier-health">Supplier health</Link>
             <Link href="/admin/manufacturer-applications">OEM applications</Link>

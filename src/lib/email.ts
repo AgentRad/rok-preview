@@ -749,6 +749,48 @@ export async function sendApplicationStatus(args: {
   }
 }
 
+// PLH-3z-3: net-terms credit application decisions.
+export async function sendCreditApplicationApproved(args: {
+  to: string;
+  contactName: string;
+  orgName: string;
+  termsLabel: string;
+  limitDollars: string;
+}): Promise<void> {
+  const url = siteUrl(`/buyer-org`);
+  const body = `
+    <p>Hi ${esc(args.contactName)},</p>
+    <p>Your net-terms application for <strong>${esc(args.orgName)}</strong> has been approved. Your organization is now set up for <strong>${esc(args.termsLabel)}</strong> billing with a credit limit of <strong>$${esc(args.limitDollars)}</strong>.</p>
+    <p>Orders placed by your members will be billed by invoice with the due date shown on each invoice.</p>
+    <p style="margin-top:22px;">${btn(url, "View your organization")}</p>`;
+  await send({
+    to: args.to,
+    subject: `${args.orgName} approved for ${args.termsLabel} terms on PartsPort`,
+    html: wrap("Net terms approved", body),
+  });
+}
+
+export async function sendCreditApplicationRejected(args: {
+  to: string;
+  contactName: string;
+  orgName: string;
+  reason: string;
+}): Promise<void> {
+  const reasonBlock = args.reason
+    ? `<p style="background:#f3f2ef;padding:12px 14px;border-radius:4px;">${esc(args.reason)}</p>`
+    : "";
+  const body = `
+    <p>Hi ${esc(args.contactName)},</p>
+    <p>Thank you for your net-terms application for <strong>${esc(args.orgName)}</strong>. After review, we are not able to approve net terms at this time.</p>
+    ${reasonBlock}
+    <p>You can continue to place orders with prepaid checkout, and you are welcome to submit a new application. Reach out at support@partsport.agentgaming.gg with any questions.</p>`;
+  await send({
+    to: args.to,
+    subject: `Update on your PartsPort net-terms application`,
+    html: wrap("Net terms application update", body),
+  });
+}
+
 /**
  * PLH-3o: thread emails render as a normal one-on-one conversation, not
  * a branded card. Plain paragraphs for the sender's text, a quoted block
