@@ -2671,8 +2671,36 @@ serially: money -> auth/SSO -> acting-as -> web LOW -> final verification.
     / wrong secret; hmacLast4 stable per input, differs across inputs/secrets.
     Build clean. No schema change.
 
-QA2 remaining (serial): web LOW (unauthenticated product-image-list GET;
-never-expiring unsubscribe token), then a final verification pass against the
-documented smoke tests.
+- **QA2-fix4 (`cdd7a5e`).** The last two LOW findings.
+  - **LOW unauthenticated product-image-list GET.** `GET /api/supplier/products/[id]/images`
+    had no auth, so anyone could enumerate ProductImage rows (blob URLs, alt,
+    ordinals) for any product incl. unpublished/draft. Now gated with
+    `authorizeProductEdit(id)` (the same gate the sibling POST uses). Verified the
+    public buyer product page does NOT use this route: it reads `product.images`
+    via a direct Prisma `include` in the server component
+    (`product/[sku]/page.tsx`), so the only consumer is the supplier-side
+    ImageManager. Public page unaffected.
+  - **LOW unsubscribe token never expired + hardcoded fallback secret.** Token is
+    now `${userId}.${issuedAtMs}.${sig}` with a 90-day expiry (generous, marketing
+    links open late); verify checks the HMAC first (issued-at is authenticated)
+    then `unsubscribeTokenExpired`. Dropped the `"partsport-unsub-fallback"`
+    constant: with no `SESSION_SECRET`/`INBOUND_REPLY_SECRET` the signer returns
+    null and callers omit the one-click URL, falling back to the mailto-only
+    List-Unsubscribe header (still RFC 8058 valid; prod always has the secret).
+    Unsubscribe + resubscribe round-trip preserved (shared verify). Pure logic in
+    new `src/lib/unsubscribe-token.ts`; 16 cases in `scripts/test-unsubscribe-token.mjs`.
+    Build clean, no schema change.
 
-MIGRATIONS pending deploy from this batch: `20260713000000_add_last_totp_step`.
+**PLH-QA1 + QA2 COMPLETE.** Every finding from the 2026-05-29 whole-platform
+adversarial audit is fixed and on origin: 3 CRITICAL + 6 HIGH + 5 MEDIUM (incl.
+2 UNCERTAINs confirmed-and-fixed) + 7 LOW. Test suite spans
+`scripts/test-route-guards.mjs` (73 cases) + `scripts/test-unsubscribe-token.mjs`
+(16) + the pre-existing `test-strip-quoted-reply.mjs`. Every round `npx next build`
+clean, zero em dashes.
+
+PENDING DEPLOY: migration `20260713000000_add_last_totp_step` (additive nullable
+column, applies on next `prisma migrate deploy`).
+
+OWNER DECISION still open (logged in REMINDERS.md, NOT a bug): net-terms invoice
+orders currently collect $0 sales tax. Confirm whether tax is owed; if yes, enable
+Stripe `automatic_tax` on the net-terms invoice path.
