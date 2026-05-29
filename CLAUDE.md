@@ -2463,3 +2463,40 @@ zero em dashes.**
   the org auto-reactivates and admins get the reactivated email. (d) Confirm a
   PREPAID order still pays the supplier on dispatch and is unaffected by all of
   the above.
+
+## PLH-QA1 (2026-05-29). Post-build QA audit (whole-platform adversarial fan-out) + serial fix loop.
+
+Ran the standard post-build QA protocol: 6 read-only adversarial code-audit
+agents (one per POV: buyer, supplier, admin, auth/security/RLS, money, enterprise)
+plus an improvement-ideas scout. Findings triaged to 3 CRITICAL + 4 HIGH + 5
+MEDIUM + 5 LOW (+ 2 UNCERTAIN). Fixing serially, one chip at a time, until zero
+known CRITICAL/HIGH. Owner-decision item (net-terms invoices collect $0 sales
+tax) logged to REMINDERS.md.
+
+- **QA1-fix1 (`1e1aac3`).** Two missing-authorization holes closed.
+  - **CRITICAL: unauthenticated demo-pay.** `src/app/api/orders/[id]/pay/route.ts`
+    had no auth, ownership, status, or payments-configured gate, so anyone who
+    knew a PENDING order id could POST it and flip the order to PAID for $0
+    (decrementing stock, generating the invoice, firing real supplier payouts).
+    Now returns 503 when `isPaymentsConfigured()` is true (inert in production /
+    inverse of create-session), and otherwise requires an authenticated ACTIVE
+    owner-or-admin session, asserts `status === "PENDING"`, and mirrors the
+    create-session approval (APPROVAL_PENDING/REJECTED) + org-suspend (423)
+    gates. Pure decision logic extracted to `src/lib/route-guards.ts`
+    (`demoPayGuard`) for unit testing. Behavior note: a pure guest can no longer
+    self-serve the demo button; in demo mode the seeded buyer login covers it.
+  - **HIGH: unauthenticated quote decline.** The `action: "decline"` branch of
+    `src/app/api/quotes/[id]/route.ts` mutated + emailed before any authz. Now
+    gated by `quoteDeclineGuard` (401 unauth, 403 unless owner / ADMIN /
+    product-supplier).
+  - Locked in with `scripts/test-route-guards.mjs` (Node 24 `--test`, 17 cases,
+    the repo's established zero-dep test pattern; no Playwright/vitest harness
+    exists). `npx next build` clean. Pushed to origin.
+
+Remaining QA1 fix queue (serial): QA1-fix2 session/login integrity (2FA-ticket
+accepted as a session cookie because `getCurrentUser` ignores `payload.kind`;
+login-2fa + account/recover skip the suspend/ban status check); QA1-fix3 SSO
+enforce/domainAllowlist accepted on an unverified domain (lockout + forced-IdP);
+QA1-fix4 approvals (self-approval has no separation-of-duties; GET one-click
+approve is auto-actionable by mail prefetch; OOO delegation to a VIEWER grants
+approval power). Then the MEDIUM/LOW batch.
