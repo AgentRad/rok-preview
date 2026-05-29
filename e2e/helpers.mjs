@@ -44,9 +44,34 @@ export async function loginAs(role) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await page.locator('input[type="email"]').first().fill(acct.email);
   await page.locator('input[type="password"]').first().fill(acct.password);
-  await Promise.all([
-    page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 20000 }),
-    page.locator('button[type="submit"], button.btn-primary').first().click(),
-  ]);
-  return { page, ctx };
+
+  // Click submit and capture the real login API response (status + body) so a
+  // failure tells us the truth instead of guessing.
+  const respPromise = page
+    .waitForResponse((r) => r.url().includes("/api/auth/login") && r.request().method() === "POST", { timeout: 20000 })
+    .catch(() => null);
+  await page.locator('button[type="submit"], button.btn-primary').first().click();
+  const resp = await respPromise;
+
+  let loginStatus = null;
+  let loginBody = null;
+  if (resp) {
+    loginStatus = resp.status();
+    try {
+      loginBody = await resp.text();
+    } catch {
+      loginBody = "(unreadable)";
+    }
+  }
+  // Give the client redirect + Set-Cookie a beat to settle.
+  await page.waitForTimeout(1500);
+  const cookies = await ctx.cookies();
+  const cookieDiag = cookies.map((c) => ({ name: c.name, secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite }));
+
+  // Diagnostic line surfaces in the CI test log (stderr).
+  console.error(
+    `[loginAs ${role}] loginStatus=${loginStatus} url=${page.url()} cookies=${JSON.stringify(cookieDiag)} body=${(loginBody || "").slice(0, 200)}`
+  );
+
+  return { page, ctx, loginStatus };
 }
