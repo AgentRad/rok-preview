@@ -2382,3 +2382,84 @@ zero em dashes.**
   A/R-specific action.
 - Deferred to 3z-4 (final round): dunning cadence + emails, auto-suspend past
   due, BuyerOrg.status column, payout hold-vs-pay policy.
+
+## PLH-3z-4 (2026-05-28). Dunning + auto-suspend + payout policy. Round 4 of 4 of the net-30 epic. THE NET-30 EPIC IS NOW COMPLETE (4 of 4). 6 feature commits, each `npx next build` clean, zero em dashes.
+
+- **Schema.** `BuyerOrgStatus` enum (ACTIVE | SUSPENDED) + `BuyerOrg.status`
+  (default ACTIVE) + `suspendedAt` + `suspendedReason` (org-level credit
+  suspension, distinct from the per-USER `User.status` from PLH-3w).
+  `InvoiceDunningLog` model (invoiceId, stage, sentAt, unique [invoiceId,
+  stage]) as the dunning idempotency table flagged by the 3z-2 / 3z-3
+  deviation notes (there is no Email model in this codebase).
+  `Invoice.stripeHostedInvoiceUrl` for self-service dunning pay links.
+  Migration `20260712000000_add_dunning_and_org_suspend`. New audit actions
+  `AR_DUNNING_SENT`, `BUYER_ORG_SUSPENDED`, `BUYER_ORG_REACTIVATED`. New
+  `AuditTargetType` value `InvoiceDunningLog`.
+- **Payout policy (LOCKED DECISION: pay suppliers AFTER the buyer pays).** This
+  is the spec's section-7.2 hold policy, deliberately chosen over the spec's
+  section-7.1 recommended "front the float" path. For net-terms orders the
+  supplier payout no longer fires at dispatch: `markSlotShipped` /
+  `markOrderShipped` now allow shipping a PENDING net-terms order, and the
+  ship-time `ensurePayoutsForOrder` call is skipped when the order is net terms
+  (`order.paymentTerms !== "PREPAID"`). `markOrderPaid` fires
+  `ensurePayoutsForOrder` for net-terms orders only, so payment is the payout
+  trigger. PREPAID orders are 100% unchanged: they still pay on dispatch via
+  `markSlotShipped`, and `markOrderPaid` does not pay them out (avoids a
+  double-trigger). `ensurePayoutsForOrder` is idempotent per slot regardless.
+  The 5% reserve flow is reused unchanged. How net-terms defers without
+  touching prepaid: the only behavioral fork is the `isNetTerms` guard in the
+  ship after() block plus the `paymentTerms !== "PREPAID"` guard in
+  markOrderPaid; both leave the PREPAID code path byte-for-byte the same.
+- **Dunning emails (`sendDunningEmail`).** One template parametrized by stage:
+  T-3 gentle, T0 due today, T+7 firm, T+30 final notice + suspend warning.
+  Corporate-professional voice. Self-service pay link is the Stripe hosted
+  invoice URL when present (`Invoice.stripeHostedInvoiceUrl`, captured at
+  finalize in `ensureNetTermsInvoiceForOrder`), else the on-platform invoice
+  page (signed token for guest access). `sendBuyerOrgSuspended` /
+  `sendBuyerOrgReactivated` notify org admins.
+- **Dunning cron (`/api/cron/ar-dunning`).** Walks unpaid DUE/PAST_DUE invoices
+  oldest-first, computes days-from-due, and sends the most-advanced cadence
+  stage that has not yet been logged (sending only the highest reached stage
+  avoids backfilling stale earlier stages when the cron missed a day; each
+  stage still fires at most once via `InvoiceDunningLog`). Flips DUE -> PAST_DUE
+  past the due date. At T+30 auto-suspends the org. `MAX_PER_RUN=200`, `hasMore`,
+  `isAuthorizedCronRequest` (mirrors PLH-2 4e). Shared `src/lib/dunning.ts`
+  holds the cron body plus `suspendOrgForDunning`, `maybeReactivateOrg`, and
+  `orgOutstandingCents`. Idempotency approach: the `(invoiceId, stage)` unique
+  row is looked up before each send; on a hit the email is skipped (and for a
+  T+30 hit the suspend is re-attempted in case a prior run logged the email but
+  died before suspending). Cron schedule slot: `15 8 * * *` (08:15 UTC).
+- **Auto-suspend / reactivate triggers.** Suspend: the ar-dunning cron at T+30
+  (`AR_SUSPEND_DAYS_PAST_DUE`, default 30). Reactivate: `maybeReactivateOrg`
+  fires after every net-terms payment (invoice.paid webhook + manual mark-paid),
+  flipping the org back to ACTIVE once `orgOutstandingCents` falls to/below
+  `AR_REACTIVATE_THRESHOLD_CENTS` (default 0, fully cleared). A SUSPENDED org's
+  members are blocked from `/api/orders` and `/api/checkout-from-quote/[id]`
+  with a 423 ORG_SUSPENDED response; non-org buyers and ACTIVE orgs unaffected.
+- **Supplier dashboard.** Incoming orders surface PENDING net-terms orders
+  (now shippable before the buyer pays) with a per-row note: "Buyer on Net N
+  terms. Payout fires when the buyer pays the invoice (due [date])." The
+  fulfill action is enabled for PENDING net-terms orders; PREPAID still require
+  PAID. `loadSupplierOrders` widened to include PENDING net-terms orders.
+- **A/R supplier-exposure.** The 3z-3 exposure table now counts only
+  Shipped/Delivered slots on unpaid invoices (the true shipped-but-uncollected
+  float under the hold policy), and the org rollup reads the real
+  `BuyerOrg.status` instead of the 3z-3 hardcoded ACTIVE.
+- **Deviations.** (1) Payout policy follows the chip's LOCKED decision
+  (pay-after-buyer-pays, spec 7.2), NOT the spec's section-7.1 recommended
+  front-the-float path. (2) Cadence is the chip's 4-stage T-3 / T-0 / T+7 / T+30
+  (LOCKED), a simplification of the spec-6.1 6-stage cadence; auto-suspend is at
+  T+30 (chip), not the spec's T+31. (3) Cron scheduled 08:15 UTC because the
+  spec's 08:00 slot is occupied by approval-escalate; it sits between the two
+  approval-escalate runs (08:00 / 08:30). (4) Supplier exposure remains a table
+  on the A/R dashboard (it shipped in 3z-3) rather than a separate interactive
+  tab.
+- **Smoke tests (owner / live):** (a) place a net-terms order, mark the
+  supplier slot shipped while PENDING (no payout fires), pay the Stripe invoice
+  -> invoice.paid -> markOrderPaid -> the supplier payout fires then. (b) Let an
+  invoice pass 30 days (or set `AR_SUSPEND_DAYS_PAST_DUE` low) and run
+  `/api/cron/ar-dunning`: the T+30 email sends once and the org flips SUSPENDED;
+  a suspended org's member gets 423 at checkout. (c) Pay the past-due invoice:
+  the org auto-reactivates and admins get the reactivated email. (d) Confirm a
+  PREPAID order still pays the supplier on dispatch and is unaffected by all of
+  the above.
