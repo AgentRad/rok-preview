@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { prisma } from "./db";
 import { writeAuditLog } from "./audit";
 import { captureError } from "./observability";
+import { canDecideApproval } from "./route-guards";
 
 // ---------------------------------------------------------------------------
 // PLH-3y-6: approval engine
@@ -312,7 +313,7 @@ export async function advanceApproval(args: {
   deciderMemberId: string;
   decision: "APPROVE" | "REJECT";
   reason?: string;
-}): Promise<ApprovalOutcome | null> {
+}): Promise<ApprovalOutcome | { error: string } | null> {
   try {
     const order = await prisma.order.findUnique({
       where: { id: args.orderId },
@@ -349,6 +350,27 @@ export async function advanceApproval(args: {
 
     const isReject = args.decision === "REJECT";
     const reason = args.reason?.trim().slice(0, 500) ?? "";
+
+    // Separation of duties: the member who PLACED the order may not approve it,
+    // not even as an org ADMIN. Resolve the placing member the same way the
+    // engine resolves the placer in evaluateAndApplyApproval (Order.buyerId ->
+    // member id within the org). Self-rejection is allowed (cancelling your own
+    // request); only self-approval is blocked. A single-approver org where the
+    // only approver placed the order cannot self-approve: advanceApproval returns
+    // the error and the order stays PENDING, falling to the escalation / orphan
+    // sweep path rather than crashing.
+    const placingMemberId = order.buyerId
+      ? await memberIdForUser(order.buyerId, order.buyerOrgId)
+      : null;
+    const decideCheck = canDecideApproval({
+      deciderMemberId: args.deciderMemberId,
+      placingMemberId,
+      isAdmin,
+      decision: args.decision,
+    });
+    if (!decideCheck.ok) {
+      return { error: decideCheck.error };
+    }
 
     if (isReject) {
       // Reject closes the whole chain immediately.

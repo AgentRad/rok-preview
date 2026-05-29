@@ -1,7 +1,8 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getActiveBuyerOrgContext } from "@/lib/buyer-org-access";
+import { getActiveBuyerOrgContext, canApproveOrders } from "@/lib/buyer-org-access";
+import { delegateApprovalGuard } from "@/lib/route-guards";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -51,10 +52,18 @@ export async function PATCH(req: Request) {
     // Verify the delegate is in the same org and is not the caller.
     const delegate = await prisma.buyerOrgMember.findUnique({
       where: { id: delegateToMemberId },
-      select: { buyerOrgId: true },
+      select: { buyerOrgId: true, role: true },
     });
     if (!delegate || delegate.buyerOrgId !== ctx.org.id) {
       return NextResponse.json({ error: "Delegate must be a member of the same org." }, { status: 400 });
+    }
+    // The delegate inherits the caller's pending approvals, and advanceApproval
+    // authorizes whoever is assigned. So the delegate MUST be able to approve
+    // orders (APPROVER or ADMIN); delegating to a VIEWER/BUYER would escalate a
+    // read-only member past canApproveOrders.
+    const roleCheck = delegateApprovalGuard({ delegateCanApprove: canApproveOrders(delegate.role) });
+    if (!roleCheck.ok) {
+      return NextResponse.json({ error: roleCheck.error }, { status: roleCheck.status });
     }
     const self = await prisma.buyerOrgMember.findUnique({
       where: { buyerOrgId_userId: { buyerOrgId: ctx.org.id, userId: user.id } },

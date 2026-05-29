@@ -47,7 +47,9 @@ export async function POST(req: Request) {
       deciderMemberId: member.id,
       decision: "APPROVE",
     });
-    if (outcome) {
+    if (outcome && typeof outcome === "object" && "error" in outcome) {
+      results.push({ orderId, status: "skipped", error: outcome.error });
+    } else if (outcome) {
       results.push({ orderId, status: outcome });
     } else {
       results.push({ orderId, status: "skipped", error: "Not actionable or not authorized." });

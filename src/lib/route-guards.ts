@@ -160,3 +160,44 @@ export function validateSsoDomainTrust(input: {
   }
   return { ok: true };
 }
+
+// BUG (HIGH): no separation of duties on approvals. advanceApproval authorized a
+// decider on isAdmin || assigned-approver, with no check that the decider is not
+// the member who PLACED the order. A buyer who also holds APPROVER (and is the
+// assigned approver), or an org ADMIN, could approve an order they placed,
+// voiding the spend control. This gate rejects self-APPROVAL only: rejecting
+// one's own order (a buyer cancelling their own request) stays allowed, and the
+// admin short-circuit must not bypass it. Pure logic so it is unit-testable.
+export function canDecideApproval(input: {
+  deciderMemberId: string;
+  placingMemberId: string | null;
+  isAdmin: boolean;
+  decision: "APPROVE" | "REJECT";
+}): GuardResult {
+  // Rejecting your own order is fine. Only block self-approval.
+  if (input.decision === "REJECT") return { ok: true };
+  // Separation of duties: the placing member may never approve their own order,
+  // not even as an org ADMIN (the short-circuit must honor this too).
+  if (input.placingMemberId && input.deciderMemberId === input.placingMemberId) {
+    return { ok: false, status: 400, error: "You cannot approve your own order." };
+  }
+  return { ok: true };
+}
+
+// BUG (HIGH): OOO delegation could hand approval power to a role that cannot
+// approve (e.g. a VIEWER), because the ooo route did no role check on the
+// delegate and advanceApproval authorizes purely on being assigned. The route
+// computes whether the delegate can approve via the canonical
+// canApproveOrders(role) helper and passes the boolean here, so the role set
+// stays single-sourced in buyer-org-access.ts and this gate stays pure +
+// testable.
+export function delegateApprovalGuard(input: { delegateCanApprove: boolean }): GuardResult {
+  if (!input.delegateCanApprove) {
+    return {
+      ok: false,
+      status: 400,
+      error: "The delegate must be able to approve orders (an APPROVER or ADMIN of this organization).",
+    };
+  }
+  return { ok: true };
+}

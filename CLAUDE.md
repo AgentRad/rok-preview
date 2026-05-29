@@ -2543,3 +2543,41 @@ trust) plus the fix1/fix2 HIGHs. Remaining QA1 queue (serial): QA1-fix4 approval
 auto-actionable by mail prefetch; OOO delegation to a VIEWER grants approval
 power) closes the last 3 HIGHs and reaches zero known CRITICAL/HIGH. Then the
 MEDIUM/LOW batch.
+
+- **QA1-fix4.** The 3 HIGH flaws in the order-approval workflow closed. Zero
+  known CRITICAL/HIGH reached.
+  - **BUG 1: no separation of duties.** `advanceApproval` (`src/lib/approval.ts`)
+    authorized a decider on `isAdmin || assigned-approver` with no check that the
+    decider is not the member who PLACED the order, so a buyer who also held
+    APPROVER, or an org ADMIN, could approve their own order. Fix: the engine now
+    resolves the placing member (`Order.buyerId -> memberIdForUser`, the same
+    resolver `evaluateAndApplyApproval` uses) and runs the new pure
+    `canDecideApproval` gate (`route-guards.ts`) before BOTH the normal approve
+    path and the admin short-circuit. Self-APPROVAL is rejected ("You cannot
+    approve your own order."); self-REJECTION stays allowed (cancelling your own
+    request). `advanceApproval`'s return type widened to
+    `ApprovalOutcome | { error } | null`; the three callers (one-click decide,
+    buyer-org single decide, bulk) map the error object to a 400. Edge case: a
+    single-approver org where the only approver placed the order cannot
+    self-approve; the order stays PENDING and falls to the escalation /
+    orphan-sweep path (no crash).
+  - **BUG 2: GET one-click approve was auto-actionable by mail prefetch.**
+    `GET /api/approval/decide?action=approve` mutated the order directly, so
+    mail scanners / link-preview bots / corporate proxies issuing GET could
+    silently approve over-limit orders. Fix: approve now mirrors reject. A GET
+    redirects to a new confirmation interstitial
+    `src/app/approval/approve/[token]/page.tsx` (a button that POSTs back); the
+    actual `advanceApproval` call happens only on POST. Reject was already
+    GET-safe and is unchanged.
+  - **BUG 3: OOO delegation could hand approval power to a VIEWER.**
+    `PATCH /api/buyer-org/member/ooo` did no role check on the delegate, and
+    `resolveApproverMember` + `advanceApproval` then routed/authorized purely on
+    assignment. Fix: the route now requires `canApproveOrders(delegate.role)`
+    (canonical helper) via the pure `delegateApprovalGuard`, rejecting a
+    delegate who cannot approve with a 400. Clearing OOO / no delegate still
+    allowed.
+  - Locked in with 7 new cases in `scripts/test-route-guards.mjs` (now 35:
+    self-approval rejected incl. admin short-circuit, different member allowed,
+    self-rejection allowed, null placer no-op, delegate-cannot-approve rejected,
+    delegate-can-approve allowed). `npx next build` clean. ALL QA1
+    CRITICAL + HIGH now closed.

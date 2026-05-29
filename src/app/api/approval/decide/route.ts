@@ -9,14 +9,18 @@ export const runtime = "nodejs";
 
 /**
  * PLH-3y-6 C4: one-click approve / reject from approver email.
- * GET or POST both accepted so email clients that prefetch GET still work
- * (the token is single-use in spirit; in practice it stays valid until the
- * step resolves, after which advanceApproval returns null).
+ *
+ * SECURITY: neither approve nor reject may mutate on GET. Mail security
+ * scanners, link-preview bots, and corporate proxies routinely issue GET on
+ * inbound-mail links, which would silently approve (or reject) over-limit
+ * orders. So a GET renders a lightweight confirmation interstitial
+ * (/approval/approve/[token] or /approval/reject/[token]) with a button that
+ * POSTs back here; the actual decision happens only on POST.
  *
  * Query params: order, member, action (approve|reject), t (HMAC token)
- * On success: 303 redirect to /orders/[id] with a status banner.
- * On reject action without reason: 303 redirect to /approval/reject/[token]
- * page where the approver can enter a reason before confirming.
+ * On GET: 303 redirect to the matching confirm page.
+ * On POST: runs advanceApproval (which enforces the BUG 1 self-approval check)
+ * and returns JSON.
  */
 export async function GET(req: Request) {
   return handleDecide(req);
@@ -78,13 +82,26 @@ async function handleDecide(req: Request) {
     return NextResponse.json({ ok: true, approvalStatus: outcome });
   }
 
-  // Approve: verify member is still in the org + order is still pending.
+  // Approve. Mirror the reject pattern: a GET (which may be an email-client
+  // prefetch or a mail-scanner bot) renders a confirmation interstitial; the
+  // actual approval only happens on the POST from that page.
+  if (req.method !== "POST") {
+    return NextResponse.redirect(
+      new URL(
+        `/approval/approve/${encodeURIComponent(token)}?order=${encodeURIComponent(orderId)}&member=${encodeURIComponent(memberId)}`,
+        req.url
+      )
+    );
+  }
+
+  // POST from the approve confirm page: verify member is still in the org and
+  // advance the approval.
   const member = await prisma.buyerOrgMember.findUnique({
     where: { id: memberId },
     select: { id: true },
   });
   if (!member) {
-    return NextResponse.redirect(new URL("/orders/" + encodeURIComponent(orderId) + "?approval=invalid", req.url));
+    return NextResponse.json({ error: "Invalid token." }, { status: 400 });
   }
 
   const outcome = await advanceApproval({
@@ -93,9 +110,12 @@ async function handleDecide(req: Request) {
     decision: "APPROVE",
   });
 
+  if (outcome && typeof outcome === "object" && "error" in outcome) {
+    return NextResponse.json({ error: outcome.error }, { status: 400 });
+  }
   if (!outcome) {
-    return NextResponse.redirect(new URL("/orders/" + encodeURIComponent(orderId) + "?approval=already-resolved", req.url));
+    return NextResponse.json({ error: "This step has already been resolved." }, { status: 400 });
   }
 
-  return NextResponse.redirect(new URL("/orders/" + encodeURIComponent(orderId) + "?approval=approved", req.url));
+  return NextResponse.json({ ok: true, approvalStatus: outcome });
 }

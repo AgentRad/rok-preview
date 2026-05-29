@@ -13,6 +13,8 @@ import {
   quoteDeclineGuard,
   isSessionTokenPayload,
   validateSsoDomainTrust,
+  canDecideApproval,
+  delegateApprovalGuard,
 } from "../src/lib/route-guards.ts";
 
 const OWNER = { id: "u_owner", role: "BUYER", status: "ACTIVE" };
@@ -273,5 +275,74 @@ test("sso-domain-trust: cert-only save (empty allowlist, not enforced) passes", 
     verifiedDomains: [],
     enforced: false,
   });
+  assert.equal(r.ok, true);
+});
+
+// ---- QA1-fix4 BUG 1: approval separation of duties ----
+
+test("approval: the placing member cannot approve their own order", () => {
+  const r = canDecideApproval({
+    deciderMemberId: "m_alice",
+    placingMemberId: "m_alice",
+    isAdmin: false,
+    decision: "APPROVE",
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+  assert.match(r.error, /your own order/i);
+});
+
+test("approval: an org ADMIN still cannot approve their own order (short-circuit honors SoD)", () => {
+  const r = canDecideApproval({
+    deciderMemberId: "m_alice",
+    placingMemberId: "m_alice",
+    isAdmin: true,
+    decision: "APPROVE",
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+});
+
+test("approval: a different member may approve the order", () => {
+  const r = canDecideApproval({
+    deciderMemberId: "m_bob",
+    placingMemberId: "m_alice",
+    isAdmin: false,
+    decision: "APPROVE",
+  });
+  assert.equal(r.ok, true);
+});
+
+test("approval: rejecting your own order is allowed (cancel your own request)", () => {
+  const r = canDecideApproval({
+    deciderMemberId: "m_alice",
+    placingMemberId: "m_alice",
+    isAdmin: false,
+    decision: "REJECT",
+  });
+  assert.equal(r.ok, true);
+});
+
+test("approval: unknown placing member does not block approval", () => {
+  const r = canDecideApproval({
+    deciderMemberId: "m_bob",
+    placingMemberId: null,
+    isAdmin: false,
+    decision: "APPROVE",
+  });
+  assert.equal(r.ok, true);
+});
+
+// ---- QA1-fix4 BUG 3: OOO delegate must be able to approve ----
+
+test("delegate: a delegate who cannot approve (VIEWER/BUYER) is rejected", () => {
+  const r = delegateApprovalGuard({ delegateCanApprove: false });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+  assert.match(r.error, /approve orders/i);
+});
+
+test("delegate: a delegate who can approve (APPROVER/ADMIN) is allowed", () => {
+  const r = delegateApprovalGuard({ delegateCanApprove: true });
   assert.equal(r.ok, true);
 });

@@ -45,6 +45,9 @@ export async function POST(
     reason,
   });
 
+  if (result && typeof result === "object" && "error" in result) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
   if (!result) {
     return NextResponse.json(
       { error: "Could not process this decision. The step may already be resolved or you are not the assigned approver." },
