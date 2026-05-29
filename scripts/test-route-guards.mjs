@@ -160,43 +160,136 @@ test("demo-pay: allows an admin on someone else's PENDING order", () => {
   assert.equal(r.ok, true);
 });
 
+// ---- BUG 1 (guest checkout): demo-pay allows a guest order ----
+
+const GUEST_ORDER = { buyerId: null, status: "PENDING", approvalStatus: "NONE" };
+
+test("demo-pay: allows a GUEST order (buyerId null) with no session", () => {
+  const r = demoPayGuard({
+    paymentsConfigured: false,
+    user: null,
+    order: GUEST_ORDER,
+    orgStatus: null,
+  });
+  assert.equal(r.ok, true);
+});
+
+test("demo-pay: a guest order is still inert (503) when payments configured", () => {
+  const r = demoPayGuard({
+    paymentsConfigured: true,
+    user: null,
+    order: GUEST_ORDER,
+    orgStatus: null,
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 503);
+});
+
+test("demo-pay: a guest order still must be PENDING", () => {
+  const r = demoPayGuard({
+    paymentsConfigured: false,
+    user: null,
+    order: { ...GUEST_ORDER, status: "PAID" },
+    orgStatus: null,
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+});
+
+test("demo-pay: a guest order still respects the approval gate", () => {
+  const r = demoPayGuard({
+    paymentsConfigured: false,
+    user: null,
+    order: { ...GUEST_ORDER, approvalStatus: "PENDING" },
+    orgStatus: null,
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "APPROVAL_PENDING");
+});
+
+test("demo-pay: still blocks an unauthenticated caller on a USER's order", () => {
+  const r = demoPayGuard({
+    paymentsConfigured: false,
+    user: null,
+    order: PENDING_ORDER,
+    orgStatus: null,
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 401);
+});
+
 // ---- BUG 2: quote decline ----
 
 const QUOTE = { buyerId: "u_owner" };
+const ACTIVE_ACCESS = { roleCanRespond: true, supplierActive: true };
 
 test("quote-decline: 401 for an unauthenticated caller", () => {
-  const r = quoteDeclineGuard({ user: null, quote: QUOTE, supplierAccessOk: false });
+  const r = quoteDeclineGuard({ user: null, quote: QUOTE, supplierAccess: null });
   assert.equal(r.ok, false);
   assert.equal(r.status, 401);
 });
 
 test("quote-decline: 403 for a signed-in non-owner with no supplier access", () => {
-  const r = quoteDeclineGuard({ user: OTHER, quote: QUOTE, supplierAccessOk: false });
+  const r = quoteDeclineGuard({ user: OTHER, quote: QUOTE, supplierAccess: null });
   assert.equal(r.ok, false);
   assert.equal(r.status, 403);
 });
 
 test("quote-decline: allows the quote owner", () => {
-  const r = quoteDeclineGuard({ user: OWNER, quote: QUOTE, supplierAccessOk: false });
+  const r = quoteDeclineGuard({ user: OWNER, quote: QUOTE, supplierAccess: null });
   assert.equal(r.ok, true);
 });
 
 test("quote-decline: allows a platform admin", () => {
-  const r = quoteDeclineGuard({ user: ADMIN, quote: QUOTE, supplierAccessOk: false });
+  const r = quoteDeclineGuard({ user: ADMIN, quote: QUOTE, supplierAccess: null });
   assert.equal(r.ok, true);
 });
 
-test("quote-decline: allows the product's supplier", () => {
+test("quote-decline: allows an approved-active supplier with a responding role", () => {
   const supplier = { id: "u_supplier", role: "SUPPLIER" };
-  const r = quoteDeclineGuard({ user: supplier, quote: QUOTE, supplierAccessOk: true });
+  const r = quoteDeclineGuard({ user: supplier, quote: QUOTE, supplierAccess: ACTIVE_ACCESS });
   assert.equal(r.ok, true);
 });
 
 test("quote-decline: 403 for a supplier WITHOUT access to this product", () => {
   const supplier = { id: "u_supplier", role: "SUPPLIER" };
-  const r = quoteDeclineGuard({ user: supplier, quote: QUOTE, supplierAccessOk: false });
+  const r = quoteDeclineGuard({ user: supplier, quote: QUOTE, supplierAccess: null });
   assert.equal(r.ok, false);
   assert.equal(r.status, 403);
+});
+
+// BUG 3: role + suspended-supplier checks now mirror the "quote" price action.
+
+test("quote-decline: 403 for a VIEWER-type role that cannot respond to RFQs", () => {
+  const supplier = { id: "u_supplier", role: "SUPPLIER" };
+  const r = quoteDeclineGuard({
+    user: supplier,
+    quote: QUOTE,
+    supplierAccess: { roleCanRespond: false, supplierActive: true },
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 403);
+});
+
+test("quote-decline: 403 for a member of a suspended / non-public supplier", () => {
+  const supplier = { id: "u_supplier", role: "SUPPLIER" };
+  const r = quoteDeclineGuard({
+    user: supplier,
+    quote: QUOTE,
+    supplierAccess: { roleCanRespond: true, supplierActive: false },
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 403);
+});
+
+test("quote-decline: owner can decline even on a suspended supplier", () => {
+  // OWNER is the quote buyer; supplier role/status must not matter for them.
+  const r = quoteDeclineGuard({
+    user: OWNER,
+    quote: QUOTE,
+    supplierAccess: { roleCanRespond: false, supplierActive: false },
+  });
+  assert.equal(r.ok, true);
 });
 
 // ---- BUG (CRITICAL): 2FA-pending ticket must not pass as a session token ----

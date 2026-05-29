@@ -30,12 +30,22 @@ export async function POST(
   }
 
   const user = await getCurrentUser();
-  // Only load the order + org context once we have a user (avoids leaking
-  // order existence to unauthenticated callers and saves the queries).
-  const order = user
-    ? await prisma.order.findUnique({ where: { id } })
+  // Load the order with its buyer. Demo mode supports guest orders (buyerId
+  // null), which a guest must be able to pay, so we cannot gate the lookup
+  // behind a session. demoPayGuard enforces auth/ownership for a real user's
+  // order; a guest order is allowed through (demo-only, no real money moves).
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: { buyer: true },
+  });
+  // BUG 2 fix. The org-suspend gate must read the ORDER's buyer's org (mirrors
+  // create-session's getActiveBuyerOrgContext(order.buyer)), NOT the current
+  // session user's org. Otherwise an admin paying on behalf of a buyer whose
+  // org is suspended would read the admin's (un-suspended) org and slip past.
+  // A guest order (buyerId null, no buyer) has no org, so no org-suspend check.
+  const orgCtx = order?.buyer
+    ? await getActiveBuyerOrgContext(order.buyer)
     : null;
-  const orgCtx = user ? await getActiveBuyerOrgContext(user) : null;
 
   const result = demoPayGuard({
     paymentsConfigured,

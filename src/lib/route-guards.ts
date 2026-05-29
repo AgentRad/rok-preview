@@ -44,20 +44,29 @@ export function demoPayGuard(input: {
       error: "Demo checkout is disabled on this environment. Use the live payment flow.",
     };
   }
-  // 2. Require an authenticated, ACTIVE session.
-  if (!input.user) {
-    return { ok: false, status: 401, error: "Sign in to complete checkout." };
-  }
-  if (input.user.status !== "ACTIVE") {
-    return { ok: false, status: 403, error: SUSPENDED_ACCOUNT_ERROR };
-  }
   if (!input.order) {
     return { ok: false, status: 404, error: "Order not found." };
   }
-  // 2 (cont). Must own the order or be a platform admin.
-  const isOwner = !!input.order.buyerId && input.order.buyerId === input.user.id;
-  if (!isOwner && input.user.role !== "ADMIN") {
-    return { ok: false, status: 403, error: "You are not allowed to pay this order." };
+  // 2. Guest checkout is supported: POST /api/orders sets buyerId null for a
+  //    guest, and the on-site demo lets a guest place and pay an order. Allow a
+  //    GUEST order (buyerId null) to be demo-paid without a session, mirroring
+  //    create-session's guest tolerance. Safe here because this route is
+  //    demo-only (the 503 above makes it inert the moment a real provider is
+  //    live), so no real money or supplier payout ever moves on this path. A
+  //    real user's order (buyerId set) still requires an authenticated ACTIVE
+  //    owner-or-admin session.
+  const isGuestOrder = input.order.buyerId === null;
+  if (!isGuestOrder) {
+    if (!input.user) {
+      return { ok: false, status: 401, error: "Sign in to complete checkout." };
+    }
+    if (input.user.status !== "ACTIVE") {
+      return { ok: false, status: 403, error: SUSPENDED_ACCOUNT_ERROR };
+    }
+    const isOwner = input.order.buyerId === input.user.id;
+    if (!isOwner && input.user.role !== "ADMIN") {
+      return { ok: false, status: 403, error: "You are not allowed to pay this order." };
+    }
   }
   // 3. Only a PENDING order can be paid.
   if (input.order.status !== "PENDING") {
@@ -95,13 +104,41 @@ export function demoPayGuard(input: {
 export function quoteDeclineGuard(input: {
   user: { id: string; role: string } | null;
   quote: { buyerId: string | null };
-  supplierAccessOk: boolean;
+  // Supplier-team context of the caller when they are a SUPPLIER member with
+  // access to this product's supplier; null otherwise. roleCanRespond is
+  // canRespondToQuotes(access.role) and supplierActive is
+  // (supplier.status === "APPROVED" && supplier.publicVisible), both computed
+  // by the route from the server-only supplier-access helpers (which cannot be
+  // imported here without pulling in server-only). This keeps the guard pure +
+  // unit-testable while mirroring the sibling "quote" (price) action's gate.
+  supplierAccess: { roleCanRespond: boolean; supplierActive: boolean } | null;
 }): GuardResult {
   if (!input.user) {
     return { ok: false, status: 401, error: "Not authorized." };
   }
+  // The quote OWNER and platform ADMIN may always decline (a buyer declining
+  // their own RFQ, an admin moderating), regardless of supplier role/status.
   const isOwner = !!input.quote.buyerId && input.quote.buyerId === input.user.id;
-  if (isOwner || input.user.role === "ADMIN" || input.supplierAccessOk) {
+  if (isOwner || input.user.role === "ADMIN") {
+    return { ok: true };
+  }
+  // BUG 3 fix. A supplier-team member may decline an RFQ only under the SAME
+  // gate the "quote" (price) action enforces: a role that canRespondToQuotes
+  // AND a supplier that is APPROVED && publicVisible (the PLH-3e B2
+  // suspended-supplier gate). Previously any member with supplier access could
+  // decline, including VIEWER/FINANCE/FULFILLMENT roles and members of a
+  // suspended / non-public supplier, though they could not price the same RFQ.
+  if (input.supplierAccess) {
+    if (!input.supplierAccess.roleCanRespond) {
+      return { ok: false, status: 403, error: "Your role doesn't allow responding to RFQs." };
+    }
+    if (!input.supplierAccess.supplierActive) {
+      return {
+        ok: false,
+        status: 403,
+        error: "Your supplier account is not active. Contact support to reactivate.",
+      };
+    }
     return { ok: true };
   }
   return { ok: false, status: 403, error: "Not authorized." };

@@ -40,12 +40,22 @@ export async function PATCH(
     // audit actor). Require an authenticated owner / ADMIN / product-supplier
     // before any state change. Mirrors the sibling "quote" action below.
     const actor = await getCurrentUser();
-    let supplierAccessOk = false;
+    // BUG 3 fix. Mirror the "quote" (price) action's supplier gate: a
+    // supplier-team member may decline only if their role canRespondToQuotes
+    // AND the supplier is APPROVED && publicVisible. The quote owner and
+    // platform admin bypass this (handled inside quoteDeclineGuard).
+    let supplierAccess: { roleCanRespond: boolean; supplierActive: boolean } | null = null;
     if (actor?.role === "SUPPLIER") {
       const access = await userHasAccessToSupplier(actor.id, quote.product.supplierId);
-      supplierAccessOk = access.ok;
+      if (access.ok) {
+        const supplier = quote.product.supplier;
+        supplierAccess = {
+          roleCanRespond: canRespondToQuotes(access.role),
+          supplierActive: supplier.status === "APPROVED" && supplier.publicVisible,
+        };
+      }
     }
-    const guard = quoteDeclineGuard({ user: actor, quote, supplierAccessOk });
+    const guard = quoteDeclineGuard({ user: actor, quote, supplierAccess });
     if (!guard.ok) {
       return NextResponse.json({ error: guard.error }, { status: guard.status });
     }
