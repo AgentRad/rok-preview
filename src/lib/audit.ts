@@ -224,6 +224,10 @@ export const AUDIT_ACTIONS = [
   "CREDIT_APP_SUBMITTED",
   "CREDIT_APP_APPROVED",
   "CREDIT_APP_REJECTED",
+  // PLH-3z-4: dunning + auto-suspend + reactivate (final net-30 round).
+  "AR_DUNNING_SENT",
+  "BUYER_ORG_SUSPENDED",
+  "BUYER_ORG_REACTIVATED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -247,7 +251,8 @@ export type AuditTargetType =
   | "SsoConfig"
   | "ApprovalRule"
   | "Invoice"
-  | "CreditApplication";
+  | "CreditApplication"
+  | "InvoiceDunningLog";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

@@ -125,6 +125,16 @@ enum BuyerOrgBillingMode {
 // PLH-3y-3: lifecycle of a claimed org email domain. PENDING is awaiting the
 // DNS TXT record; VERIFIED means the cron found the token; FAILED means the
 // record disappeared or never showed up within the verification window.
+// PLH-3z-4: org-level credit suspension for past-due net-terms balances. This
+// is distinct from the per-USER suspend from PLH-3w (User.status). ACTIVE is
+// the default; a member of a SUSPENDED org cannot place new orders. Auto-set
+// by the dunning cron at 30 days past due and auto-cleared when all past-due
+// invoices are paid.
+enum BuyerOrgStatus {
+  ACTIVE
+  SUSPENDED
+}
+
 enum BuyerOrgDomainStatus {
   PENDING
   VERIFIED
@@ -505,6 +515,13 @@ model BuyerOrg {
   // D-U-N-S / auto-approve until a later round); null = no explicit limit.
   paymentTerms            PaymentTerms @default(PREPAID)
   creditLimitCents        Int?
+  // PLH-3z-4: org-level credit suspension. SUSPENDED orgs cannot place new
+  // orders (gated in /api/orders + checkout-from-quote). Set by the ar-dunning
+  // cron at 30 days past due; cleared automatically when all past-due invoices
+  // clear (invoice.paid webhook / manual mark-paid).
+  status          BuyerOrgStatus   @default(ACTIVE)
+  suspendedAt     DateTime?
+  suspendedReason String?
   members         BuyerOrgMember[]
   invites         BuyerOrgInvite[]
   addresses       BuyerOrgAddress[]
@@ -1050,12 +1067,35 @@ model Invoice {
   // invoice. partialPaidCents tracks the running sum of PaymentRecord rows so
   // a partial wire keeps the invoice open until the full balance clears.
   stripeInvoiceId String?        @unique
+  // PLH-3z-4: Stripe-hosted invoice payment page URL, captured at finalize
+  // time. Dunning emails deep-link to this when present (self-service ACH
+  // pay), else fall back to the on-platform invoice page. Null for PREPAID
+  // invoices and when Stripe is not configured.
+  stripeHostedInvoiceUrl String?
   dueDate         DateTime?
   paidAt          DateTime?
   paidReference   String?
   paymentMethod   String?
   partialPaidCents Int           @default(0)
   payments        PaymentRecord[]
+  dunningLogs     InvoiceDunningLog[]
+}
+
+// PLH-3z-4: dunning idempotency. One row per (invoice, stage) so a dunning
+// stage email fires exactly once per invoice no matter how many times the
+// ar-dunning cron runs. There is no Email model in this codebase (email sends
+// are fire-and-forget helpers), so this is the dedicated idempotency table the
+// PLH-3z-2 / 3z-3 deviation notes flagged. stage is one of the cadence labels
+// ("T-3" | "T0" | "T+7" | "T+30").
+model InvoiceDunningLog {
+  id        String   @id @default(cuid())
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId String
+  stage     String
+  sentAt    DateTime @default(now())
+
+  @@unique([invoiceId, stage])
+  @@index([invoiceId])
 }
 
 // PLH-3z-2: one row per payment applied to an invoice. The Stripe webhook
