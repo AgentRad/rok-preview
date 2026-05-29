@@ -2855,6 +2855,45 @@ closing it. Fixing serially.
     decline regardless.
   - 8 new test cases (now 91). Build clean.
 
-QA3 remaining (serial): net-terms shared-customer address race + TOTP fast-clock
-edge (LOW). Then a final build + test gate, after which the audit + two-pass
-re-audit are fully remediated.
+- **QA3-fix4 (`f13e8a4`).** Last two LOW items.
+  - **net-terms shared-customer tax-jurisdiction race.** `createStripeInvoiceForOrder`
+    mutated the shared org HYBRID Stripe customer's address per invoice; concurrent
+    net-terms orders to different states could finalize against the wrong address.
+    Investigated the invoice-level-address option and confirmed Stripe Tax for
+    Invoices reads the location off the CUSTOMER (invoice shipping_details is
+    PDF-only for tax), so the fix mints a FRESH per-invoice customer carrying that
+    order's ship-to + tax_exempt, never touching a shared customer. Race gone in
+    all cases. Org id kept in customer metadata for cross-ref. Exemption still via
+    lookupTaxExemption; PREPAID + fail-soft + local-total reconciliation unchanged.
+    Behavioral note: HYBRID-org net-terms invoice email now goes to the order's
+    buyerEmail (same as non-org net-terms already did); org A/R is tracked
+    on-platform by buyerOrgId, send_invoice/ACH has no saved-PM dependency, so
+    nothing functional is lost.
+  - **TOTP fast-clock anti-replay: ANALYZED, NO CHANGE (current logic proven
+    correct).** `verifyTotpStep` returns the code's CANONICAL step
+    (server_step + window_delta), so two presentations collide on one stored step
+    only when they are the literally-same code, which is exactly the replay to
+    block. A fast-clock device shows the NEXT step's code at the next real window
+    (strictly greater canonical step, accepted), so there is no genuine
+    false-reject. Documented in route-guards.ts; no behavioral change. 2 scenario
+    tests added (now 93 in route-guards).
+  - Full suite 133/133 (route-guards 93 + net-terms-tax 14 + unsubscribe-token 16
+    + strip-quoted-reply 10). Build clean.
+
+**PLH-QA3 COMPLETE. Audit + two-pass re-audit fully remediated.** The 2026-05-29
+whole-platform adversarial audit (15 findings: 3 CRIT, 6 HIGH, 5 MED, 7 LOW, incl.
+net-terms tax) AND the second adversarial pass over the fix code itself (QA3: 1 MED
+spend-control gap + 2 MED + several LOW residuals) are all fixed and on origin.
+Final verification gate (orchestrator-run): 133/133 unit tests pass across 4 suites;
+`npx next build` clean; branch in sync with origin. No known CRITICAL/HIGH/MEDIUM/LOW
+open from either pass.
+
+PENDING DEPLOY: migration `20260713000000_add_last_totp_step` (additive nullable,
+applies on next `prisma migrate deploy`).
+
+REMAINING TO LAUNCH (all owner-side, banked in REMINDERS.md): (1) deploy so the
+migration applies + confirm green; (2) the live owner smoke tests (SSO round-trip +
+tampered-assertion reject, approval pause/approve, net-30 ACH + dunning + auto-suspend,
+demo-pay-503-in-prod, iPhone Safari) which catch the env/webhook/mobile class code
+review cannot; (3) entity/bank -> Stripe live keys, Sentry DSN, demo-data wipe,
+attorney glance at legal pages.
