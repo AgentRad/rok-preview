@@ -96,9 +96,10 @@ test("admin can log in and reach the admin console", async () => {
 test("wrong password does not grant a session", async () => {
   const page = await newPage();
   await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.locator('input[type="email"]').first().fill("buyer@partsport.example");
-  await page.locator('input[type="password"]').first().fill("wrong-password-xyz");
-  await page.locator('button[type="submit"], button.btn-primary').first().click();
+  const form = page.locator("form").filter({ has: page.locator('input[type="password"]') }).first();
+  await form.locator('input[type="email"]').first().fill("buyer@partsport.example");
+  await form.locator('input[type="password"]').first().fill("wrong-password-xyz");
+  await form.locator('button.btn-primary, button[type="submit"]').first().click();
   await page.waitForTimeout(2500);
   // Directly assert the security property: a failed login grants no session, so
   // an auth-gated page bounces to /login (robust regardless of client redirect).

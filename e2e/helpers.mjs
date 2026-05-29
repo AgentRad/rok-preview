@@ -42,15 +42,17 @@ export async function loginAs(role) {
   page.setDefaultTimeout(15000);
   page.setDefaultNavigationTimeout(20000);
   await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.locator('input[type="email"]').first().fill(acct.email);
-  await page.locator('input[type="password"]').first().fill(acct.password);
+  // Scope to the login FORM (the one with a password field), so we don't hit the
+  // site header's search button, which also carries .btn-primary.
+  const form = page.locator("form").filter({ has: page.locator('input[type="password"]') }).first();
+  await form.locator('input[type="email"]').first().fill(acct.email);
+  await form.locator('input[type="password"]').first().fill(acct.password);
 
-  // Click submit and capture the real login API response (status + body) so a
-  // failure tells us the truth instead of guessing.
+  // Click the login submit and capture the real login API response.
   const respPromise = page
     .waitForResponse((r) => r.url().includes("/api/auth/login") && r.request().method() === "POST", { timeout: 20000 })
     .catch(() => null);
-  await page.locator('button[type="submit"], button.btn-primary').first().click();
+  await form.locator('button.btn-primary, button[type="submit"]').first().click();
   const resp = await respPromise;
 
   let loginStatus = null;
