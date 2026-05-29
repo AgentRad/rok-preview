@@ -55,25 +55,8 @@ export async function loginAs(role) {
   await form.locator('button.btn-primary, button[type="submit"]').first().click();
   const resp = await respPromise;
 
-  let loginStatus = null;
-  let loginBody = null;
-  if (resp) {
-    loginStatus = resp.status();
-    try {
-      loginBody = await resp.text();
-    } catch {
-      loginBody = "(unreadable)";
-    }
-  }
+  const loginStatus = resp ? resp.status() : null;
   // Give the client redirect + Set-Cookie a beat to settle.
   await page.waitForTimeout(1500);
-  const cookies = await ctx.cookies();
-  const cookieDiag = cookies.map((c) => ({ name: c.name, secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite }));
-
-  // Diagnostic line surfaces in the CI test log (stderr).
-  console.error(
-    `[loginAs ${role}] loginStatus=${loginStatus} url=${page.url()} cookies=${JSON.stringify(cookieDiag)} body=${(loginBody || "").slice(0, 200)}`
-  );
-
   return { page, ctx, loginStatus };
 }

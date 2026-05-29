@@ -71,26 +71,65 @@ test("marketing pages render", async () => {
 });
 
 test("buyer can log in and reach the account page", async () => {
-  const { page, ctx } = await loginAs("buyer");
+  const { page, ctx, loginStatus } = await loginAs("buyer");
+  assert.equal(loginStatus, 200, "buyer login API should return 200");
   await page.goto("/account", { waitUntil: "domcontentloaded" });
   assert.ok(!page.url().includes("/login"), "account must not bounce an authenticated buyer to /login");
   await ctx.close();
 });
 
-test("supplier can log in and reach the supplier dashboard", async () => {
-  const { page, ctx } = await loginAs("supplier");
-  await page.goto("/supplier", { waitUntil: "domcontentloaded" });
-  assert.ok(!page.url().includes("/login"), "supplier dashboard must not bounce an authenticated supplier");
-  const body = (await page.locator("body").innerText()).toLowerCase();
-  assert.ok(body.length > 0, "supplier dashboard rendered");
+test("supplier can log in and reach the supplier dashboard + sub-pages", async () => {
+  const { page, ctx, loginStatus } = await loginAs("supplier");
+  assert.equal(loginStatus, 200, "supplier login API should return 200");
+  for (const path of ["/supplier", "/supplier/products", "/supplier/payouts", "/supplier/quotes", "/supplier/settings"]) {
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+    assert.ok(!page.url().includes("/login"), `${path} must not bounce an authenticated supplier`);
+  }
   await ctx.close();
 });
 
-test("admin can log in and reach the admin console", async () => {
-  const { page, ctx } = await loginAs("admin");
-  await page.goto("/admin", { waitUntil: "domcontentloaded" });
-  assert.ok(!page.url().includes("/login"), "admin console must not bounce an authenticated admin");
+test("admin can log in and reach the admin console + key sub-pages", async () => {
+  const { page, ctx, loginStatus } = await loginAs("admin");
+  assert.equal(loginStatus, 200, "admin login API should return 200");
+  for (const path of ["/admin", "/admin/buyer-orgs", "/admin/users", "/admin/accounts-receivable"]) {
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+    assert.ok(!page.url().includes("/login"), `${path} must not bounce an authenticated admin`);
+  }
   await ctx.close();
+});
+
+test("search returns catalog results", async () => {
+  const page = await newPage();
+  await page.goto("/catalog?q=transformer", { waitUntil: "domcontentloaded" });
+  const body = (await page.locator("body").innerText()).toLowerCase();
+  assert.ok(body.includes("transformer") || body.includes("kva"), "search should surface matching products");
+  await page.context().close();
+});
+
+test("all legal pages render", async () => {
+  const page = await newPage();
+  const routes = [
+    "/legal/terms",
+    "/legal/privacy",
+    "/legal/acceptable-use",
+    "/legal/returns",
+    "/legal/supplier-agreement",
+    "/legal/dpa",
+    "/legal/security",
+    "/legal/subprocessors",
+  ];
+  for (const path of routes) {
+    const resp = await page.goto(path, { waitUntil: "domcontentloaded" });
+    assert.ok(resp && resp.status() < 400, `${path} should render (got ${resp && resp.status()})`);
+  }
+  await page.context().close();
+});
+
+test("unknown route returns 404", async () => {
+  const page = await newPage();
+  const resp = await page.goto("/this-route-does-not-exist-zzz", { waitUntil: "domcontentloaded" });
+  assert.equal(resp.status(), 404, "an unknown route should 404");
+  await page.context().close();
 });
 
 test("wrong password does not grant a session", async () => {
