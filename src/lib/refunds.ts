@@ -151,9 +151,12 @@ async function clawbackSlotInTx(
       },
     });
   }
-  // Bump slot refundedCents so per-slot accounting reflects the claw. Slot
-  // caps are enforced upstream in refundOrder (validate amount <=
-  // slot.subtotal+freight - slot.refundedCents).
+  // Bump slot refundedCents so per-slot accounting reflects the claw via
+  // {increment} (never a blind set), so concurrent claws compose. The slot
+  // cap (amount <= slot.subtotal+freight - slot.refundedCents) is re-read
+  // FRESH inside the same unified tx in refundOrder (QA3 BUG 1) right before
+  // this runs, mirroring the order-level fresh re-read; the stale
+  // top-of-function snapshot is only a preliminary fast-reject.
   await tx.orderSupplierSlot.update({
     where: { id: slot.id },
     data: { refundedCents: { increment: amount } },
@@ -595,6 +598,37 @@ export async function refundOrder(args: {
       return { kind: "over" as const, remaining: freshRemaining };
     }
 
+    // QA3 BUG 1: slot/item-scoped refunds also need a FRESH in-tx cap re-read.
+    // The slot cap checked at the top of refundOrder reads the stale
+    // findUnique snapshot, so two concurrent slot-scoped (or item-scoped)
+    // refunds on the SAME slot, where the ORDER total still has headroom from
+    // other unrefunded slots, can both pass the stale slot check AND the fresh
+    // order check, then both clawback, pushing that slot's refundedCents past
+    // its subtotal+freight and double-drawing that one supplier's reserve.
+    // Re-read the target slot fresh here, in the same tx as the {increment}
+    // bump, and reject over the slot cap. Mirrors the order-level pattern and
+    // reuses refundRemainingCents on the slot base (subtotal + freight).
+    if (targetSlotId) {
+      const freshSlot = await tx.orderSupplierSlot.findUnique({
+        where: { id: targetSlotId },
+        select: {
+          subtotalCents: true,
+          freightCents: true,
+          refundedCents: true,
+        },
+      });
+      if (!freshSlot) {
+        return { kind: "slot-notfound" as const };
+      }
+      const slotRemaining = refundRemainingCents(
+        freshSlot.subtotalCents + freshSlot.freightCents,
+        freshSlot.refundedCents
+      );
+      if (amount > slotRemaining) {
+        return { kind: "over-slot" as const, remaining: slotRemaining };
+      }
+    }
+
     const owedAudits = await applySupplierClawbackInTx(
       tx,
       clawTarget,
@@ -626,13 +660,71 @@ export async function refundOrder(args: {
     return { kind: "ok" as const, refundId: r.id, owedAudits };
   });
 
+  // QA3 BUG 2: the Stripe refund fired ABOVE, outside the tx (correct, we never
+  // hold a DB tx open across the network call). If a concurrent refund consumed
+  // the remaining between the preliminary cap and the in-tx fresh re-read, the
+  // tx rejects ("over" / "over-slot") having written NOTHING, yet Stripe already
+  // moved money to the customer. Never drop that silently: leave a reconcilable
+  // trace (captureError + audit row) capturing the Stripe refund id and amount,
+  // so the out-of-band money movement is recoverable. Audit-only (not a
+  // clamped Refund row) is deliberate: in the slot-over case the order still
+  // has headroom, so the "right" booking (reassign to another slot, draw the
+  // supplier into owed, or leave it) is a policy decision an operator must make,
+  // not something to guess here. When NO Stripe refund happened (manualOverride
+  // DB-only path), stripeRefundId is null and the plain reject below is correct.
+  if (txOut.kind !== "ok" && stripeRefundId) {
+    const detail =
+      txOut.kind === "over"
+        ? `order-level cap (${txOut.remaining} cents remaining on the order)`
+        : txOut.kind === "over-slot"
+          ? `slot-level cap (${txOut.remaining} cents remaining on the slot)`
+          : "the order/slot row vanished mid-transaction";
+    captureError(
+      new Error(
+        `Stripe refund ${stripeRefundId} succeeded but the local record was rejected: ${detail}`
+      ),
+      {
+        subsystem: "stripe",
+        op: "refund-over-cap-after-stripe",
+        orderId: order.id,
+      }
+    );
+    await writeAuditLog({
+      actor: { id: args.refundedByUserId, email: args.refundedByEmail },
+      action: "REFUND_OVER_CAP_AFTER_STRIPE",
+      targetType: "Order",
+      targetId: order.id,
+      summary: `Stripe refund ${stripeRefundId} of ${amount} cents on order ${order.reference} could not be recorded locally (${detail}). Out-of-band money movement, reconcile manually.`,
+      metadata: {
+        orderReference: order.reference,
+        amountCents: amount,
+        stripeRefundId,
+        scope: scope.kind,
+        slotId: targetSlotId,
+        orderItemId: targetOrderItemId,
+        rejection: txOut.kind,
+        remaining: "remaining" in txOut ? txOut.remaining : null,
+      },
+    });
+  }
+
   if (txOut.kind === "notfound") {
     return { ok: false, error: "Order not found.", status: 404 };
+  }
+  if (txOut.kind === "slot-notfound") {
+    return { ok: false, error: "Supplier slot not found.", status: 404 };
   }
   if (txOut.kind === "over") {
     return {
       ok: false,
       error: `Refund exceeds remaining ${txOut.remaining} cents on this order.`,
+      status: 400,
+    };
+  }
+  if (txOut.kind === "over-slot") {
+    return {
+      ok: false,
+      error: `Refund exceeds remaining ${txOut.remaining} cents on the supplier slot.`,
       status: 400,
     };
   }

@@ -414,6 +414,41 @@ test("invoice: a zero-total invoice is considered cleared at zero", () => {
   assert.equal(clearsInvoice(0, 0), true);
 });
 
+// ---- QA3 BUG 1: slot-level refund cap (fresh in-tx re-read) ----
+// refundOrder now re-reads the target OrderSupplierSlot FRESH inside the
+// unified refund tx and caps via refundRemainingCents on the slot base
+// (subtotalCents + freightCents). These cases pin the pure slot math the
+// in-tx guard relies on. Slot base here: subtotal 8000 + freight 2000 = 10000.
+const slotBase = (subtotal, freight) => subtotal + freight;
+
+test("slot-cap: refund OVER the slot remaining is rejected", () => {
+  // 6000 already refunded on the slot, 4000 remains; a 4001 refund is over.
+  const remaining = refundRemainingCents(slotBase(8000, 2000), 6000);
+  assert.equal(remaining, 4000);
+  assert.equal(refundWithinCap(slotBase(8000, 2000), 6000, 4001), false);
+});
+
+test("slot-cap: a refund for EXACTLY the slot remaining is allowed", () => {
+  assert.equal(refundWithinCap(slotBase(8000, 2000), 6000, 4000), true);
+});
+
+test("slot-cap: a PARTIAL refund within the slot remaining is allowed", () => {
+  assert.equal(refundWithinCap(slotBase(8000, 2000), 6000, 1000), true);
+});
+
+test("slot-cap: a fully-refunded slot has zero remaining and rejects any more", () => {
+  // Two concurrent slot-scoped refunds: the first consumed the whole slot, so
+  // the second, re-reading fresh in-tx, sees 0 remaining and is rejected even
+  // though the ORDER may still have headroom from other slots.
+  assert.equal(refundRemainingCents(slotBase(8000, 2000), 10000), 0);
+  assert.equal(refundWithinCap(slotBase(8000, 2000), 10000, 1), false);
+});
+
+test("slot-cap: a corrupt over-refunded slot row cannot widen the cap below zero", () => {
+  // refundedCents somehow exceeds the base: remaining clamps to 0, never negative.
+  assert.equal(refundRemainingCents(slotBase(8000, 2000), 12000), 0);
+});
+
 // QA2 BUG 1 lost-update shape: two concurrent payments. The fix increments
 // atomically, so the running total is the SUM, not the last writer's blind
 // set. Only the cumulative sum clears the invoice.

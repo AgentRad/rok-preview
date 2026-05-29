@@ -2788,7 +2788,51 @@ closing it. Fixing serially.
   VIEWER/BUYER rejected). Reject POST branch given the `{error}`-shape guard. +5
   test cases (now 78). Build clean.
 
-QA3 remaining (serial): refund slot-level cap race + record-on-over (money,
-MEDIUM); demo-pay guest dead-end + wrong-org suspend check + quote-decline role
-gate (MEDIUM+LOW); net-terms shared-customer address race + TOTP fast-clock edge
-(LOW). Then a final build + test gate.
+- **QA3-fix2.** Two residual refund-concurrency issues in `src/lib/refunds.ts`
+  left after QA2-fix1 (which made the ORDER-level cap race-safe via a fresh
+  in-tx re-read but left the slot-level cap reading the stale snapshot).
+  - **BUG 1 (MEDIUM, money): slot-level cap read stale data.** The slot/item
+    cap (`amount > slotRemaining`) was computed from the top-of-function
+    `order.supplierSlots` findUnique snapshot, and `clawbackSlotInTx` did no
+    slot-cap re-validation, so two concurrent slot-scoped (or item-scoped)
+    refunds on the SAME slot, where the ORDER total still had headroom from
+    other unrefunded slots, could both pass the stale slot check AND the fresh
+    order check and both clawback, pushing that slot's `refundedCents` past its
+    `subtotalCents + freightCents` and double-drawing that one supplier's
+    reserve (no Stripe backstop on the manualOverride DB-only path). Fix: inside
+    the unified `$transaction`, when the refund is slot/item-scoped, re-read the
+    target `OrderSupplierSlot` FRESH and reject when
+    `amount > refundRemainingCents(slot.subtotalCents + slot.freightCents,
+    slot.refundedCents)`, returning a `{ kind: "over-slot" }` shape mirrored on
+    the order-level `over` shape. The slot `refundedCents` bump already used
+    `{ increment }` in `clawbackSlotInTx` (confirmed, not a blind set). Mirrors
+    the QA2 order-level fresh-read pattern and reuses `refundRemainingCents`.
+  - **BUG 2 (LOW): successful Stripe refund with zero local record on in-tx
+    over.** The Stripe refund fires OUTSIDE the tx (correct). If a concurrent
+    refund consumed the remaining between the preliminary cap and the in-tx
+    fresh re-read, the tx returned `over`/`over-slot` having written NOTHING,
+    yet Stripe already refunded the customer, so money left the platform with
+    no Refund row, no clawback, no audit. Fix: when the in-tx cap rejects AFTER
+    a Stripe refund succeeded (`stripeRefundId` set), write a
+    `REFUND_OVER_CAP_AFTER_STRIPE` audit row + `captureError` capturing the
+    Stripe refund id, amount, scope, slotId, and which cap rejected, so the
+    out-of-band money movement is reconcilable. Chose AUDIT-ONLY (not a
+    clamped Refund row) deliberately: in the slot-over case the order still has
+    headroom, so the correct booking (reassign to another slot, draw the
+    supplier into owed, or leave it) is a policy decision for an operator, not
+    a guess. When NO Stripe refund happened (manualOverride DB-only path),
+    `stripeRefundId` is null and the plain reject with no write is preserved.
+  - Order-level cap (QA2), `clawbackSlotInTx` netting (`Math.min` + fresh
+    reserve re-read + `owedToPlatformCents`, P12 c2 / PLH-1 c5), and net-terms
+    payout-on-payment timing (PLH-3z-4) are all UNCHANGED; only the slot-level
+    re-read + the over-after-Stripe trace were added. No DB tx is held across
+    the Stripe network call. New audit action `REFUND_OVER_CAP_AFTER_STRIPE`.
+    Locked in with 5 new slot-cap cases in `scripts/test-route-guards.mjs` (now
+    83: over rejected, exact-remaining allowed, partial allowed, fully-consumed
+    slot rejects, corrupt over-refunded row clamps to 0). The tx/Stripe
+    ordering + audit-on-over are integration-level (not unit-tested; covered by
+    build + reasoning). `npx next build` clean.
+
+QA3 remaining (serial): demo-pay guest dead-end + wrong-org suspend check +
+quote-decline role gate (MEDIUM+LOW); net-terms shared-customer address race +
+TOTP fast-clock edge (LOW). Then a final build + test gate.
