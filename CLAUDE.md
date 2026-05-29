@@ -2759,3 +2759,36 @@ collect via Stripe Checkout + Stripe Tax. PREPAID is byte-for-byte untouched.
 
 PENDING DEPLOY: migration `20260713000000_add_last_totp_step` (additive nullable
 column, applies on next `prisma migrate deploy`). No new migration in PLH-3z-tax.
+
+## PLH-QA3 (2026-05-29). Second adversarial pass over the QA1/QA2 fix code itself.
+
+After QA1+QA2, ran a 4-agent re-audit focused on the changed code (diff
+b74f3fb..a7eb2cd) to catch fix-induced regressions, bypasses around the new
+guards, and incompletely-closed vulnerability classes. Result: the fixes hold
+(no regressions, no guard bypasses, no new CRITICAL/HIGH), but fresh eyes found
+several residual items, mostly cases where a fix narrowed a class without fully
+closing it. Fixing serially.
+
+- **QA3-fix1 (`c248312`).** Residual approver-role privilege gap (MEDIUM, spend
+  control). QA1-fix4 blocked the VIEWER-as-approver case only on the OOO
+  delegation route; `advanceApproval` still authorized purely on
+  `isAdmin || isAssigned` with no role check, so a non-approver assigned via the
+  escalation cron or an approval rule could approve/reject via the email
+  one-click path (which, unlike the buyer-org decide routes, did not check role).
+  Single-source fix: `advanceApproval` (`src/lib/approval.ts:365`) now runs
+  `approverRoleGuard(canApproveOrders(decider.role))` after the isAssigned check
+  and before both `canDecideApproval` and the isAdmin short-circuit, covering
+  APPROVE and REJECT and every caller (email one-click, buyer-org decide, bulk,
+  escalation-assigned approver) at once. Buyer-org ADMIN satisfies
+  canApproveOrders so the admin short-circuit + platform-admin `/approval/bypass`
+  (separate route) are unaffected; buyer self-cancel is a separate path
+  (`orders/[id]/cancel`) and unchanged. Rule create + PATCH now validate via
+  shared `validateApprovalRuleApprovers` (approverMemberId/escalateToMemberId
+  must be an org member who canApproveOrders; approverRole must be APPROVER/ADMIN,
+  VIEWER/BUYER rejected). Reject POST branch given the `{error}`-shape guard. +5
+  test cases (now 78). Build clean.
+
+QA3 remaining (serial): refund slot-level cap race + record-on-over (money,
+MEDIUM); demo-pay guest dead-end + wrong-org suspend check + quote-decline role
+gate (MEDIUM+LOW); net-terms shared-customer address race + TOTP fast-clock edge
+(LOW). Then a final build + test gate.
