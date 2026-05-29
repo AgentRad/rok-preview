@@ -118,3 +118,45 @@ export function quoteDeclineGuard(input: {
 export function isSessionTokenPayload(payload: Record<string, unknown>): boolean {
   return payload.kind === undefined || payload.kind === null;
 }
+
+// BUG (CRITICAL): SSO config trusted a domain allowlist + enforce flag with no
+// cross-check against the DNS-TXT-verified BuyerOrgDomain table. An org admin
+// could PUT domainAllowlist:["victim-corp.com"], enforced:true for a domain the
+// org never proved control of, then every victim-corp.com password login 403s
+// with an ssoInitiateUrl pointing at the attacker's IdP (lockout + phishing),
+// and SAML/OIDC JIT provisioning trusts the same unverified allowlist. The
+// domain auto-join feature (PLH-3y-3) correctly requires a VERIFIED row; SSO
+// skipped it. This pure function (allowlist + the org's set of VERIFIED domains
+// + enforce flag -> ok/error) is the gate; the upsert path queries the verified
+// rows and turns a non-ok result into a 400. Comparison is case-insensitive
+// (both sides come through normalizeDomainClaim, which lowercases, but the set
+// is defensive).
+export function validateSsoDomainTrust(input: {
+  allowlist: string[];
+  verifiedDomains: string[];
+  enforced: boolean;
+}): { ok: true } | { ok: false; error: string } {
+  const verified = new Set(input.verifiedDomains.map((d) => d.toLowerCase()));
+  const unverified = input.allowlist.filter((d) => !verified.has(d.toLowerCase()));
+  if (unverified.length > 0) {
+    const plural = unverified.length > 1;
+    return {
+      ok: false,
+      error: `Cannot trust ${plural ? "domains" : "domain"} not verified for this organization: ${unverified.join(
+        ", "
+      )}. Verify ${plural ? "them" : "it"} under the organization's Email domains card first.`,
+    };
+  }
+  // enforced=true means every password login on an allowlisted domain is forced
+  // to SSO, so you must have proven control of at least one domain first. Since
+  // every allowlist entry above is already verified, a non-empty allowlist
+  // guarantees at least one verified domain.
+  if (input.enforced && input.allowlist.length === 0) {
+    return {
+      ok: false,
+      error:
+        "Cannot enforce SSO without at least one verified domain in the allowlist. Verify a domain under the organization's Email domains card first.",
+    };
+  }
+  return { ok: true };
+}

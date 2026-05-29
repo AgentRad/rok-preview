@@ -1,6 +1,8 @@
 import "server-only";
 import type { BuyerOrgRole, Prisma, SsoConfig, User } from "@prisma/client";
+import { BuyerOrgDomainStatus } from "@prisma/client";
 import { prisma } from "./db";
+import { validateSsoDomainTrust } from "./route-guards";
 import { writeAuditLog } from "./audit";
 import { normalizeDomainClaim } from "./free-email-domains";
 import { acsUrl, spEntityId } from "./sso";
@@ -126,6 +128,32 @@ export async function upsertSsoConfig(
 
   const groupRoleMap = parseGroupRoleMap(body.groupRoleMap);
   const domainAllowlist = parseAllowlist(body.domainAllowlist);
+  const enforced = body.enforced === true || body.enforced === "true";
+
+  // Domain-trust gate. The allowlisted domains and the enforce flag are what
+  // SSO trusts (forced password-login redirect to the org's IdP + SAML/OIDC JIT
+  // provisioning). Reject any allowlisted domain not DNS-TXT-VERIFIED for THIS
+  // org, reusing the same VERIFIED notion the PLH-3y-3 auto-join path requires.
+  // Skip the query only when nothing is being trusted (empty allowlist + not
+  // enforced), so an org that never touched domains, or a cert-only save that
+  // clears the allowlist, is unaffected. Validating the full incoming allowlist
+  // on every write is intentional: a cert-only save on an already-verified org
+  // re-submits its verified allowlist and passes; an org cannot save an
+  // unverified domain. Both routes (org-admin + site-admin) call this, so both
+  // inherit the gate, and both turn the thrown Error into a 400.
+  if (domainAllowlist.length > 0 || enforced) {
+    const verifiedRows = await prisma.buyerOrgDomain.findMany({
+      where: { buyerOrgId: orgId, status: BuyerOrgDomainStatus.VERIFIED },
+      select: { domain: true },
+    });
+    const check = validateSsoDomainTrust({
+      allowlist: domainAllowlist,
+      verifiedDomains: verifiedRows.map((r) => r.domain),
+      enforced,
+    });
+    if (!check.ok) throw new Error(check.error);
+  }
+
   const defaultRoleRaw = String(body.defaultRole ?? "BUYER").toUpperCase();
   const defaultRole = (ROLES.includes(defaultRoleRaw as BuyerOrgRole)
     ? defaultRoleRaw
@@ -167,7 +195,7 @@ export async function upsertSsoConfig(
     groupAttributeName: str(body.groupAttributeName) || null,
     groupRoleMap: groupRoleMap as Prisma.InputJsonValue,
     defaultRole,
-    enforced: body.enforced === true || body.enforced === "true",
+    enforced,
     sessionMaxAgeMin,
     honorIdpSessionExpiry:
       body.honorIdpSessionExpiry === undefined
