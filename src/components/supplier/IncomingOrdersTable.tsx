@@ -54,6 +54,24 @@ export default function IncomingOrdersTable({
                   ? slot.subtotalCents + slot.freightCents
                   : mine.reduce((s, i) => s + i.unitPriceCents * i.qty, 0);
                 const slotStage = slot?.shipmentStage ?? "Pending";
+                // PLH-3z-4: net-terms orders ship before the buyer pays; the
+                // supplier payout fires when the buyer pays the invoice (LOCKED
+                // hold policy). Surface that to the supplier so the delay is
+                // expected, not a surprise.
+                const isNetTerms = o.paymentTerms !== "PREPAID";
+                const termsLabel = isNetTerms
+                  ? o.paymentTerms.replace("NET_", "Net ")
+                  : "";
+                const dueStr = o.invoiceDueDate
+                  ? new Date(o.invoiceDueDate).toLocaleDateString()
+                  : "the invoice due date";
+                // Net-terms orders are shippable while PENDING; prepaid require PAID.
+                const canShipNow =
+                  (o.status === "PAID" || (isNetTerms && o.status === "PENDING")) &&
+                  slot &&
+                  slotStage !== "Shipped" &&
+                  slotStage !== "Delivered" &&
+                  canFulfill;
                 return (
                   <tr key={o.id}>
                     <td style={{ fontWeight: 700 }}>
@@ -63,6 +81,15 @@ export default function IncomingOrdersTable({
                         variant="dot"
                         ariaLabel="Unread messages"
                       />
+                      {isNetTerms && (
+                        <div
+                          className="muted-text"
+                          style={{ fontSize: 11.5, fontWeight: 400, marginTop: 3 }}
+                        >
+                          Buyer on {termsLabel} terms. Payout fires when the buyer
+                          pays the invoice (due {dueStr}).
+                        </div>
+                      )}
                     </td>
                     <td>{o.createdAt.toLocaleDateString()}</td>
                     <td>
@@ -86,14 +113,10 @@ export default function IncomingOrdersTable({
                     </td>
                     <td className="num">{formatCents(mineTotal)}</td>
                     <td className="num">
-                      {o.status === "PAID" &&
-                        slot &&
-                        slotStage !== "Shipped" &&
-                        slotStage !== "Delivered" &&
-                        canFulfill && (
-                          <FulfillButton orderId={o.id} slotId={slot.id} />
-                        )}
-                      {o.status === "PAID" && slotStage === "Shipped" && (
+                      {canShipNow && slot && (
+                        <FulfillButton orderId={o.id} slotId={slot.id} />
+                      )}
+                      {slotStage === "Shipped" && (
                         <span
                           className="muted-text"
                           style={{ fontSize: 12 }}

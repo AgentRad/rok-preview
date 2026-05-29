@@ -32,7 +32,13 @@ export async function loadSupplierOrders(supplierId: string) {
   return prisma.order.findMany({
     where: {
       items: { some: { product: { supplierId } } },
-      status: { in: ["PAID", "FULFILLED"] },
+      // PLH-3z-4: net-terms orders ship before the buyer pays, so a PENDING
+      // net-terms order must surface to the supplier to be fulfilled. PREPAID
+      // orders still only appear once PAID.
+      OR: [
+        { status: { in: ["PAID", "FULFILLED"] } },
+        { status: "PENDING", paymentTerms: { not: "PREPAID" } },
+      ],
     },
     include: {
       items: { include: { product: true } },

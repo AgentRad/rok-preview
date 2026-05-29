@@ -82,6 +82,7 @@ export async function loadArDashboard(now = new Date()): Promise<ArDashboard> {
             select: {
               subtotalCents: true,
               freightCents: true,
+              shipmentStage: true,
               supplier: { select: { name: true } },
             },
           },
@@ -96,7 +97,7 @@ export async function loadArDashboard(now = new Date()): Promise<ArDashboard> {
   const orgs = orgIds.length
     ? await prisma.buyerOrg.findMany({
         where: { id: { in: orgIds } },
-        select: { id: true, name: true, paymentTerms: true, creditLimitCents: true },
+        select: { id: true, name: true, paymentTerms: true, creditLimitCents: true, status: true },
       })
     : [];
   const orgById = new Map(orgs.map((o) => [o.id, o]));
@@ -130,9 +131,8 @@ export async function loadArDashboard(now = new Date()): Promise<ArDashboard> {
         overdueCents: 0,
         availableCents: null,
         oldestAgeDays: 0,
-        // BuyerOrg has no status column until the 3z-4 dunning/suspend round;
-        // every org reads ACTIVE here for now.
-        status: "ACTIVE",
+        // PLH-3z-4: real org credit-suspension status.
+        status: org?.status ?? "ACTIVE",
         invoiceCount: 0,
       };
       rollups.set(key, r);
@@ -142,7 +142,13 @@ export async function loadArDashboard(now = new Date()): Promise<ArDashboard> {
     if (past > r.oldestAgeDays) r.oldestAgeDays = past;
     r.invoiceCount += 1;
 
+    // PLH-3z-4 float exposure: under the locked pay-after-buyer-pays policy,
+    // PartsPort's net-terms exposure is what has SHIPPED on an unpaid invoice
+    // (the supplier delivered goods; PartsPort owes that supplier once the
+    // buyer pays, and eats the gap net of reserve if the buyer defaults). Only
+    // count Shipped/Delivered slots.
     for (const slot of inv.order.supplierSlots) {
+      if (slot.shipmentStage !== "Shipped" && slot.shipmentStage !== "Delivered") continue;
       const name = slot.supplier?.name ?? "Unknown supplier";
       exposure.set(name, (exposure.get(name) ?? 0) + slot.subtotalCents + slot.freightCents);
     }
