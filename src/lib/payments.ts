@@ -355,6 +355,103 @@ export async function createStripeCustomer(args: {
 }
 
 /**
+ * PLH-3z-2: create a Stripe Invoice for a net-terms order and finalize/send it
+ * so the buyer gets a hosted invoice page with ACH (us_bank_account) collection.
+ * Returns the Stripe invoice id + hosted URL, or null when Stripe is not
+ * configured (the caller treats that as a fail-soft skip). Throws on a Stripe
+ * API error so the caller can log + audit and keep the local DUE invoice as the
+ * source of truth.
+ *
+ * collection_method=send_invoice means Stripe does not auto-charge a card; it
+ * issues a payable invoice with a due date, which is exactly the net-terms
+ * model. payment_settings restricts payment to ACH bank debit.
+ */
+export async function createStripeInvoiceForOrder(args: {
+  orderReference: string;
+  buyerName: string;
+  buyerEmail: string;
+  invoiceDueDate: Date | null;
+  /** Org HYBRID-billing customer, when the buyer's org centralizes billing. */
+  orgStripeCustomerId?: string | null;
+  items: { name: string; unitPriceCents: number; qty: number }[];
+  freightCents: number;
+  feeCents: number;
+  taxCents: number;
+  purchaseOrderNumber?: string | null;
+}): Promise<{ id: string; hostedInvoiceUrl: string | null } | null> {
+  const s = stripeClient();
+  if (!s) return null;
+
+  // Reuse the org's centralized customer when present; otherwise mint a
+  // per-buyer customer so Stripe can email the hosted invoice.
+  const customerId =
+    args.orgStripeCustomerId ||
+    (
+      await s.customers.create({
+        name: args.buyerName,
+        email: args.buyerEmail,
+        metadata: { partsportOrderRef: args.orderReference },
+      })
+    ).id;
+
+  // due_date requires a future timestamp on send_invoice; fall back to a
+  // 30-day window if the order somehow lacks an invoiceDueDate.
+  const dueMs = args.invoiceDueDate
+    ? args.invoiceDueDate.getTime()
+    : Date.now() + 30 * 24 * 60 * 60 * 1000;
+  const dueDateSec = Math.floor(dueMs / 1000);
+
+  const invoice = await s.invoices.create({
+    customer: customerId,
+    collection_method: "send_invoice",
+    due_date: dueDateSec,
+    auto_advance: false,
+    payment_settings: { payment_method_types: ["us_bank_account"] },
+    description: `PartsPort order ${args.orderReference}`,
+    metadata: {
+      partsportOrderRef: args.orderReference,
+      ...(args.purchaseOrderNumber ? { poNumber: args.purchaseOrderNumber } : {}),
+    },
+  });
+  if (!invoice.id) throw new Error("Stripe did not return an invoice id.");
+
+  // One invoice item per order line, then freight / fee / tax lines so the
+  // Stripe invoice total matches the local Invoice.totalCents exactly.
+  const lines: { amountCents: number; description: string }[] = [
+    ...args.items.map((it) => ({
+      amountCents: it.unitPriceCents * it.qty,
+      description: `${it.name} (x${it.qty})`,
+    })),
+  ];
+  if (args.freightCents > 0)
+    lines.push({ amountCents: args.freightCents, description: "Freight" });
+  if (args.feeCents > 0)
+    lines.push({ amountCents: args.feeCents, description: "Marketplace fee" });
+  if (args.taxCents > 0)
+    lines.push({ amountCents: args.taxCents, description: "Sales tax" });
+
+  for (const line of lines) {
+    await s.invoiceItems.create({
+      customer: customerId,
+      invoice: invoice.id,
+      currency: "usd",
+      amount: line.amountCents,
+      description: line.description,
+    });
+  }
+
+  // Finalize so a hosted invoice URL exists, then send so Stripe emails the
+  // buyer the ACH payment link.
+  const finalized = await s.invoices.finalizeInvoice(invoice.id);
+  await s.invoices.sendInvoice(invoice.id);
+
+  return {
+    id: invoice.id,
+    hostedInvoiceUrl: finalized.hosted_invoice_url ?? null,
+  };
+}
+
+/**
  * Webhook-independent reconciliation. When a buyer returns from Stripe to the
  * success_url and the webhook has not landed yet (or has been mis-configured),
  * we still need to flip the order to PAID so the UI is honest. This pulls the

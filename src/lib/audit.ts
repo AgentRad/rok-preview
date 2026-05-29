@@ -164,6 +164,17 @@ export const AUDIT_ACTIONS = [
   "BUYER_ORG_ORDERS_EXPORTED",
   // PLH-3z-1: net-terms billing.
   "BUYER_ORG_TERMS_UPDATED",
+  // PLH-3z-2: Stripe Invoices + payment recording. STRIPE_INVOICE_CREATE_FAILED
+  // is the fail-soft trail when the Stripe Invoice API call throws at net-terms
+  // order time (the local DUE invoice still stands). INVOICE_PAID_AUTO fires on
+  // the invoice.paid webhook; INVOICE_PAYMENT_RECORDED on a manual admin
+  // record-payment; INVOICE_PAYMENT_FAILED on invoice.payment_failed;
+  // INVOICE_MARKED_UNCOLLECTIBLE on the Stripe write-off webhook.
+  "STRIPE_INVOICE_CREATE_FAILED",
+  "INVOICE_PAID_AUTO",
+  "INVOICE_PAYMENT_RECORDED",
+  "INVOICE_PAYMENT_FAILED",
+  "INVOICE_MARKED_UNCOLLECTIBLE",
   // PLH-3y-3: domain auto-join + DNS verification.
   "BUYER_ORG_DOMAIN_CLAIMED",
   "BUYER_ORG_DOMAIN_VERIFIED",
@@ -230,7 +241,8 @@ export type AuditTargetType =
   | "Message"
   | "BuyerOrg"
   | "SsoConfig"
-  | "ApprovalRule";
+  | "ApprovalRule"
+  | "Invoice";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry

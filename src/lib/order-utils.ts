@@ -5,6 +5,8 @@ import { sendPaymentReceived, sendInvoiceIssued } from "./email";
 import { captureError } from "./observability";
 import { intuitConfigured } from "./qbo-auth";
 import { syncInvoice } from "./qbo-sync";
+import { createStripeInvoiceForOrder } from "./payments";
+import { writeAuditLog } from "./audit";
 
 export function generateReference(prefix = "PP"): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -184,7 +186,10 @@ export async function ensureNetTermsInvoiceForOrder(orderId: string): Promise<vo
   const existing = await prisma.invoice.findUnique({ where: { orderId } });
   if (existing) return;
 
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
   if (!order) return;
   // Only net-terms orders get an up-front DUE invoice. PREPAID orders keep
   // using ensureInvoiceForOrder on payment.
@@ -204,12 +209,70 @@ export async function ensureNetTermsInvoiceForOrder(orderId: string): Promise<vo
         buyerName: order.buyerName,
         buyerEmail: order.buyerEmail,
         shipTo: order.shipTo,
+        // PLH-3z-2: mirror the order's net-terms due date onto the invoice.
+        dueDate: order.invoiceDueDate,
       },
     });
   } catch (err) {
     const code = (err as { code?: string }).code;
     if (code !== "P2002") throw err;
     return;
+  }
+
+  // PLH-3z-2: also create a Stripe Invoice (collection_method=send_invoice,
+  // ACH) so the buyer gets a hosted payment page and Stripe handles
+  // collection. Fail-soft: the local DUE invoice + sendInvoiceIssued email
+  // above are the source of truth, so a missing STRIPE_SECRET_KEY or a Stripe
+  // API error must never break order placement. We log + audit and move on.
+  try {
+    let orgStripeCustomerId: string | null = null;
+    if (order.buyerOrgId) {
+      const org = await prisma.buyerOrg.findUnique({
+        where: { id: order.buyerOrgId },
+        select: { stripeCustomerId: true },
+      });
+      orgStripeCustomerId = org?.stripeCustomerId ?? null;
+    }
+    const stripeInvoice = await createStripeInvoiceForOrder({
+      orderReference: order.reference,
+      buyerName: order.buyerName,
+      buyerEmail: order.buyerEmail,
+      invoiceDueDate: order.invoiceDueDate,
+      orgStripeCustomerId,
+      items: order.items.map((i) => ({
+        name: i.nameSnapshot,
+        unitPriceCents: i.unitPriceCents,
+        qty: i.qty,
+      })),
+      freightCents: order.freightCents,
+      feeCents: order.feeCents,
+      taxCents: order.taxCents,
+      purchaseOrderNumber: order.purchaseOrderNumber,
+    });
+    if (stripeInvoice) {
+      await prisma.invoice.update({
+        where: { orderId: order.id },
+        data: { stripeInvoiceId: stripeInvoice.id },
+      });
+    }
+  } catch (err) {
+    captureError(err, {
+      subsystem: "payments",
+      op: "stripe-invoice-create",
+      orderId: order.id,
+    });
+    try {
+      await writeAuditLog({
+        actor: { id: "system", email: "system@partsport" },
+        action: "STRIPE_INVOICE_CREATE_FAILED",
+        targetType: "Order",
+        targetId: order.id,
+        summary: `Stripe Invoice creation failed for net-terms order ${order.reference}; local DUE invoice stands.`,
+        metadata: { orderReference: order.reference },
+      });
+    } catch {
+      // audit is best-effort
+    }
   }
 
   after(async () => {
