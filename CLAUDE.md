@@ -2216,3 +2216,25 @@ Migrations: `20260707000000_add_order_buyer_org_id`,
 `20260708000000_add_approval_workflows`.
 
 **THE SSO + BUYER-ORGS + APPROVALS EPIC (PLH-3y) IS NOW COMPLETE (6 of 6).**
+
+**PLH-3z-1 (2026-05-28). Net-terms invoice plumbing. Round 1 of 4 of the
+net-30 epic (full spec at docs/PLH-3z-spec-net30-ar.md). 1 commit (6779f63).**
+- `PaymentTerms` enum (PREPAID default, NET_15/30/60). `InvoiceStatus` extended
+  with DUE + PAST_DUE. `BuyerOrg.paymentTerms` + `creditLimitCents`,
+  `Order.paymentTerms` + `invoiceDueDate`. Migration
+  `20260709000000_add_net_terms`.
+- Order creation snapshots the active org's terms onto the order. Non-PREPAID
+  orgs place invoice orders: status PENDING, no Stripe Checkout, invoiceDueDate
+  = order date + terms days, a DUE invoice generated at order time via
+  `ensureNetTermsInvoiceForOrder`, `sendInvoiceIssued` emails the hosted
+  invoice link (no PDF attach; no PDF renderer in the tree). Response carries
+  `invoiceOrder: true` so the client skips the payment step.
+- PREPAID orgs and non-org buyers are 100% unchanged (existing Stripe checkout).
+- Site admin sets terms + manual credit limit on `/admin/buyer-orgs/[id]` via
+  the new `OrgTermsEditor` + `/api/admin/buyer-orgs/[id]/terms` PATCH.
+- Audit `BUYER_ORG_TERMS_UPDATED`.
+- Deferred to later rounds: Stripe Invoices + ACH (3z-2), credit application +
+  A/R dashboard (3z-3), dunning + auto-suspend + payout policy (3z-4).
+- Built by the orchestrator directly (build chips were hitting transient
+  "Invalid request" API errors from oversized reads on the now-large codebase).
+- `npx next build` clean. Zero em dashes.
