@@ -6,6 +6,7 @@ import { captureError } from "./observability";
 import { intuitConfigured } from "./qbo-auth";
 import { syncInvoice } from "./qbo-sync";
 import { createStripeInvoiceForOrder } from "./payments";
+import { ensurePayoutsForOrder } from "./payouts";
 import { writeAuditLog } from "./audit";
 
 export function generateReference(prefix = "PP"): string {
@@ -89,6 +90,22 @@ export async function markOrderPaid(
       include: { items: true },
     });
     if (paidOrder) {
+      // PLH-3z-4 payout policy (LOCKED): net-terms suppliers are paid AFTER the
+      // buyer pays. Ship time deliberately skips the payout for net-terms
+      // orders, so payment is the trigger. Fire the same per-slot 3-stage
+      // payout flow here for net-terms orders only. PREPAID orders are
+      // untouched: they keep paying on dispatch (markSlotShipped), so calling
+      // ensurePayoutsForOrder here would double-trigger. ensurePayoutsForOrder
+      // is idempotent per slot regardless.
+      if (paidOrder.paymentTerms !== "PREPAID") {
+        after(async () => {
+          try {
+            await ensurePayoutsForOrder(orderId);
+          } catch (err) {
+            captureError(err, { subsystem: "payouts", op: "net-terms-pay-trigger", orderId });
+          }
+        });
+      }
       // after() keeps the serverless function alive past the response so
       // the email is guaranteed to fire. markOrderPaid is called from the
       // webhook handler and the success-page reconcile flow, both running

@@ -146,7 +146,18 @@ export async function markSlotShipped(
     return { ok: false, status: 404, error: "Shipment slot not found." };
   }
   const order = slot.order;
-  if (order.status !== "PAID" && order.status !== "FULFILLED") {
+  // PLH-3z-4: net-terms orders ship before the buyer pays (that is the point
+  // of net terms: receive goods, pay within the term). So a PENDING net-terms
+  // order is shippable. PREPAID orders still require PAID/FULFILLED. The
+  // supplier payout for net-terms does NOT fire at ship time (the after()
+  // block below skips it for net-terms); it fires when the buyer pays the
+  // invoice (markOrderPaid). PREPAID payout-on-ship is unchanged.
+  const isNetTerms = order.paymentTerms !== "PREPAID";
+  const shippable =
+    order.status === "PAID" ||
+    order.status === "FULFILLED" ||
+    (isNetTerms && order.status === "PENDING");
+  if (!shippable) {
     return {
       ok: false,
       status: 400,
@@ -250,10 +261,13 @@ export async function markSlotShipped(
   });
   after(async () => {
     try {
-      // ensurePayoutsForOrder iterates all slots and skips slots whose
-      // payout is already PAID/PROCESSING (idempotent). Calling it on
-      // every slot ship is safe; only the just-shipped supplier's slot
-      // produces a new transfer.
+      // PLH-3z-4 payout policy (LOCKED): for net-terms orders the supplier is
+      // paid AFTER the buyer pays the invoice, NOT on dispatch. So ship time
+      // never triggers a net-terms payout; markOrderPaid does (on invoice.paid
+      // / manual mark-paid). PREPAID orders keep the pay-on-dispatch behavior
+      // unchanged: ensurePayoutsForOrder iterates all slots and skips any whose
+      // payout already exists (idempotent).
+      if (isNetTerms) return;
       await ensurePayoutsForOrder(orderId);
     } catch (err) {
       console.error("[payouts] create-on-dispatch failed:", err);
@@ -358,7 +372,13 @@ export async function markOrderShipped(
   if (!order) {
     return { ok: false, status: 404, error: "Order not found." };
   }
-  if (order.status !== "PAID" && order.status !== "FULFILLED") {
+  // PLH-3z-4: net-terms orders are shippable while PENDING (see markSlotShipped).
+  const isNetTerms = order.paymentTerms !== "PREPAID";
+  const shippable =
+    order.status === "PAID" ||
+    order.status === "FULFILLED" ||
+    (isNetTerms && order.status === "PENDING");
+  if (!shippable) {
     return {
       ok: false,
       status: 400,
