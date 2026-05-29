@@ -15,6 +15,10 @@ import {
   validateSsoDomainTrust,
   canDecideApproval,
   delegateApprovalGuard,
+  clearsInvoice,
+  refundRemainingCents,
+  refundWithinCap,
+  buildTransferIdempotencyKey,
 } from "../src/lib/route-guards.ts";
 
 const OWNER = { id: "u_owner", role: "BUYER", status: "ACTIVE" };
@@ -345,4 +349,107 @@ test("delegate: a delegate who cannot approve (VIEWER/BUYER) is rejected", () =>
 test("delegate: a delegate who can approve (APPROVER/ADMIN) is allowed", () => {
   const r = delegateApprovalGuard({ delegateCanApprove: true });
   assert.equal(r.ok, true);
+});
+
+// ---- QA2 BUG 1: invoice clears only at full payment ----
+
+test("invoice: a partial payment does NOT clear the invoice", () => {
+  // 4000 of 10000 paid so far, plus this is the running total post-increment.
+  assert.equal(clearsInvoice(4000, 10000), false);
+});
+
+test("invoice: clears exactly when the running total reaches the total", () => {
+  assert.equal(clearsInvoice(10000, 10000), true);
+});
+
+test("invoice: clears when an over-payment exceeds the total", () => {
+  assert.equal(clearsInvoice(10500, 10000), true);
+});
+
+test("invoice: a zero-total invoice is considered cleared at zero", () => {
+  assert.equal(clearsInvoice(0, 0), true);
+});
+
+// QA2 BUG 1 lost-update shape: two concurrent payments. The fix increments
+// atomically, so the running total is the SUM, not the last writer's blind
+// set. Only the cumulative sum clears the invoice.
+test("invoice: two concurrent partials each below total clear only when summed", () => {
+  const total = 10000;
+  const first = 6000;
+  const second = 6000;
+  // Blind-set (buggy) behavior: second writer clobbers first -> 6000, never clears.
+  assert.equal(clearsInvoice(second, total), false);
+  // Atomic-increment (fixed) behavior: running total is the sum -> clears.
+  assert.equal(clearsInvoice(first + second, total), true);
+});
+
+// ---- QA2 BUG 2: refund over-refund cap ----
+
+test("refund cap: remaining is total minus already-refunded", () => {
+  assert.equal(refundRemainingCents(10000, 3000), 7000);
+});
+
+test("refund cap: remaining never goes negative on a corrupt over-refunded row", () => {
+  assert.equal(refundRemainingCents(10000, 12000), 0);
+});
+
+test("refund cap: a negative already-refunded is clamped to 0", () => {
+  assert.equal(refundRemainingCents(10000, -500), 10000);
+});
+
+test("refund cap: rejects an over-refund (amount > remaining)", () => {
+  // 8000 already refunded on a 10000 order: only 2000 remains.
+  assert.equal(refundWithinCap(10000, 8000, 2001), false);
+});
+
+test("refund cap: accepts a refund up to exactly the remaining amount", () => {
+  assert.equal(refundWithinCap(10000, 8000, 2000), true);
+});
+
+test("refund cap: rejects a zero or negative requested amount", () => {
+  assert.equal(refundWithinCap(10000, 0, 0), false);
+  assert.equal(refundWithinCap(10000, 0, -100), false);
+});
+
+// QA2 BUG 2 concurrency shape: two concurrent manualOverride refunds each pass
+// the STALE pre-tx cap, but the FRESH in-tx re-read of refundedCents rejects
+// the second so the order can never be over-refunded.
+test("refund cap: fresh in-tx re-read rejects the second concurrent over-refund", () => {
+  const total = 10000;
+  const requested = 7000;
+  // Both reads see refundedCents=0 (stale snapshot) -> both pass pre-tx check.
+  assert.equal(refundWithinCap(total, 0, requested), true);
+  // First commits: refundedCents is now 7000. Second tx re-reads fresh:
+  // remaining is 3000, so 7000 is rejected.
+  assert.equal(refundWithinCap(total, 7000, requested), false);
+});
+
+// ---- QA2 BUG 3: distinct Stripe transfer idempotency keys ----
+
+test("transfer key: the payout and reserve-release keys differ for same supplier+order", () => {
+  const payout = buildTransferIdempotencyKey("payout", "sup_1", "ord_1");
+  const release = buildTransferIdempotencyKey("reserve_release", "sup_1", "ord_1");
+  assert.notEqual(payout, release);
+});
+
+test("transfer key: the default payout key shape is unchanged (back-compat)", () => {
+  assert.equal(buildTransferIdempotencyKey("payout", "sup_1", "ord_1"), "payout_sup_1_ord_1");
+});
+
+test("transfer key: stable across retries of the same logical transfer", () => {
+  assert.equal(
+    buildTransferIdempotencyKey("reserve_release", "sup_9", "ord_9"),
+    buildTransferIdempotencyKey("reserve_release", "sup_9", "ord_9")
+  );
+});
+
+test("transfer key: differs per supplier and per order", () => {
+  assert.notEqual(
+    buildTransferIdempotencyKey("payout", "sup_1", "ord_1"),
+    buildTransferIdempotencyKey("payout", "sup_2", "ord_1")
+  );
+  assert.notEqual(
+    buildTransferIdempotencyKey("payout", "sup_1", "ord_1"),
+    buildTransferIdempotencyKey("payout", "sup_1", "ord_2")
+  );
 });

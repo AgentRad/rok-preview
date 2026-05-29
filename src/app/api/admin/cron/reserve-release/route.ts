@@ -131,6 +131,11 @@ export async function GET(req: Request) {
             amountCents: drawCents,
             orderId: order.id,
             payoutReference: generateReference("RES"),
+            // QA2 BUG 3: distinct idempotency-key discriminator so the
+            // reserve transfer never collides with the original payout
+            // transfer's `payout_<supplierId>_<orderId>` key. Stable across
+            // retries (one reserve release per supplier+order).
+            transferKind: "reserve_release",
           });
         } catch (err) {
           transferFailed = true;

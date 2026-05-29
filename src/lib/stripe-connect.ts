@@ -4,6 +4,7 @@ import type { Supplier } from "@prisma/client";
 import { prisma } from "./db";
 import { siteUrl } from "./site-url";
 import { captureError } from "./observability";
+import { buildTransferIdempotencyKey } from "./route-guards";
 
 /**
  * Thin wrapper over Stripe Connect Express. Lazy-init the client so the
@@ -173,6 +174,18 @@ export async function createTransferToSupplier(args: {
   amountCents: number;
   orderId: string;
   payoutReference: string;
+  /**
+   * QA2 BUG 3: the logical transfer kind, folded into the Stripe
+   * idempotency key. Defaults to "payout" (the original supplier payout).
+   * The reserve-release cron passes "reserve_release" so the held-back 5%
+   * transfer gets a DISTINCT key from the original payout transfer for the
+   * same supplier+order. Without this, both transfers shared the key
+   * `payout_<supplierId>_<orderId>` and Stripe would return the cached
+   * original payout transfer instead of creating the reserve transfer,
+   * while the cron decremented reserveBalanceCents as if cash had moved.
+   * The key stays stable across retries of the same logical transfer.
+   */
+  transferKind?: string;
 }): Promise<string | null> {
   const s = client();
   if (!s) return null;
@@ -181,8 +194,13 @@ export async function createTransferToSupplier(args: {
   // ensurePayoutsForOrder calls would otherwise race on transfers.create
   // before the Payout row commits, producing duplicate transfers. Stripe
   // returns the original response for repeated requests with the same
-  // key, dedupe at their layer. Key shape: payout_<supplierId>_<orderId>
-  // (one transfer per supplier-per-order is the invariant).
+  // key, dedupe at their layer. Key shape: <kind>_<supplierId>_<orderId>
+  // (one transfer per kind-per-supplier-per-order is the invariant).
+  const idempotencyKey = buildTransferIdempotencyKey(
+    args.transferKind ?? "payout",
+    args.supplier.id,
+    args.orderId
+  );
   const transfer = await s.transfers.create(
     {
     amount: args.amountCents,
@@ -197,7 +215,7 @@ export async function createTransferToSupplier(args: {
     },
     },
     {
-      idempotencyKey: `payout_${args.supplier.id}_${args.orderId}`,
+      idempotencyKey,
     }
   );
   return transfer.id;

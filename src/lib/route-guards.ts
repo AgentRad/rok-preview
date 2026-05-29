@@ -201,3 +201,49 @@ export function delegateApprovalGuard(input: { delegateCanApprove: boolean }): G
   }
   return { ok: true };
 }
+
+// QA2 BUG 1. Manual invoice-payment: does the running total clear the invoice?
+// An invoice clears only when the cumulative paid cents reach or exceed the
+// total. Used by POST /api/admin/invoices/[id]/payments AFTER the increment
+// is applied inside the transaction (compute against the fresh post-increment
+// partialPaidCents, never the stale pre-read value).
+export function clearsInvoice(partialPaidCents: number, totalCents: number): boolean {
+  return partialPaidCents >= totalCents;
+}
+
+// QA2 BUG 2. Refund over-refund cap. Given the order total and the amount
+// already refunded (re-read FRESH inside the refund transaction), how many
+// cents remain refundable, and is a requested amount within the cap?
+// Negative inputs are clamped to 0 so a corrupt row can never widen the cap.
+export function refundRemainingCents(
+  totalCents: number,
+  alreadyRefundedCents: number
+): number {
+  return Math.max(0, totalCents - Math.max(0, alreadyRefundedCents));
+}
+
+export function refundWithinCap(
+  totalCents: number,
+  alreadyRefundedCents: number,
+  requestedCents: number
+): boolean {
+  return (
+    requestedCents > 0 &&
+    requestedCents <= refundRemainingCents(totalCents, alreadyRefundedCents)
+  );
+}
+
+// QA2 BUG 3. Stripe transfer idempotency key. Each LOGICAL transfer for a
+// supplier+order must own a distinct key so Stripe does not return a cached
+// earlier transfer in place of a new one. The original payout and the
+// held-back 5% reserve release are two different logical transfers for the
+// same supplier+order, so they must carry different `kind` discriminators.
+// The key is stable across retries of the SAME logical transfer (same kind +
+// supplier + order) so a retry dedupes at Stripe instead of double-sending.
+export function buildTransferIdempotencyKey(
+  kind: string,
+  supplierId: string,
+  orderId: string
+): string {
+  return `${kind}_${supplierId}_${orderId}`;
+}
