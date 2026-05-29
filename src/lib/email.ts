@@ -1,5 +1,4 @@
 import "server-only";
-import crypto from "node:crypto";
 import { Resend } from "resend";
 import { prisma } from "./db";
 import { siteUrl } from "./site-url";
@@ -8,6 +7,10 @@ import { trackingLink } from "./tracking";
 import { formatCents } from "./money";
 import { replyAddress, type ThreadKind } from "./inbound-email";
 import { captureError } from "./observability";
+import {
+  signUnsubscribeTokenWith,
+  verifyUnsubscribeTokenWith,
+} from "./unsubscribe-token";
 
 /**
  * PLH-3c F0: for guest orders (buyerId == null) the outbound email
@@ -85,44 +88,24 @@ export async function shouldSendToUser(
  * the List-Unsubscribe header and on a public /api/email/unsubscribe
  * endpoint so the recipient can opt out without logging in.
  */
-function unsubSecret(): string {
-  return (
-    process.env.SESSION_SECRET ||
-    process.env.INBOUND_REPLY_SECRET ||
-    "partsport-unsub-fallback"
-  );
+// No hardcoded fallback: a deterministic well-known secret would let anyone
+// forge an unsubscribe token for any userId. Return null when no real secret
+// is configured so sign() declines and the caller omits the one-click header.
+// SESSION_SECRET is always set at runtime on Vercel.
+function unsubSecret(): string | null {
+  const value = process.env.SESSION_SECRET || process.env.INBOUND_REPLY_SECRET;
+  if (!value || value.length < 16) return null;
+  return value;
 }
 
-export function signUnsubscribeToken(userId: string): string {
-  const sig = crypto
-    .createHmac("sha256", unsubSecret())
-    .update(userId)
-    .digest("hex")
-    .slice(0, 24);
-  return `${userId}.${sig}`;
+// Returns null when no real secret is configured; callers fall back to the
+// mailto-only unsubscribe header.
+export function signUnsubscribeToken(userId: string): string | null {
+  return signUnsubscribeTokenWith(unsubSecret(), userId, Date.now());
 }
 
 export function verifyUnsubscribeToken(token: string): string | null {
-  const parts = token.split(".");
-  if (parts.length !== 2) return null;
-  const [userId, sig] = parts;
-  if (!userId || !sig) return null;
-  const expected = crypto
-    .createHmac("sha256", unsubSecret())
-    .update(userId)
-    .digest("hex")
-    .slice(0, 24);
-  if (expected.length !== sig.length) return null;
-  try {
-    if (
-      !crypto.timingSafeEqual(Buffer.from(expected, "utf8"), Buffer.from(sig, "utf8"))
-    ) {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-  return userId;
+  return verifyUnsubscribeTokenWith(unsubSecret(), token, Date.now());
 }
 
 function unsubscribeHeaders(toEmail: string): Record<string, string> {
@@ -138,8 +121,16 @@ function unsubscribeHeaders(toEmail: string): Record<string, string> {
 
 function unsubscribeHeadersForUser(userId: string, toEmail: string): Record<string, string> {
   const token = signUnsubscribeToken(userId);
-  const oneClick = siteUrl(`/api/email/unsubscribe?token=${encodeURIComponent(token)}`);
   const mailto = `mailto:unsubscribe@partsport.agentgaming.gg?subject=unsubscribe%20${encodeURIComponent(toEmail)}`;
+  // No secret configured: degrade to the mailto-only header (still RFC 8058
+  // valid) rather than emit a one-click URL with an unverifiable token.
+  if (!token) {
+    return {
+      "List-Unsubscribe": `<${mailto}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    };
+  }
+  const oneClick = siteUrl(`/api/email/unsubscribe?token=${encodeURIComponent(token)}`);
   return {
     "List-Unsubscribe": `<${oneClick}>, <${mailto}>`,
     "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
@@ -859,10 +850,11 @@ export async function sendThreadMessage(args: {
 
   // Unsubscribe link: signed-token route when we know the user, mailto
   // fallback otherwise. CAN-SPAM footer requirement.
-  const unsubUrl = args.recipientUserId
-    ? siteUrl(
-        `/api/email/unsubscribe?token=${encodeURIComponent(signUnsubscribeToken(args.recipientUserId))}`
-      )
+  const unsubToken = args.recipientUserId
+    ? signUnsubscribeToken(args.recipientUserId)
+    : null;
+  const unsubUrl = unsubToken
+    ? siteUrl(`/api/email/unsubscribe?token=${encodeURIComponent(unsubToken)}`)
     : `mailto:unsubscribe@partsport.agentgaming.gg?subject=unsubscribe%20${encodeURIComponent(args.to)}`;
 
   const attachmentCount = args.attachmentCount ?? 0;

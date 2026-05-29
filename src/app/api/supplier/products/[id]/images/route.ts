@@ -14,6 +14,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  // Gate the list the same way POST is gated: only a supplier who owns the
+  // product (or an admin) may enumerate its ProductImage rows. The buyer
+  // carousel does NOT use this route. It reads product.images via a direct
+  // Prisma include in the product detail server component
+  // (src/app/product/[sku]/page.tsx), so locking this route does not affect
+  // the public page. The only client consumer is the supplier-side
+  // ImageManager component.
+  const auth = await authorizeProductEdit(id);
+  if (auth.error) return auth.error;
+
   const images = await prisma.productImage.findMany({
     where: { productId: id },
     orderBy: { ordinal: "asc" },
