@@ -72,6 +72,11 @@ export default async function BuyerOrgPage({
                   Single sign-on
                 </Link>
               )}
+              {isAdmin && (
+                <Link href="/credit-application" className="btn btn-ghost btn-sm">
+                  Net terms
+                </Link>
+              )}
             </div>
           </div>
           <p className="page-sub">
