@@ -439,13 +439,33 @@ export async function createStripeCustomer(args: {
  * so collection still proceeds (tax stays zero, same as before this change).
  * The finalized invoice's computed tax + total are returned so the caller can
  * reconcile the local Invoice + Order rows.
+ *
+ * QA3-fix (net-terms shared-customer race): every net-terms invoice now gets
+ * its OWN freshly-minted Stripe customer. We deliberately do NOT reuse the
+ * org's shared HYBRID customer. Stripe Tax for invoices reads the tax location
+ * off the CUSTOMER's address at finalize (it ignores invoice-level
+ * shipping_details for tax: that field is PDF-only, see
+ * https://docs.stripe.com/tax/customer-locations), so two net-terms orders from
+ * the same org shipping to different states and finalizing close together would
+ * race on the shared customer's address and one invoice could compute tax for
+ * the wrong jurisdiction. A dedicated per-invoice customer carries this order's
+ * address with zero cross-order mutation, so each invoice is jurisdiction-
+ * correct. The org link is preserved in customer metadata for dashboard cross-
+ * reference; net-terms collection (send_invoice + ACH, no auto-charge, no saved
+ * payment method) does not depend on reusing the org customer, and org-level
+ * A/R is tracked on-platform by buyerOrgId, not by Stripe customer grouping.
  */
 export async function createStripeInvoiceForOrder(args: {
   orderReference: string;
   buyerName: string;
   buyerEmail: string;
   invoiceDueDate: Date | null;
-  /** Org HYBRID-billing customer, when the buyer's org centralizes billing. */
+  /**
+   * Org HYBRID-billing customer id, when the buyer's org centralizes billing.
+   * No longer reused as the invoice customer (that caused a cross-order tax
+   * race); kept only to stamp the per-invoice customer's metadata for
+   * dashboard cross-reference.
+   */
   orgStripeCustomerId?: string | null;
   items: { name: string; unitPriceCents: number; qty: number }[];
   freightCents: number;
@@ -480,27 +500,26 @@ export async function createStripeInvoiceForOrder(args: {
       }
     : undefined;
 
-  // Reuse the org's centralized customer when present; otherwise mint a
-  // per-buyer customer so Stripe can email the hosted invoice. Either way the
-  // customer must carry this order's tax address + exemption before finalize,
-  // since automatic_tax reads them off the customer at that moment.
-  let customerId: string;
-  if (args.orgStripeCustomerId) {
-    customerId = args.orgStripeCustomerId;
-    await s.customers.update(customerId, {
-      tax_exempt: taxExemptStatus,
-      ...(addressParam ? { address: addressParam } : {}),
-    });
-  } else {
-    const created = await s.customers.create({
-      name: args.buyerName,
-      email: args.buyerEmail,
-      tax_exempt: taxExemptStatus,
-      ...(addressParam ? { address: addressParam } : {}),
-      metadata: { partsportOrderRef: args.orderReference },
-    });
-    customerId = created.id;
-  }
+  // Always mint a dedicated per-invoice customer carrying THIS order's tax
+  // address + exemption. We never reuse the org's shared HYBRID customer: since
+  // automatic_tax reads the customer's address off Stripe at finalize, a shared
+  // customer would race across concurrent org orders shipping to different
+  // jurisdictions (see the function docblock). A per-invoice customer is
+  // created fresh here, so the address + tax_exempt set below can never be
+  // clobbered by another order before this invoice finalizes.
+  const created = await s.customers.create({
+    name: args.buyerName,
+    email: args.buyerEmail,
+    tax_exempt: taxExemptStatus,
+    ...(addressParam ? { address: addressParam } : {}),
+    metadata: {
+      partsportOrderRef: args.orderReference,
+      ...(args.orgStripeCustomerId
+        ? { partsportOrgStripeCustomerId: args.orgStripeCustomerId }
+        : {}),
+    },
+  });
+  const customerId = created.id;
 
   // due_date requires a future timestamp on send_invoice; fall back to a
   // 30-day window if the order somehow lacks an invoiceDueDate.

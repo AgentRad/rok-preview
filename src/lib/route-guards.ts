@@ -313,6 +313,25 @@ export function stateNonceMatches(
 // step on the User and rejects any candidate step at or below it. A null
 // lastStep (never logged in with 2FA before, or pre-migration) is never a
 // replay. Pure so it is unit-testable without otpauth or a DB.
+//
+// QA3-fix analysis (the "fast device clock false-reject" candidate): the `<=`
+// comparison is CORRECT and does NOT false-reject a legitimate next code. Two
+// facts make this airtight: (1) verifyTotpStep returns the code's CANONICAL
+// absolute step (server-current step + the matching window delta), so the
+// returned value identifies the code itself, independent of how fast/slow the
+// presenting device's clock runs; (2) each 30-second step has exactly one
+// 6-digit HOTP code. Therefore two presentations collide on a single stored
+// step ONLY when they are the literally-same code, which is precisely the reuse
+// we must block. A device with a fast clock does not break this: at the next
+// real step it displays the NEXT step's code (a strictly greater canonical
+// step), which passes. The spec's worry assumed a fast-clock device would
+// re-show the same step's code at the next real window; it cannot, because an
+// authenticator advances monotonically with wall-clock time. The only way to
+// present a candidateStep <= lastStep is to re-show an already-consumed (or
+// older) code, so rejecting it is genuine anti-replay, not a false-reject. No
+// behavioral change; the clear "wait for the next code" 401 message on the
+// login path already gives the right UX when a user double-submits within one
+// 30s window.
 export function totpStepIsReplay(
   candidateStep: number,
   lastStep: number | null | undefined

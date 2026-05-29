@@ -670,6 +670,27 @@ test("totp replay: null lastStep (first 2FA login / pre-migration) is never a re
   assert.equal(totpStepIsReplay(100, undefined), false);
 });
 
+// QA3-fix: the "fast device clock false-reject" scenario, encoded. A device
+// whose clock runs ~30s+ fast presents a future-step code first (consumed
+// early at step N+1), then at the NEXT real window its authenticator has
+// advanced to show the code for step N+2. That distinct, advancing code
+// resolves to a strictly greater canonical step and MUST be accepted: the
+// guard does not false-reject the legitimate next login.
+test("totp replay: fast-clock device's next advancing code (N+2 after N+1) is accepted", () => {
+  // First login consumed the fast device's future code at absolute step N+1.
+  const lastStep = 101; // N+1
+  // ~30s later the device shows the next step's code -> canonical step N+2.
+  assert.equal(totpStepIsReplay(102, lastStep), false);
+});
+
+// The genuine threat the guard must keep blocking: the SAME future code shown
+// twice within one 30s window (the device has not advanced yet) resolves to the
+// same canonical step and is correctly rejected as a replay.
+test("totp replay: same future code re-submitted within one window (N+1 twice) is rejected", () => {
+  const lastStep = 101; // N+1 consumed
+  assert.equal(totpStepIsReplay(101, lastStep), true);
+});
+
 // ---- QA2 acting-as BUG 2: signed admin-bound impersonation cookie ----
 
 const ACT_SECRET = "test-acting-as-secret-at-least-32-chars-long";
