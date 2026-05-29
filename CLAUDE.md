@@ -2581,3 +2581,46 @@ MEDIUM/LOW batch.
     self-rejection allowed, null placer no-op, delegate-cannot-approve rejected,
     delegate-can-approve allowed). `npx next build` clean. ALL QA1
     CRITICAL + HIGH now closed.
+
+## PLH-QA2 (2026-05-29). MEDIUM/LOW cleanup batch (owner directive: fix everything, re-verify against the docs).
+
+After zero-known-CRITICAL/HIGH, Conrad directed fixing the entire MEDIUM/LOW +
+UNCERTAIN list and re-verifying against the documented test procedures. Fixing
+serially: money -> auth/SSO -> acting-as -> web LOW -> final verification.
+
+- **QA2-fix1 (`16f2f1e`).** Three money-correctness concurrency bugs.
+  - **MEDIUM lost-update in manual invoice payment.** `admin/invoices/[id]/payments`
+    read `partialPaidCents` outside the tx then wrote a blind `set`; two concurrent
+    admin posts clobbered each other. Now one `$transaction`: in-tx status re-read
+    (409 on a concurrent PAID flip), insert PaymentRecord, `partialPaidCents:
+    { increment }`, re-read fresh, flip PAID via `updateMany({ where: status not
+    PAID })` so exactly one caller clears it and `markOrderPaid` fires once.
+  - **MEDIUM over-refund/over-clawback race on manualOverride (DB-only) refunds.**
+    Cap was read non-transactionally and the clawback + `refundedCents` bump were
+    separate txns, so two concurrent manual refunds could exceed totalCents and
+    double-draw the reserve. Now: Stripe refund still fires first OUTSIDE any tx
+    (no DB tx held across the network call), then ONE `$transaction` re-reads
+    `refundedCents` fresh, caps via `refundRemainingCents`, runs the clawback,
+    creates the Refund row, and increments `refundedCents` + REFUNDED status. The
+    clawback was refactored into tx-client-aware cores (`clawbackSlotInTx` /
+    `applySupplierClawbackInTx`) shared by `refundOrder` and the `charge.refunded`
+    webhook, preserving the `Math.min` + fresh-reserve re-read + `owedToPlatformCents`
+    netting (P12 c2 / PLH-1 c5) in one place.
+  - **UNCERTAIN -> CONFIRMED reserve-release idempotency-key collision.** The
+    reserve-release transfer reused the payout's idempotency key (`payout_<sid>_<oid>`,
+    reference ignored), so Stripe could return the original transfer instead of
+    creating the reserve transfer while the cron decremented the reserve (money
+    leak). Fix: `buildTransferIdempotencyKey(kind, sid, oid)`; default `kind=
+    "payout"` keeps the payout/retry key byte-for-byte unchanged (in-flight
+    back-compat), reserve-release passes `reserve_release`. Used a stable
+    discriminator rather than the volatile per-run `RES` reference (which would
+    break retry-dedup).
+  - 18 new test cases (now 51). Build clean. PREPAID path untouched; net-terms
+    payout-on-payment, 3-stage payout (P12 c2), and 3-stage reserve-release
+    (PLH-2 4e) invariants preserved.
+
+QA2 remaining (serial): auth/SSO (OIDC callback state not browser-bound = login
+CSRF; spoofable SSO_INITIATED audit actor; TOTP replay window), acting-as (admin
+impersonation bank-info edits not flagged in the audit trail; unsigned acting-as
+cookie; unsalted last4 hash), web LOW (unauthenticated product-image-list GET;
+never-expiring unsubscribe token), then a final verification pass.
