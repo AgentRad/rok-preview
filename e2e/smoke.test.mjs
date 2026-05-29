@@ -132,6 +132,45 @@ test("unknown route returns 404", async () => {
   await page.context().close();
 });
 
+// Cart is client-side localStorage (src/lib/cart.ts, key partsport_cart_v1).
+// CBL-CTRL14 is a sub-$3000 in-stock item, so it uses instant checkout (not RFQ).
+test("add to cart persists the line and the cart page shows it", async () => {
+  const page = await newPage();
+  await page.goto("/product/CBL-CTRL14", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Add to cart" }).first().click();
+  // localStorage is the cart's source of truth: the bulletproof signal.
+  await page.waitForFunction(
+    () => (localStorage.getItem("partsport_cart_v1") || "").includes("CBL-CTRL14"),
+    { timeout: 8000 }
+  );
+  await page.goto("/cart", { waitUntil: "domcontentloaded" });
+  // CartClient hydrates then fetches product metadata; wait for the line to render.
+  await page
+    .waitForFunction(() => /Control Cable|14 AWG/i.test(document.body.innerText), { timeout: 10000 })
+    .catch(() => {});
+  const body = await page.locator("body").innerText();
+  assert.ok(/Control Cable|14 AWG/i.test(body), "cart should show the added product");
+  await page.context().close();
+});
+
+test("checkout page renders for a guest cart in demo mode", async () => {
+  const page = await newPage();
+  await page.goto("/product/CBL-CTRL14", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Add to cart" }).first().click();
+  await page.waitForFunction(
+    () => (localStorage.getItem("partsport_cart_v1") || "").includes("CBL-CTRL14"),
+    { timeout: 8000 }
+  );
+  const resp = await page.goto("/checkout", { waitUntil: "domcontentloaded" });
+  assert.ok(resp && resp.status() < 400, `checkout should render (got ${resp && resp.status()})`);
+  assert.ok(!page.url().includes("/login"), "guest checkout must not require login in demo mode");
+  await page.context().close();
+});
+
+// NOTE: the RFQ / request-a-quote path is intentionally not covered here because
+// no seeded product has quoteOnly=true, so the seed cannot exercise it. It is
+// covered by the owner live smoke tests (a real >=$3000 quote-only listing).
+
 test("wrong password does not grant a session", async () => {
   const page = await newPage();
   await page.goto("/login", { waitUntil: "domcontentloaded" });
