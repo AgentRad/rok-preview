@@ -2520,8 +2520,26 @@ tax) logged to REMINDERS.md.
     `{uid,sso,org}` payloads accepted, any non-null `kind` rejected.
     `npx next build` clean.
 
-Remaining QA1 fix queue (serial): QA1-fix3 SSO
-enforce/domainAllowlist accepted on an unverified domain (lockout + forced-IdP);
-QA1-fix4 approvals (self-approval has no separation-of-duties; GET one-click
-approve is auto-actionable by mail prefetch; OOO delegation to a VIEWER grants
-approval power). Then the MEDIUM/LOW batch.
+- **QA1-fix3 (`5110657`).** CRITICAL: SSO config trusted a domain allowlist +
+  enforce flag with no cross-check against the DNS-TXT-verified `BuyerOrgDomain`
+  table, so an org ADMIN could set `domainAllowlist:["victim-corp.com"],
+  enforced:true` for a domain the org never proved control of: every
+  victim-corp.com password login would 403 with an `ssoInitiateUrl` to the
+  attacker's IdP (lockout + phishing), and SAML/OIDC JIT provisioning trusted the
+  same unverified allowlist. `upsertSsoConfig` (`src/lib/sso-config-admin.ts`)
+  now queries the org's `BuyerOrgDomainStatus.VERIFIED` rows and runs the new
+  pure `validateSsoDomainTrust` gate (`route-guards.ts`): every allowlisted
+  domain must be VERIFIED for this org, and `enforced:true` requires at least one
+  verified domain. Both routes (org-admin `/api/buyer-org/sso` + site-admin
+  `/api/admin/buyer-orgs/[id]/sso`) inherit it (the thrown Error maps to 400). A
+  cert-only save on an already-verified org re-submits its verified allowlist and
+  passes; an org that never touched domains (empty allowlist, not enforced) skips
+  the query. Auto-join path untouched. 7 new test cases (now 28). `npx next
+  build` clean.
+
+ALL 3 CRITICALs now closed (QA1-fix1 demo-pay, fix2 2FA-bypass, fix3 SSO domain
+trust) plus the fix1/fix2 HIGHs. Remaining QA1 queue (serial): QA1-fix4 approvals
+(self-approval has no separation-of-duties; GET one-click approve is
+auto-actionable by mail prefetch; OOO delegation to a VIEWER grants approval
+power) closes the last 3 HIGHs and reaches zero known CRITICAL/HIGH. Then the
+MEDIUM/LOW batch.
