@@ -61,6 +61,9 @@ enum InvoiceStatus {
   // PREPAID invoices keep using ISSUED -> PAID as before.
   DUE
   PAST_DUE
+  // PLH-3z-2: Stripe marked the invoice uncollectible (manual write-off in
+  // the Stripe dashboard or via the invoice.marked_uncollectible webhook).
+  UNCOLLECTIBLE
 }
 
 // PLH-3z-1: payment terms for enterprise net-terms billing. PREPAID is the
@@ -1036,6 +1039,42 @@ model Invoice {
   // after createInvoice succeeds. Null until P2 sync runs (or when QBO is
   // not configured).
   qboInvoiceId  String?
+  // PLH-3z-2: net-terms collection via Stripe Invoices. stripeInvoiceId is the
+  // Stripe-hosted invoice created at order time for a net-terms order
+  // (collection_method=send_invoice, ACH). Null for PREPAID invoices and when
+  // Stripe is not configured / the create call failed soft. dueDate mirrors
+  // Order.invoiceDueDate. paidAt/paidReference/paymentMethod are stamped when
+  // the invoice.paid webhook (or a manual admin record-payment) settles the
+  // invoice. partialPaidCents tracks the running sum of PaymentRecord rows so
+  // a partial wire keeps the invoice open until the full balance clears.
+  stripeInvoiceId String?        @unique
+  dueDate         DateTime?
+  paidAt          DateTime?
+  paidReference   String?
+  paymentMethod   String?
+  partialPaidCents Int           @default(0)
+  payments        PaymentRecord[]
+}
+
+// PLH-3z-2: one row per payment applied to an invoice. The Stripe webhook
+// inserts a row on invoice.paid (source=stripe_webhook, recordedBy null); an
+// admin reconciling an off-platform wire/check inserts a row via the manual
+// record-payment route (source=manual_admin, recordedBy=admin User id). The
+// invoice flips PAID once sum(amountCents) >= Invoice.totalCents.
+model PaymentRecord {
+  id          String   @id @default(cuid())
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String
+  amountCents Int
+  receivedAt  DateTime
+  method      String // "ach" | "wire" | "check" | "card" | "other"
+  reference   String   @default("")
+  source      String // "stripe_webhook" | "manual_admin" | "import"
+  recordedBy  String? // User.id of the admin who recorded (manual only)
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([invoiceId])
 }
 
 model OrderItem {
