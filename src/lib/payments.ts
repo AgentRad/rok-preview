@@ -123,6 +123,28 @@ export type WebhookEvent =
         metadata: Record<string, string>;
       }>;
     }
+  | {
+      // PLH-3z-2: a Stripe Invoice (net-terms collection) was paid. Settles the
+      // local Invoice and runs markOrderPaid so payouts + QBO sync fire.
+      type: "invoice.paid";
+      stripeInvoiceId: string;
+      paidReference: string | null;
+      paymentMethod: string;
+      amountPaidCents: number;
+    }
+  | {
+      // PLH-3z-2: an ACH/charge attempt on a Stripe Invoice failed. The local
+      // invoice stays DUE/PAST_DUE; we audit for the A/R trail.
+      type: "invoice.payment_failed";
+      stripeInvoiceId: string;
+      failureMessage: string;
+    }
+  | {
+      // PLH-3z-2: the invoice was written off in Stripe. Flip the local invoice
+      // to UNCOLLECTIBLE.
+      type: "invoice.marked_uncollectible";
+      stripeInvoiceId: string;
+    }
   | { type: "ignored" };
 
 let _stripe: Stripe | null = null;
@@ -315,6 +337,45 @@ const stripeProvider: PaymentProvider = {
         amountRefundedCents: charge.amount_refunded ?? 0,
         reason: refunds[0]?.reason ?? null,
         refunds,
+      };
+    }
+    if (event.type === "invoice.paid") {
+      const inv = event.data.object as Stripe.Invoice;
+      // We only allow us_bank_account on these invoices, so ACH is the
+      // expected method; map whatever Stripe reports for completeness.
+      const pmType = inv.payment_settings?.payment_method_types?.[0] ?? "us_bank_account";
+      const method = pmType === "us_bank_account" ? "ach" : pmType === "card" ? "card" : pmType;
+      const charge =
+        typeof (inv as { charge?: unknown }).charge === "string"
+          ? ((inv as { charge?: string }).charge as string)
+          : null;
+      const pi =
+        typeof (inv as { payment_intent?: unknown }).payment_intent === "string"
+          ? ((inv as { payment_intent?: string }).payment_intent as string)
+          : null;
+      return {
+        type: "invoice.paid",
+        stripeInvoiceId: inv.id as string,
+        paidReference: charge || pi,
+        paymentMethod: method,
+        amountPaidCents: inv.amount_paid ?? inv.total ?? 0,
+      };
+    }
+    if (event.type === "invoice.payment_failed") {
+      const inv = event.data.object as Stripe.Invoice;
+      return {
+        type: "invoice.payment_failed",
+        stripeInvoiceId: inv.id as string,
+        failureMessage:
+          (inv.last_finalization_error?.message as string | undefined) ||
+          "Invoice payment failed.",
+      };
+    }
+    if (event.type === "invoice.marked_uncollectible") {
+      const inv = event.data.object as Stripe.Invoice;
+      return {
+        type: "invoice.marked_uncollectible",
+        stripeInvoiceId: inv.id as string,
       };
     }
     return { type: "ignored" };

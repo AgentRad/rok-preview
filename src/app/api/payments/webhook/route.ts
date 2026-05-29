@@ -25,6 +25,9 @@ export const dynamic = "force-dynamic";
  *   transfer.paid
  *   transfer.failed
  *   transfer.reversed
+ *   invoice.paid                  (PLH-3z-2 net-terms collection)
+ *   invoice.payment_failed        (PLH-3z-2)
+ *   invoice.marked_uncollectible  (PLH-3z-2)
  *
  * Idempotency: each branch is keyed off a Stripe id (transferId,
  * paymentIntentId, etc.). Stripe retries deliver the same id; our writes
@@ -273,6 +276,103 @@ export async function POST(req: Request) {
               },
             });
           }
+        }
+        break;
+      }
+
+      case "invoice.paid": {
+        // PLH-3z-2: net-terms collection settled. Find the local invoice by
+        // stripeInvoiceId, flip it PAID, record the payment, and run
+        // markOrderPaid so the existing P8 payout flow + PLH-3i QBO sync +
+        // order confirmation all fire (same path prepaid orders use).
+        const invoice = await prisma.invoice.findUnique({
+          where: { stripeInvoiceId: event.stripeInvoiceId },
+          include: { order: { select: { id: true } } },
+        });
+        if (invoice && invoice.status !== "PAID") {
+          // Idempotent: short-circuit on already-PAID. Stripe retries land
+          // here and find status PAID, so no double PaymentRecord / payout.
+          await prisma.$transaction(async (tx) => {
+            await tx.invoice.update({
+              where: { id: invoice.id },
+              data: {
+                status: "PAID",
+                paidAt: new Date(),
+                paidReference: event.paidReference ?? undefined,
+                paymentMethod: event.paymentMethod,
+                partialPaidCents: invoice.totalCents,
+              },
+            });
+            await tx.paymentRecord.create({
+              data: {
+                invoiceId: invoice.id,
+                amountCents: event.amountPaidCents,
+                receivedAt: new Date(),
+                method: event.paymentMethod,
+                reference: event.paidReference ?? "",
+                source: "stripe_webhook",
+              },
+            });
+          });
+          if (invoice.order) {
+            await markOrderPaid(invoice.order.id, event.paymentMethod);
+          }
+          await writeAuditLog({
+            actor: { id: "system", email: "system@partsport" },
+            action: "INVOICE_PAID_AUTO",
+            targetType: "Invoice",
+            targetId: invoice.id,
+            summary: `Invoice ${invoice.number} paid via Stripe (${event.paymentMethod}).`,
+            metadata: {
+              stripeInvoiceId: event.stripeInvoiceId,
+              amountCents: event.amountPaidCents,
+              paidReference: event.paidReference,
+            },
+          });
+        }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        // PLH-3z-2: leave the local invoice DUE/PAST_DUE. Audit so the A/R
+        // trail shows the failed attempt. Idempotent (audit-only).
+        const invoice = await prisma.invoice.findUnique({
+          where: { stripeInvoiceId: event.stripeInvoiceId },
+          select: { id: true, number: true },
+        });
+        if (invoice) {
+          await writeAuditLog({
+            actor: { id: "system", email: "system@partsport" },
+            action: "INVOICE_PAYMENT_FAILED",
+            targetType: "Invoice",
+            targetId: invoice.id,
+            summary: `Invoice ${invoice.number} payment failed: ${event.failureMessage}`,
+            metadata: { stripeInvoiceId: event.stripeInvoiceId },
+          });
+        }
+        break;
+      }
+
+      case "invoice.marked_uncollectible": {
+        // PLH-3z-2: Stripe write-off. Flip the local invoice to UNCOLLECTIBLE
+        // (idempotent) and audit.
+        const invoice = await prisma.invoice.findUnique({
+          where: { stripeInvoiceId: event.stripeInvoiceId },
+          select: { id: true, number: true, status: true },
+        });
+        if (invoice && invoice.status !== "UNCOLLECTIBLE") {
+          await prisma.invoice.update({
+            where: { id: invoice.id },
+            data: { status: "UNCOLLECTIBLE" },
+          });
+          await writeAuditLog({
+            actor: { id: "system", email: "system@partsport" },
+            action: "INVOICE_MARKED_UNCOLLECTIBLE",
+            targetType: "Invoice",
+            targetId: invoice.id,
+            summary: `Invoice ${invoice.number} marked uncollectible in Stripe.`,
+            metadata: { stripeInvoiceId: event.stripeInvoiceId },
+          });
         }
         break;
       }
