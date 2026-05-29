@@ -2493,7 +2493,7 @@ tax) logged to REMINDERS.md.
     the repo's established zero-dep test pattern; no Playwright/vitest harness
     exists). `npx next build` clean. Pushed to origin.
 
-- **QA1-fix2 (`<pending>`).** Session/login integrity. Two auth bypasses closed.
+- **QA1-fix2 (`691257c`).** Session/login integrity. Two auth bypasses closed.
   - **CRITICAL: 2FA bypass via the pre-2FA ticket.** `/api/auth/login` minted the
     `kind:"2fa-pending"` ticket with `getSessionSecret()` (the SAME key as real
     `pp_session` cookies) and `getCurrentUser` in `src/lib/auth.ts` read only
