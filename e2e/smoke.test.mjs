@@ -167,9 +167,18 @@ test("checkout page renders for a guest cart in demo mode", async () => {
   await page.context().close();
 });
 
-// NOTE: the RFQ / request-a-quote path is intentionally not covered here because
-// no seeded product has quoteOnly=true, so the seed cannot exercise it. It is
-// covered by the owner live smoke tests (a real >=$3000 quote-only listing).
+// The RFQ path is driven by price (>=$3,000 / made-to-order), not a quoteOnly
+// flag. TXF-PM75 ($8,450) is an RFQ product, so it must offer "Request a quote"
+// and NOT instant add-to-cart. (Verified live before codifying.)
+test("an expensive made-to-order product shows Request a quote, not Add to cart", async () => {
+  const page = await newPage();
+  await page.goto("/product/TXF-PM75", { waitUntil: "domcontentloaded" });
+  const body = await page.locator("body").innerText();
+  assert.ok(/request a quote/i.test(body), "a >=$3,000 product should show Request a quote");
+  const addToCart = await page.getByRole("button", { name: "Add to cart" }).count();
+  assert.equal(addToCart, 0, "an RFQ product must not offer instant Add to cart");
+  await page.context().close();
+});
 
 test("wrong password does not grant a session", async () => {
   const page = await newPage();
