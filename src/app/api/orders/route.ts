@@ -67,6 +67,22 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
+  // PLH-3z-4: org-level credit suspension. A member of a SUSPENDED org (30-day
+  // past-due net-terms balance) cannot place new orders until the balance
+  // clears. 423 Locked. Non-org buyers and ACTIVE orgs are unaffected.
+  if (sessionUser) {
+    const orgForGate = await getActiveBuyerOrgContext(sessionUser);
+    if (orgForGate && orgForGate.org.status === "SUSPENDED") {
+      return NextResponse.json(
+        {
+          error:
+            "Your organization's account is suspended for a past-due balance. Contact your accounts-payable team or support@partsport.agentgaming.gg to clear it.",
+          code: "ORG_SUSPENDED",
+        },
+        { status: 423 }
+      );
+    }
+  }
 
   const body = await req.json().catch(() => ({}));
   const items: { sku: string; qty: number }[] = Array.isArray(body.items)

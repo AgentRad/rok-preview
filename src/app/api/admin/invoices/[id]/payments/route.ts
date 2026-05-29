@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { markOrderPaid } from "@/lib/order-utils";
+import { maybeReactivateOrg } from "@/lib/dunning";
 
 export const runtime = "nodejs";
 
@@ -56,7 +57,7 @@ export async function POST(
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
-    include: { order: { select: { id: true } } },
+    include: { order: { select: { id: true, buyerOrgId: true } } },
   });
   if (!invoice) {
     return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
@@ -104,6 +105,8 @@ export async function POST(
   // markOrderPaid path prepaid orders use (idempotent; only acts on PENDING).
   if (clearsInvoice && invoice.order) {
     await markOrderPaid(invoice.order.id, method);
+    // PLH-3z-4: clearing the balance may reactivate a suspended org.
+    await maybeReactivateOrg(invoice.order.buyerOrgId);
   }
 
   await writeAuditLog({

@@ -72,6 +72,21 @@ export async function POST(
     return NextResponse.json({ error: "Verify your email before completing checkout. Request a new verification link from /account.", code: "EMAIL_NOT_VERIFIED" }, { status: 403 });
   }
 
+  // PLH-3z-4: block checkout for members of a SUSPENDED org (past-due balance).
+  if (user) {
+    const orgForGate = await getActiveBuyerOrgContext(user);
+    if (orgForGate && orgForGate.org.status === "SUSPENDED") {
+      return NextResponse.json(
+        {
+          error:
+            "Your organization's account is suspended for a past-due balance. Contact your accounts-payable team or support@partsport.agentgaming.gg to clear it.",
+          code: "ORG_SUSPENDED",
+        },
+        { status: 423 }
+      );
+    }
+  }
+
   if (quote.status !== "ACCEPTED" || quote.quotedUnitCents == null) {
     return NextResponse.json(
       { error: "Accept the quote first." },

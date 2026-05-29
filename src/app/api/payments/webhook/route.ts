@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getProvider } from "@/lib/payments";
 import { markOrderPaid } from "@/lib/order-utils";
+import { maybeReactivateOrg } from "@/lib/dunning";
 import { applySupplierClawback } from "@/lib/refunds";
 import { syncSupplierConnectStatus } from "@/lib/stripe-connect";
 import { writeAuditLog } from "@/lib/audit";
@@ -287,7 +288,7 @@ export async function POST(req: Request) {
         // order confirmation all fire (same path prepaid orders use).
         const invoice = await prisma.invoice.findUnique({
           where: { stripeInvoiceId: event.stripeInvoiceId },
-          include: { order: { select: { id: true } } },
+          include: { order: { select: { id: true, buyerOrgId: true } } },
         });
         if (invoice && invoice.status !== "PAID") {
           // Idempotent: short-circuit on already-PAID. Stripe retries land
@@ -316,6 +317,8 @@ export async function POST(req: Request) {
           });
           if (invoice.order) {
             await markOrderPaid(invoice.order.id, event.paymentMethod);
+            // PLH-3z-4: a payment may clear a suspended org's past-due balance.
+            await maybeReactivateOrg(invoice.order.buyerOrgId);
           }
           await writeAuditLog({
             actor: { id: "system", email: "system@partsport" },
