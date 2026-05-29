@@ -2238,3 +2238,72 @@ net-30 epic (full spec at docs/PLH-3z-spec-net30-ar.md). 1 commit (6779f63).**
 - Built by the orchestrator directly (build chips were hitting transient
   "Invalid request" API errors from oversized reads on the now-large codebase).
 - `npx next build` clean. Zero em dashes.
+
+**PLH-3z-2 (2026-05-28). Stripe Invoices + payment recording. Round 2 of 4 of
+the net-30 epic. 4 commits, each `npx next build` clean, zero em dashes.**
+- **Schema (bc6d155).** `PaymentRecord` model (one row per payment applied to
+  an invoice: invoiceId, amountCents, receivedAt, method, reference, source,
+  recordedBy nullable, notes). `Invoice.stripeInvoiceId` (unique) + `dueDate`
+  + `paidAt` + `paidReference` + `paymentMethod` + `partialPaidCents`.
+  `InvoiceStatus` extended with `UNCOLLECTIBLE`. CHECK
+  `invoice_partial_paid_nonneg`. Migration `20260710000000_add_payment_record`.
+- **Stripe Invoice creation (f10e4da).** `createStripeInvoiceForOrder` in
+  `src/lib/payments.ts` issues a Stripe Invoice
+  (`collection_method=send_invoice`, `payment_settings.payment_method_types=
+  ["us_bank_account"]` (ACH), `due_date` from the order), one invoice item per
+  order line plus freight / fee / tax lines so the Stripe total matches the
+  local `Invoice.totalCents`, finalizes and sends it, returns the id. Reuses
+  the org HYBRID Stripe customer when present, else mints a per-buyer customer.
+  `ensureNetTermsInvoiceForOrder` (from 3z-1) now also mirrors the due date onto
+  the local invoice and, after the local DUE invoice is created, calls the
+  helper and stores `Invoice.stripeInvoiceId`.
+  - **Fail-soft:** the Stripe call is wrapped in try/catch. An unset
+    `STRIPE_SECRET_KEY` returns null (skip silently); any Stripe API error is
+    caught, `captureError`'d, and audited `STRIPE_INVOICE_CREATE_FAILED`. The
+    local DUE invoice + `sendInvoiceIssued` email are the source of truth, so
+    Stripe being down never breaks order placement. Stripe is only the
+    collection mechanism.
+- **Webhook handlers (7a92cfa).** `parseWebhookEvent` maps `invoice.paid`,
+  `invoice.payment_failed`, `invoice.marked_uncollectible` to canonical events.
+  The existing `/api/payments/webhook` route handles them:
+  - `invoice.paid`: in one `$transaction`, flip the local Invoice PAID
+    (paidAt / paidReference / paymentMethod, partialPaidCents = totalCents) and
+    insert a `PaymentRecord` (source `stripe_webhook`, recordedBy null), then
+    call `markOrderPaid(orderId, method)` so the existing P8 per-slot payout
+    flow + PLH-3i P2 QBO invoice sync + order-confirmation email all fire (the
+    same path prepaid orders use). Audit `INVOICE_PAID_AUTO`.
+  - `invoice.payment_failed`: audit `INVOICE_PAYMENT_FAILED`, invoice stays
+    DUE/PAST_DUE.
+  - `invoice.marked_uncollectible`: flip Invoice `UNCOLLECTIBLE` + audit.
+  - **Idempotency:** the paid branch short-circuits on an already-PAID invoice,
+    so a Stripe retry (it delivers the same invoice id) does not re-record a
+    payment, re-pay suppliers, or re-sync QBO. `markOrderPaid` is itself
+    idempotent (only acts on PENDING). Uncollectible is guarded on
+    `status !== UNCOLLECTIBLE`; payment_failed is audit-only.
+- **Manual mark-paid (0634ef1).** `POST /api/admin/invoices/[id]/payments`
+  (admin only) records an off-platform wire/check/etc as a `PaymentRecord`
+  (source `manual_admin`, recordedBy admin id). Once the running
+  `partialPaidCents` clears `totalCents`, the invoice flips PAID and
+  `markOrderPaid` advances the order; a partial payment leaves it open. Audit
+  `INVOICE_PAYMENT_RECORDED`. `AdminRecordPayment` control renders on
+  `/orders/[id]` (admin view) for a still-DUE/PAST_DUE net-terms invoice, since
+  there is no `/admin/accounts-receivable` surface yet (that lands in 3z-3).
+- **markOrderPaid integration confirmed:** both the webhook and manual paths
+  route net-terms payment through the same `markOrderPaid` used by prepaid, so
+  QBO invoice sync (PLH-3i P2) fires automatically on net-terms payment.
+- New audit actions: `STRIPE_INVOICE_CREATE_FAILED`, `INVOICE_PAID_AUTO`,
+  `INVOICE_PAYMENT_RECORDED`, `INVOICE_PAYMENT_FAILED`,
+  `INVOICE_MARKED_UNCOLLECTIBLE`. New `AuditTargetType` value `Invoice`.
+- **Deviation:** the spec's `Email.dunningStage String?` column (for 3z-4
+  dunning idempotency) was NOT added. This codebase has no `Email` model (email
+  sends are fire-and-forget `sendX` helpers; there is no per-email table). The
+  spec presumed an Email table that was never built. Rather than invent a whole
+  model out of scope for this round, 3z-4 will create whatever idempotency
+  table it needs (keyed on invoiceId + stage). Flagged for the dunning round.
+- **Owner setup for a live test:** `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`
+  must be set in Vercel (test mode is fine), and the Stripe webhook endpoint
+  must subscribe to `invoice.paid`, `invoice.payment_failed`, and
+  `invoice.marked_uncollectible` (in addition to the existing checkout /
+  refund / transfer events). Then place a net-terms order: a Stripe Invoice is
+  created and emailed; paying it via the hosted ACH page fires `invoice.paid`,
+  which settles the local invoice + advances the order.
