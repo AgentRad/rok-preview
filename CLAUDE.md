@@ -2833,6 +2833,28 @@ closing it. Fixing serially.
     ordering + audit-on-over are integration-level (not unit-tested; covered by
     build + reasoning). `npx next build` clean.
 
-QA3 remaining (serial): demo-pay guest dead-end + wrong-org suspend check +
-quote-decline role gate (MEDIUM+LOW); net-terms shared-customer address race +
-TOTP fast-clock edge (LOW). Then a final build + test gate.
+- **QA3-fix3 (`d22216d`).** Three route-level consistency gaps.
+  - **MEDIUM demo-pay guest dead-end.** The QA1-fix1 hardening required an
+    authenticated owner-or-admin, but guest checkout sets `buyerId=null` and the
+    on-site demo lets a guest place + pay, so guests got 401 and could not
+    complete the demo. Fix: `demoPayGuard` now allows a GUEST order
+    (`buyerId === null`) to demo-pay without a session, mirroring create-session's
+    guest tolerance. Safe because the `paymentsConfigured -> 503` branch is still
+    the FIRST check (production inert, unchanged); guest-allow runs only in demo
+    mode where no real money/payout moves. A real user's order still requires an
+    ACTIVE owner-or-admin.
+  - **LOW wrong org for suspend check.** The pay route read the suspend-org from
+    the session user; now loads the order with `include:{buyer:true}` and derives
+    `getActiveBuyerOrgContext(order.buyer)`, mirroring create-session (an admin
+    paying for a suspended-org buyer is now correctly blocked).
+  - **LOW quote-decline role/status gate.** The decline branch authorized any
+    supplier member incl. VIEWER and suspended-supplier members; the sibling
+    price action was stricter. Fix: decline now gates the SUPPLIER path on
+    `canRespondToQuotes(role)` + supplier `APPROVED && publicVisible` (same as the
+    price action) via `quoteDeclineGuard`; quote owner + platform ADMIN still
+    decline regardless.
+  - 8 new test cases (now 91). Build clean.
+
+QA3 remaining (serial): net-terms shared-customer address race + TOTP fast-clock
+edge (LOW). Then a final build + test gate, after which the audit + two-pass
+re-audit are fully remediated.
