@@ -19,6 +19,10 @@ export const AUDIT_ACTIONS = [
   "SUPPLIER_DOC_REJECTED",
   "SUPPLIER_DOC_PENDING",
   "SUPPLIER_BANK_INFO_UPDATED",
+  // QA2 BUG 1: minting a Stripe Connect onboarding link redirects the payout
+  // destination, the same payout-fraud lever as a bank-info edit, so it now
+  // gets its own audit row that also carries the acting-as-admin marker.
+  "SUPPLIER_CONNECT_ONBOARD_LINK_CREATED",
   "TAX_EXEMPT_APPROVED",
   "TAX_EXEMPT_REJECTED",
   "TAX_EXEMPT_PENDING",

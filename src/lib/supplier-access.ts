@@ -37,7 +37,7 @@ export async function getActiveSupplierContext(
   user: User
 ): Promise<SupplierContext | null> {
   if (user.role === "ADMIN") {
-    const actingAs = await getActingAsSupplier();
+    const actingAs = await getActingAsSupplier(user.id);
     if (actingAs) {
       const supplier = await prisma.supplier.findUnique({
         where: { id: actingAs },
@@ -102,7 +102,7 @@ export async function effectiveAccessToSupplier(
   supplierId: string
 ): Promise<{ ok: boolean; role: SupplierMemberRole | null }> {
   if (user.role === "ADMIN") {
-    const actingAs = await getActingAsSupplier();
+    const actingAs = await getActingAsSupplier(user.id);
     if (actingAs === supplierId) return { ok: true, role: "OWNER" };
   }
   return userHasAccessToSupplier(user.id, supplierId);

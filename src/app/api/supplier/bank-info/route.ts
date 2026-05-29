@@ -7,14 +7,23 @@ import {
 } from "@/lib/supplier-access";
 import { rateLimit } from "@/lib/rate-limit";
 import { writeAuditLog } from "@/lib/audit";
-import crypto from "node:crypto";
+import { hmacLast4 } from "@/lib/route-guards";
 
-// PLH-3e B7: hash last-4 in audit metadata so visibility into "did it
-// change?" is preserved without leaking the digits themselves through
-// the audit log read surface.
-function hashLast4(last4: string | null | undefined): string | null {
-  if (!last4) return null;
-  return crypto.createHash("sha256").update(last4).digest("hex").slice(0, 8);
+// PLH-3e B7 / QA2 BUG 3: fingerprint last-4 in audit metadata so visibility
+// into "did the payout destination change?" is preserved without leaking the
+// digits. A bare sha256(last4) was brute-forceable (only 10,000 inputs), so
+// this is now an HMAC keyed on a server secret: the before/after mismatch
+// still signals a change, but the value is not reversible without the secret.
+// Same secret-derivation pattern as order-link.ts / acting-as.ts.
+function bankInfoHashSecret(): string {
+  return (
+    process.env.BANK_INFO_HASH_SECRET ||
+    process.env.SESSION_SECRET ||
+    "partsport-bank-info-hash-fallback"
+  );
+}
+function fingerprintLast4(last4: string | null | undefined): string | null {
+  return hmacLast4(last4, bankInfoHashSecret());
 }
 
 export const runtime = "nodejs";
@@ -111,10 +120,19 @@ export async function PATCH(req: Request) {
     targetId: updated.id,
     summary: `Bank info updated to ${bankName} ****${last4Raw} (was ****${previous?.bankInfoLast4 ?? "none"})`,
     metadata: {
-      previousLast4Hash: hashLast4(previous?.bankInfoLast4 ?? null),
-      newLast4Hash: hashLast4(last4Raw),
+      previousLast4Hash: fingerprintLast4(previous?.bankInfoLast4 ?? null),
+      newLast4Hash: fingerprintLast4(last4Raw),
       previousStatus: previous?.bankInfoStatus ?? null,
       actor: user.id,
+      // QA2 BUG 1: when an admin changes the payout bank info WHILE acting-as
+      // this supplier, flag it so an investigator can tell impersonated edits
+      // apart from a normal supplier self-edit. The payout-destination change
+      // is the exact payout-fraud lever, so the impersonation marker rides on
+      // the same high-signal audit row.
+      actingAsAdmin: ctx.actingAsAdmin === true,
+      ...(ctx.actingAsAdmin
+        ? { impersonatedSupplierId: ctx.supplier.id }
+        : {}),
     },
   });
 

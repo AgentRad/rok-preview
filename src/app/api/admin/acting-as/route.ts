@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       { status: 404 }
     );
   }
-  await setActingAsSupplier(supplier.id);
+  await setActingAsSupplier(supplier.id, user.id);
   await writeAuditLog({
     actor: user,
     action: "ACCOUNT_IMPERSONATION_STARTED",
@@ -49,7 +49,7 @@ export async function DELETE() {
   if (!user || user.role !== "ADMIN") {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
-  const wasActingAs = await getActingAsSupplier();
+  const wasActingAs = await getActingAsSupplier(user.id);
   await clearActingAsSupplier();
   if (wasActingAs) {
     await writeAuditLog({

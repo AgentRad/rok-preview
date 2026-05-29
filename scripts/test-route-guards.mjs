@@ -21,6 +21,10 @@ import {
   buildTransferIdempotencyKey,
   stateNonceMatches,
   totpStepIsReplay,
+  signActingAsToken,
+  buildActingAsCookie,
+  verifyActingAsCookie,
+  hmacLast4,
 } from "../src/lib/route-guards.ts";
 
 const OWNER = { id: "u_owner", role: "BUYER", status: "ACTIVE" };
@@ -498,4 +502,85 @@ test("totp replay: newer step is not a replay (accept)", () => {
 test("totp replay: null lastStep (first 2FA login / pre-migration) is never a replay", () => {
   assert.equal(totpStepIsReplay(100, null), false);
   assert.equal(totpStepIsReplay(100, undefined), false);
+});
+
+// ---- QA2 acting-as BUG 2: signed admin-bound impersonation cookie ----
+
+const ACT_SECRET = "test-acting-as-secret-at-least-32-chars-long";
+const SUP = "cmpokkr5y0003l704715ph61l"; // cuid shape, no dots
+const ADMIN_A = "u_admin_a";
+const ADMIN_B = "u_admin_b";
+
+test("acting-as: a cookie signed for an admin verifies back to the supplierId for THAT admin", () => {
+  const cookie = buildActingAsCookie(SUP, ADMIN_A, ACT_SECRET);
+  assert.equal(verifyActingAsCookie(cookie, ADMIN_A, ACT_SECRET), SUP);
+});
+
+test("acting-as: a cookie set under one admin is NOT honored under a different admin", () => {
+  const cookie = buildActingAsCookie(SUP, ADMIN_A, ACT_SECRET);
+  assert.equal(verifyActingAsCookie(cookie, ADMIN_B, ACT_SECRET), null);
+});
+
+test("acting-as: a tampered supplierId (signature no longer matches) is rejected", () => {
+  const cookie = buildActingAsCookie(SUP, ADMIN_A, ACT_SECRET);
+  const sig = cookie.slice(cookie.lastIndexOf(".") + 1);
+  const tampered = `cmEVILsupplierid000000000.${sig}`;
+  assert.equal(verifyActingAsCookie(tampered, ADMIN_A, ACT_SECRET), null);
+});
+
+test("acting-as: a tampered signature is rejected", () => {
+  const cookie = buildActingAsCookie(SUP, ADMIN_A, ACT_SECRET);
+  const tampered = cookie.slice(0, cookie.lastIndexOf(".") + 1) + "00000000000000000000000000000000";
+  assert.equal(verifyActingAsCookie(tampered, ADMIN_A, ACT_SECRET), null);
+});
+
+test("acting-as: an unsigned legacy raw-supplierId value is rejected (no dot/sig)", () => {
+  assert.equal(verifyActingAsCookie(SUP, ADMIN_A, ACT_SECRET), null);
+});
+
+test("acting-as: null / empty / malformed cookie values are rejected", () => {
+  assert.equal(verifyActingAsCookie(null, ADMIN_A, ACT_SECRET), null);
+  assert.equal(verifyActingAsCookie("", ADMIN_A, ACT_SECRET), null);
+  assert.equal(verifyActingAsCookie(".abcd", ADMIN_A, ACT_SECRET), null);
+  assert.equal(verifyActingAsCookie(`${SUP}.`, ADMIN_A, ACT_SECRET), null);
+});
+
+test("acting-as: a value signed with a different secret is rejected", () => {
+  const cookie = buildActingAsCookie(SUP, ADMIN_A, ACT_SECRET);
+  assert.equal(verifyActingAsCookie(cookie, ADMIN_A, "some-other-secret-value-32-characters!!"), null);
+});
+
+test("acting-as: signActingAsToken is a 32-hex-char HMAC truncation", () => {
+  const sig = signActingAsToken(SUP, ADMIN_A, ACT_SECRET);
+  assert.equal(sig.length, 32);
+  assert.match(sig, /^[0-9a-f]{32}$/);
+});
+
+// ---- QA2 acting-as BUG 3: HMAC last4 fingerprint ----
+
+const HASH_SECRET = "test-bank-info-hash-secret-32-chars-min";
+
+test("hmacLast4: stable for the same input + secret (change-detection compares equal)", () => {
+  assert.equal(hmacLast4("1234", HASH_SECRET), hmacLast4("1234", HASH_SECRET));
+});
+
+test("hmacLast4: differs across different last4 (a change still signals a change)", () => {
+  assert.notEqual(hmacLast4("1234", HASH_SECRET), hmacLast4("5678", HASH_SECRET));
+});
+
+test("hmacLast4: differs across secrets (not reversible without the server secret)", () => {
+  assert.notEqual(hmacLast4("1234", HASH_SECRET), hmacLast4("1234", "a-completely-different-secret-value!!"));
+});
+
+test("hmacLast4: returns a short hex slice, not the raw digits", () => {
+  const h = hmacLast4("1234", HASH_SECRET);
+  assert.equal(h.length, 8);
+  assert.match(h, /^[0-9a-f]{8}$/);
+  assert.notEqual(h, "1234");
+});
+
+test("hmacLast4: null / empty input returns null", () => {
+  assert.equal(hmacLast4(null, HASH_SECRET), null);
+  assert.equal(hmacLast4(undefined, HASH_SECRET), null);
+  assert.equal(hmacLast4("", HASH_SECRET), null);
 });

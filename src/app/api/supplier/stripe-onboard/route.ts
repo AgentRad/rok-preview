@@ -10,6 +10,7 @@ import {
 } from "@/lib/stripe-connect";
 import { captureError } from "@/lib/observability";
 import { rateLimit } from "@/lib/rate-limit";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -72,6 +73,23 @@ export async function POST() {
         { status: 502 }
       );
     }
+    // QA2 BUG 1: a Connect onboarding link can redirect the payout
+    // destination, so it is audited like a bank-info change, and the row
+    // records whether an admin minted it while impersonating this supplier.
+    await writeAuditLog({
+      actor: user,
+      action: "SUPPLIER_CONNECT_ONBOARD_LINK_CREATED",
+      targetType: "Supplier",
+      targetId: ctx.supplier.id,
+      summary: `Stripe Connect onboarding link created for ${ctx.supplier.name}`,
+      metadata: {
+        actor: user.id,
+        actingAsAdmin: ctx.actingAsAdmin === true,
+        ...(ctx.actingAsAdmin
+          ? { impersonatedSupplierId: ctx.supplier.id }
+          : {}),
+      },
+    });
     return NextResponse.json({ ok: true, url });
   } catch (err) {
     captureError(err, {

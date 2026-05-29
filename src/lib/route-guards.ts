@@ -10,6 +10,8 @@
 // strip-quoted-reply.ts. The route handlers gather the data (session user,
 // order/quote row, org status) and map a non-ok result to a NextResponse.
 
+import crypto from "node:crypto";
+
 export type GuardResult =
   | { ok: true }
   | { ok: false; status: number; error: string; code?: string };
@@ -278,4 +280,81 @@ export function buildTransferIdempotencyKey(
   orderId: string
 ): string {
   return `${kind}_${supplierId}_${orderId}`;
+}
+
+// QA2 acting-as BUG 2. The pp_acting_as cookie stored a raw supplierId,
+// unsigned and not bound to the admin who set it. It is only HONORED for
+// ADMIN sessions, so a non-admin cannot forge powers, but a value set under
+// one admin session was honored under any admin session (defense-in-depth
+// weak). The cookie is now `${supplierId}.${sig}` where sig is HMAC-SHA256
+// over `${supplierId}.${adminUserId}` truncated to 16 bytes (32 hex chars),
+// so the reader can prove BOTH integrity and that the binding admin matches
+// the current session. supplierId is a cuid (no dots) so the last "." cleanly
+// separates payload from signature. Pure (secret passed in) so the
+// sign/verify round-trip is unit-testable without next/headers.
+export function signActingAsToken(
+  supplierId: string,
+  adminUserId: string,
+  secret: string
+): string {
+  const mac = crypto
+    .createHmac("sha256", secret)
+    .update(`${supplierId}.${adminUserId}`)
+    .digest();
+  return mac.subarray(0, 16).toString("hex");
+}
+
+/** Build the signed cookie value written by setActingAsSupplier. */
+export function buildActingAsCookie(
+  supplierId: string,
+  adminUserId: string,
+  secret: string
+): string {
+  return `${supplierId}.${signActingAsToken(supplierId, adminUserId, secret)}`;
+}
+
+/**
+ * Verify a pp_acting_as cookie value against the CURRENT admin's user id.
+ * Returns the impersonated supplierId on a valid signature whose binding
+ * admin matches `adminUserId`, else null (fall back to no impersonation).
+ * Constant-time signature compare.
+ */
+export function verifyActingAsCookie(
+  value: string | null | undefined,
+  adminUserId: string,
+  secret: string
+): string | null {
+  if (!value || typeof value !== "string") return null;
+  const idx = value.lastIndexOf(".");
+  if (idx <= 0 || idx >= value.length - 1) return null;
+  const supplierId = value.slice(0, idx);
+  const sig = value.slice(idx + 1);
+  if (!supplierId || sig.length !== 32) return null;
+  const expected = signActingAsToken(supplierId, adminUserId, secret);
+  let a: Buffer;
+  let b: Buffer;
+  try {
+    a = Buffer.from(expected, "hex");
+    b = Buffer.from(sig, "hex");
+  } catch {
+    return null;
+  }
+  if (a.length !== b.length || a.length !== 16) return null;
+  if (!crypto.timingSafeEqual(a, b)) return null;
+  return supplierId;
+}
+
+// QA2 acting-as BUG 3. The bank last-4 in audit metadata was a bare
+// sha256(last4).slice(0,8). last4 has only 10,000 possible values, so anyone
+// with audit-log read access can precompute the full table and recover the
+// digits, defeating the PLH-3e B7 intent. HMAC with a server secret instead:
+// the before/after hash mismatch still signals "the payout destination
+// changed" while the value is no longer reversible without the secret. Pure
+// (secret passed in) so stability + uniqueness is unit-testable.
+export function hmacLast4(
+  last4: string | null | undefined,
+  secret: string
+): string | null {
+  if (!last4) return null;
+  return crypto.createHmac("sha256", secret).update(last4).digest("hex").slice(0, 8);
 }
