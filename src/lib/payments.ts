@@ -1,6 +1,10 @@
 import "server-only";
 import Stripe from "stripe";
 import { siteUrl } from "./site-url";
+import {
+  resolveTaxExemptStatus,
+  type UsTaxAddress,
+} from "./net-terms-tax";
 
 /**
  * Processor-agnostic payment abstraction. The platform never imports Stripe
@@ -426,6 +430,15 @@ export async function createStripeCustomer(args: {
  * collection_method=send_invoice means Stripe does not auto-charge a card; it
  * issues a payable invoice with a due date, which is exactly the net-terms
  * model. payment_settings restricts payment to ACH bank debit.
+ *
+ * PLH-3z-tax: automatic_tax is now enabled so net-terms invoices collect the
+ * same Stripe-computed sales tax PREPAID checkout already does. automatic_tax
+ * reads the Stripe Customer's address at finalize, so we set the customer's tax
+ * address (parsed from the order ship-to) and tax_exempt status before
+ * finalizing. When no usable address can be parsed, automatic_tax is left off
+ * so collection still proceeds (tax stays zero, same as before this change).
+ * The finalized invoice's computed tax + total are returned so the caller can
+ * reconcile the local Invoice + Order rows.
  */
 export async function createStripeInvoiceForOrder(args: {
   orderReference: string;
@@ -437,23 +450,57 @@ export async function createStripeInvoiceForOrder(args: {
   items: { name: string; unitPriceCents: number; qty: number }[];
   freightCents: number;
   feeCents: number;
-  taxCents: number;
+  /** Parsed US tax location for automatic_tax. Null leaves tax computation off. */
+  customerAddress?: UsTaxAddress | null;
+  /** Same exemption the PREPAID path uses (lookupTaxExemption -> isExempt). */
+  taxExempt?: boolean;
   purchaseOrderNumber?: string | null;
-}): Promise<{ id: string; hostedInvoiceUrl: string | null } | null> {
+}): Promise<{
+  id: string;
+  hostedInvoiceUrl: string | null;
+  taxCents: number;
+  totalCents: number | null;
+} | null> {
   const s = stripeClient();
   if (!s) return null;
 
+  // automatic_tax can only compute when the customer carries a usable address.
+  // We always still set tax_exempt so exempt buyers read correctly in Stripe.
+  const canComputeTax = !!args.customerAddress?.postal_code;
+  const taxExemptStatus = resolveTaxExemptStatus(!!args.taxExempt);
+  const addressParam: Stripe.AddressParam | undefined = args.customerAddress
+    ? {
+        country: args.customerAddress.country,
+        ...(args.customerAddress.postal_code
+          ? { postal_code: args.customerAddress.postal_code }
+          : {}),
+        ...(args.customerAddress.state
+          ? { state: args.customerAddress.state }
+          : {}),
+      }
+    : undefined;
+
   // Reuse the org's centralized customer when present; otherwise mint a
-  // per-buyer customer so Stripe can email the hosted invoice.
-  const customerId =
-    args.orgStripeCustomerId ||
-    (
-      await s.customers.create({
-        name: args.buyerName,
-        email: args.buyerEmail,
-        metadata: { partsportOrderRef: args.orderReference },
-      })
-    ).id;
+  // per-buyer customer so Stripe can email the hosted invoice. Either way the
+  // customer must carry this order's tax address + exemption before finalize,
+  // since automatic_tax reads them off the customer at that moment.
+  let customerId: string;
+  if (args.orgStripeCustomerId) {
+    customerId = args.orgStripeCustomerId;
+    await s.customers.update(customerId, {
+      tax_exempt: taxExemptStatus,
+      ...(addressParam ? { address: addressParam } : {}),
+    });
+  } else {
+    const created = await s.customers.create({
+      name: args.buyerName,
+      email: args.buyerEmail,
+      tax_exempt: taxExemptStatus,
+      ...(addressParam ? { address: addressParam } : {}),
+      metadata: { partsportOrderRef: args.orderReference },
+    });
+    customerId = created.id;
+  }
 
   // due_date requires a future timestamp on send_invoice; fall back to a
   // 30-day window if the order somehow lacks an invoiceDueDate.
@@ -467,6 +514,9 @@ export async function createStripeInvoiceForOrder(args: {
     collection_method: "send_invoice",
     due_date: dueDateSec,
     auto_advance: false,
+    // PLH-3z-tax: let Stripe Tax add tax on top of the line items below, same
+    // as the PREPAID Checkout Session. Tax-exempt customers compute to zero.
+    automatic_tax: { enabled: canComputeTax },
     payment_settings: { payment_method_types: ["us_bank_account"] },
     description: `PartsPort order ${args.orderReference}`,
     metadata: {
@@ -476,20 +526,30 @@ export async function createStripeInvoiceForOrder(args: {
   });
   if (!invoice.id) throw new Error("Stripe did not return an invoice id.");
 
-  // One invoice item per order line, then freight / fee / tax lines so the
-  // Stripe invoice total matches the local Invoice.totalCents exactly.
-  const lines: { amountCents: number; description: string }[] = [
+  // One invoice item per order line, then freight + fee lines. We no longer add
+  // a manual "Sales tax" line: automatic_tax is the single source of the tax
+  // number for net-terms now, so a manual line would double-count. Tax codes
+  // mirror the PREPAID path (goods txcd_99999999, marketplace fee txcd_10000000
+  // = SaaS); freight rides as taxable goods, the conservative US treatment.
+  const lines: { amountCents: number; description: string; taxCode?: string }[] = [
     ...args.items.map((it) => ({
       amountCents: it.unitPriceCents * it.qty,
       description: `${it.name} (x${it.qty})`,
+      taxCode: "txcd_99999999",
     })),
   ];
   if (args.freightCents > 0)
-    lines.push({ amountCents: args.freightCents, description: "Freight" });
+    lines.push({
+      amountCents: args.freightCents,
+      description: "Freight",
+      taxCode: "txcd_99999999",
+    });
   if (args.feeCents > 0)
-    lines.push({ amountCents: args.feeCents, description: "Marketplace fee" });
-  if (args.taxCents > 0)
-    lines.push({ amountCents: args.taxCents, description: "Sales tax" });
+    lines.push({
+      amountCents: args.feeCents,
+      description: "Marketplace fee",
+      taxCode: "txcd_10000000",
+    });
 
   for (const line of lines) {
     await s.invoiceItems.create({
@@ -498,18 +558,41 @@ export async function createStripeInvoiceForOrder(args: {
       currency: "usd",
       amount: line.amountCents,
       description: line.description,
+      ...(line.taxCode ? { tax_code: line.taxCode } : {}),
     });
   }
 
-  // Finalize so a hosted invoice URL exists, then send so Stripe emails the
-  // buyer the ACH payment link.
+  // Finalize so a hosted invoice URL exists (and, with automatic_tax on, Stripe
+  // computes the tax now), then send so Stripe emails the buyer the ACH link.
   const finalized = await s.invoices.finalizeInvoice(invoice.id);
   await s.invoices.sendInvoice(invoice.id);
 
   return {
     id: invoice.id,
     hostedInvoiceUrl: finalized.hosted_invoice_url ?? null,
+    taxCents: extractInvoiceTaxCents(finalized),
+    totalCents: typeof finalized.total === "number" ? finalized.total : null,
   };
+}
+
+/**
+ * Read the total computed tax (cents) off a finalized Stripe invoice across API
+ * shapes: the 2025+ API exposes `total_taxes[]`, older shapes exposed a scalar
+ * `tax`, and as a last resort tax = total - subtotal (no discounts in play).
+ */
+function extractInvoiceTaxCents(inv: Stripe.Invoice): number {
+  const anyInv = inv as unknown as {
+    tax?: number | null;
+    total_taxes?: Array<{ amount?: number | null }> | null;
+    total?: number | null;
+    subtotal?: number | null;
+  };
+  if (Array.isArray(anyInv.total_taxes) && anyInv.total_taxes.length > 0)
+    return anyInv.total_taxes.reduce((sum, t) => sum + (t.amount ?? 0), 0);
+  if (typeof anyInv.tax === "number") return anyInv.tax;
+  if (typeof anyInv.total === "number" && typeof anyInv.subtotal === "number")
+    return Math.max(0, anyInv.total - anyInv.subtotal);
+  return 0;
 }
 
 /**

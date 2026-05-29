@@ -2701,6 +2701,61 @@ clean, zero em dashes.
 PENDING DEPLOY: migration `20260713000000_add_last_totp_step` (additive nullable
 column, applies on next `prisma migrate deploy`).
 
-OWNER DECISION still open (logged in REMINDERS.md, NOT a bug): net-terms invoice
-orders currently collect $0 sales tax. Confirm whether tax is owed; if yes, enable
-Stripe `automatic_tax` on the net-terms invoice path.
+## PLH-3z-tax (2026-05-29). Net-terms sales tax via Stripe automatic_tax. Closes the open owner-decision from PLH-QA1 (net-terms invoices collected $0 sales tax). 1 commit, `npx next build` clean, zero em dashes.
+
+Owner confirmed tax is owed on net-terms orders. Net-terms (NET_15/30/60 invoice)
+orders now collect the same Stripe-computed sales tax that PREPAID orders already
+collect via Stripe Checkout + Stripe Tax. PREPAID is byte-for-byte untouched.
+
+- **automatic_tax on the net-terms Stripe Invoice.** `createStripeInvoiceForOrder`
+  (`src/lib/payments.ts`) now sets `automatic_tax: { enabled: canComputeTax }` on
+  the Stripe Invoice. automatic_tax reads the Stripe Customer's address at finalize,
+  so before finalizing the function sets the customer's tax address + tax_exempt
+  status: a freshly-minted per-buyer customer gets them at `customers.create`, and a
+  reused org HYBRID customer gets them via `customers.update`. The address is parsed
+  from the order's free-text `shipTo` (the Order carries no structured address) via
+  `parseUsTaxAddressFromShipTo` (country US + 5-digit ZIP, refined by a USPS state
+  token when present). The manual "Sales tax" invoice line was removed so
+  automatic_tax is the single tax source (no double-count); product lines carry
+  tax_code txcd_99999999 and the marketplace-fee line txcd_10000000, mirroring the
+  PREPAID Checkout path. Freight rides as taxable goods (conservative US treatment).
+- **Tax exemption mirrors PREPAID exactly.** `ensureNetTermsInvoiceForOrder`
+  (`src/lib/order-utils.ts`) resolves exemption with `lookupTaxExemption(order.buyerId)`,
+  the identical source the PREPAID/create-session path uses (personal address cert OR
+  active-org cert, APPROVED + not expired). `resolveTaxExemptStatus(isExempt)` maps it
+  to the Stripe customer `tax_exempt` value ("exempt" -> $0 tax, "none" -> compute).
+- **Local Invoice + Order reconciled from the finalized Stripe invoice.** The local
+  DUE invoice + Order are created with taxCents=0 BEFORE Stripe computes tax. After
+  finalize, `createStripeInvoiceForOrder` returns the Stripe-computed tax + total
+  (read across API shapes: `total_taxes[]`, scalar `tax`, or total-minus-subtotal),
+  and `ensureNetTermsInvoiceForOrder` writes them onto both `Invoice.taxCents/totalCents`
+  and `Order.taxCents/totalCents` via `mergeStripeTax` (floors a bad read at zero), in
+  the same fail-soft try/catch block that captures `stripeInvoiceId` +
+  `stripeHostedInvoiceUrl`. The in-memory order is synced so the `sendInvoiceIssued`
+  email (fired via after()) reflects the real tax + total. So the on-platform invoice
+  page, the A/R dashboard, and dunning all show the real amount the buyer will pay.
+- **invoice.paid webhook unchanged + correct.** It records the actual amount paid
+  (`inv.amount_paid`, which includes tax) in the PaymentRecord and sets
+  partialPaidCents to the now-reconciled `Invoice.totalCents`; `markOrderPaid` is
+  called with no taxSnapshot, so the order's already-reconciled tax/total stand. No
+  double-count.
+- **Fail-soft posture preserved.** Unset `STRIPE_SECRET_KEY` -> `createStripeInvoiceForOrder`
+  returns null -> local DUE invoice stays taxCents=0 and the order still places (net
+  terms requires Stripe to collect anyway). An unparseable ship-to (no ZIP) leaves
+  automatic_tax OFF so the invoice still finalizes + collects (tax stays 0) rather
+  than throwing; any Stripe API error is still caught, captureError'd, audited
+  `STRIPE_INVOICE_CREATE_FAILED`, and the local DUE invoice remains the source of
+  truth. Payout-on-payment timing (PLH-3z-4) and the dunning/hosted-URL capture are
+  not disturbed: the only added writes are the tax/total reconciliation inside the
+  existing Stripe block.
+- Pure logic factored into `src/lib/net-terms-tax.ts` (`resolveTaxExemptStatus`,
+  `parseUsTaxAddressFromShipTo`, `mergeStripeTax`), covered by
+  `scripts/test-net-terms-tax.mjs` (14 cases, Node 24 --test). The Stripe API calls
+  are integration-level and not unit-tested.
+- **Owner setup in Stripe:** Stripe Tax tax registrations must cover the buyer's
+  ship-to jurisdiction(s) for automatic_tax to compute a non-zero rate there; an
+  unregistered jurisdiction computes $0 (Stripe's documented behavior). This is the
+  same registration requirement the PREPAID path already depends on.
+
+PENDING DEPLOY: migration `20260713000000_add_last_totp_step` (additive nullable
+column, applies on next `prisma migrate deploy`). No new migration in PLH-3z-tax.

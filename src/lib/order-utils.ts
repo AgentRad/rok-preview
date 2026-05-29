@@ -8,6 +8,8 @@ import { syncInvoice } from "./qbo-sync";
 import { createStripeInvoiceForOrder } from "./payments";
 import { ensurePayoutsForOrder } from "./payouts";
 import { writeAuditLog } from "./audit";
+import { lookupTaxExemption } from "./stripe-tax";
+import { parseUsTaxAddressFromShipTo, mergeStripeTax } from "./net-terms-tax";
 
 export function generateReference(prefix = "PP"): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -250,6 +252,12 @@ export async function ensureNetTermsInvoiceForOrder(orderId: string): Promise<vo
       });
       orgStripeCustomerId = org?.stripeCustomerId ?? null;
     }
+    // PLH-3z-tax: resolve exemption from the SAME source the PREPAID/Stripe-Tax
+    // path uses (lookupTaxExemption -> personal address cert OR active-org cert,
+    // APPROVED + not expired) so the two lanes agree, and parse a US tax
+    // location out of the order's ship-to so automatic_tax can compute.
+    const { isExempt } = await lookupTaxExemption(order.buyerId);
+    const customerAddress = parseUsTaxAddressFromShipTo(order.shipTo);
     const stripeInvoice = await createStripeInvoiceForOrder({
       orderReference: order.reference,
       buyerName: order.buyerName,
@@ -263,10 +271,23 @@ export async function ensureNetTermsInvoiceForOrder(orderId: string): Promise<vo
       })),
       freightCents: order.freightCents,
       feeCents: order.feeCents,
-      taxCents: order.taxCents,
+      customerAddress,
+      taxExempt: isExempt,
       purchaseOrderNumber: order.purchaseOrderNumber,
     });
     if (stripeInvoice) {
+      // PLH-3z-tax: the local DUE invoice + Order were created with taxCents=0
+      // BEFORE Stripe computed tax. Now that the Stripe invoice is finalized,
+      // reconcile both rows to the Stripe-computed tax + total so the on-platform
+      // invoice page, the A/R dashboard, and dunning all show the real amount
+      // the buyer will pay. mergeStripeTax floors a bad read at zero.
+      const { taxCents, totalCents } = mergeStripeTax(
+        order.subtotalCents,
+        order.freightCents,
+        order.feeCents,
+        stripeInvoice.taxCents,
+        stripeInvoice.totalCents
+      );
       await prisma.invoice.update({
         where: { orderId: order.id },
         data: {
@@ -274,8 +295,19 @@ export async function ensureNetTermsInvoiceForOrder(orderId: string): Promise<vo
           // PLH-3z-4: capture the hosted ACH pay page so dunning emails can
           // deep-link to self-service payment.
           stripeHostedInvoiceUrl: stripeInvoice.hostedInvoiceUrl,
+          taxCents,
+          totalCents,
         },
       });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { taxCents, totalCents },
+      });
+      // Keep the in-memory order in sync so the sendInvoiceIssued email below
+      // (fired via after()) reflects the real tax + total, not the zero-tax
+      // snapshot captured at order creation.
+      order.taxCents = taxCents;
+      order.totalCents = totalCents;
     }
   } catch (err) {
     captureError(err, {
