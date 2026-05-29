@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/approval-orphan-sweep",
       "schedule": "30 7 * * *"
+    },
+    {
+      "path": "/api/cron/ar-dunning",
+      "schedule": "15 8 * * *"
     }
   ]
 }
