@@ -109,7 +109,11 @@ export async function createSession(
   const store = await cookies();
   store.set(COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // Secure in production. ALLOW_INSECURE_COOKIES=1 relaxes this ONLY for the
+    // CI e2e job, which serves the production build over http://localhost where
+    // a Secure cookie cannot be stored. Vercel never sets this env, so real
+    // production is always Secure.
+    secure: process.env.NODE_ENV === "production" && process.env.ALLOW_INSECURE_COOKIES !== "1",
     sameSite: "lax",
     path: "/",
     maxAge: maxAgeSec,

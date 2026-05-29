@@ -63,7 +63,7 @@ test("register page shows the form", async () => {
 
 test("marketing pages render", async () => {
   const page = await newPage();
-  for (const path of ["/for-suppliers", "/for-manufacturers", "/how-it-works"]) {
+  for (const path of ["/suppliers", "/manufacturers", "/how-it-works"]) {
     const resp = await page.goto(path, { waitUntil: "domcontentloaded" });
     assert.ok(resp && resp.status() < 400, `${path} should not error (got ${resp && resp.status()})`);
   }
@@ -93,14 +93,16 @@ test("admin can log in and reach the admin console", async () => {
   await ctx.close();
 });
 
-test("wrong password is rejected", async () => {
+test("wrong password does not grant a session", async () => {
   const page = await newPage();
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await page.locator('input[type="email"]').first().fill("buyer@partsport.example");
   await page.locator('input[type="password"]').first().fill("wrong-password-xyz");
   await page.locator('button[type="submit"], button.btn-primary').first().click();
-  // Should stay on /login (no session). Give it a beat to NOT navigate away.
   await page.waitForTimeout(2500);
-  assert.ok(page.url().includes("/login"), "a wrong password must not log the user in");
+  // Directly assert the security property: a failed login grants no session, so
+  // an auth-gated page bounces to /login (robust regardless of client redirect).
+  await page.goto("/account", { waitUntil: "domcontentloaded" });
+  assert.ok(page.url().includes("/login"), "a wrong password must not grant access to /account");
   await page.context().close();
 });
