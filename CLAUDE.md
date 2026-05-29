@@ -2619,8 +2619,35 @@ serially: money -> auth/SSO -> acting-as -> web LOW -> final verification.
     payout-on-payment, 3-stage payout (P12 c2), and 3-stage reserve-release
     (PLH-2 4e) invariants preserved.
 
-QA2 remaining (serial): auth/SSO (OIDC callback state not browser-bound = login
-CSRF; spoofable SSO_INITIATED audit actor; TOTP replay window), acting-as (admin
-impersonation bank-info edits not flagged in the audit trail; unsigned acting-as
-cookie; unsalted last4 hash), web LOW (unauthenticated product-image-list GET;
-never-expiring unsubscribe token), then a final verification pass.
+- **QA2-fix2 (`d3a3d4f`).** Auth/SSO hardening.
+  - **MEDIUM OIDC login-CSRF.** The OIDC callback validated only the signed
+    state signature + `state.org`, with no binding to the initiating browser, so
+    an attacker could feed a captured code+state to a victim and log them into
+    the attacker's IdP identity. Fix: `initiate` (OIDC branch) sets a short-lived
+    HttpOnly+Secure+SameSite=Lax `pp_oidc_state` cookie = state nonce (10-min,
+    matches signed-state expiry, mirrors the session-cookie flags); the callback
+    requires `stateNonceMatches(cookieNonce, state.nonce)`, records a FAILED_SIG
+    SsoLoginEvent + mints no session on missing/mismatch, and clears the cookie
+    on every exit. The ID-token nonce check is untouched (it defends a different
+    step). `buildOidcAuthorizeUrl` now returns `{ url, nonce }`.
+  - **LOW spoofable SSO_INITIATED actor.** The unauthenticated initiate route
+    logged `actor.email` from the attacker-supplied `?email=`. Now logs a fixed
+    `{ id: "system", email: "sso-initiate" }` actor and moves the email to
+    `metadata.suppliedEmail` (labeled untrusted).
+  - **UNCERTAIN -> CONFIRMED TOTP replay.** No last-step tracking existed and
+    `verifyTotp` used `window:1`, so a code was replayable ~90s. Fix: new
+    `User.lastTotpStep Int?` (migration
+    `20260713000000_add_last_totp_step`, additive/nullable, applies on next
+    `prisma migrate deploy`). `verifyTotpStep` returns the absolute consumed
+    30s step; the login-2fa path rejects `totpStepIsReplay(step, lastTotpStep)`
+    then persists the step. Enroll-verify path deliberately NOT tracked (it
+    mints no session; gating it risks enroll-time lockout). Null lastTotpStep
+    (first login / pre-migration) is never a replay.
+  - 9 new test cases (now 60). Build clean.
+
+QA2 remaining (serial): acting-as (admin impersonation bank-info edits not
+flagged in the audit trail; unsigned acting-as cookie; unsalted last4 hash),
+web LOW (unauthenticated product-image-list GET; never-expiring unsubscribe
+token), then a final verification pass against the documented smoke tests.
+
+MIGRATIONS pending deploy from this batch: `20260713000000_add_last_totp_step`.
