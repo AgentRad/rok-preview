@@ -516,6 +516,8 @@ model BuyerOrg {
   // PLH-3y-6: orders permanently bound to this org.
   orders          Order[]          @relation("BuyerOrgOrders")
   approvalRules   ApprovalRule[]
+  // PLH-3z-3: net-terms credit applications submitted for this org.
+  creditApplications CreditApplication[]
 }
 
 // PLH-3y-4: per-org single sign-on configuration. SAML 2.0 ships this round;
@@ -1075,6 +1077,51 @@ model PaymentRecord {
   createdAt   DateTime @default(now())
 
   @@index([invoiceId])
+}
+
+// PLH-3z-3: a buyer org's request for net-terms billing. An org ADMIN submits
+// the application (company legal name, EIN, expected monthly spend, trade
+// references, requested terms + limit, optional W-9 URL). A site admin reviews
+// at /admin/credit-applications and either approves (which sets the org's
+// paymentTerms + creditLimitCents from the approved values) or rejects with a
+// note. orgId is nullable per spec (a future flow may accept a prospect with no
+// org yet); the buyer-facing flow this round always submits for the submitter's
+// active org. Credit limit is admin-set on approval (no D-U-N-S auto-lookup, no
+// auto-approve this round).
+model CreditApplication {
+  id                   String        @id @default(cuid())
+  reference            String        @unique
+  org                  BuyerOrg?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId                String?
+  submittedByUserId    String
+  legalName            String
+  dba                  String?
+  ein                  String
+  yearsInBusiness      Int?
+  expectedMonthlyCents Int
+  requestedLimitCents  Int
+  requestedTerms       PaymentTerms
+  billingAddress       String
+  apContactName        String
+  apContactEmail       String
+  apContactPhone       String?
+  // [{ companyName, contact, phone, email }, ...]
+  references           Json
+  w9BlobUrl            String?
+  dunsNumber           String?
+  notes                String        @default("")
+  // PENDING | APPROVED | REJECTED
+  status               String        @default("PENDING")
+  reviewedBy           String?
+  reviewedAt           DateTime?
+  reviewerNote         String        @default("")
+  // May differ from the requested values (admin can downgrade on approval).
+  approvedLimitCents   Int?
+  approvedTerms        PaymentTerms?
+  createdAt            DateTime      @default(now())
+
+  @@index([orgId])
+  @@index([status])
 }
 
 model OrderItem {

@@ -220,6 +220,10 @@ export const AUDIT_ACTIONS = [
   "APPROVAL_ORPHANED_REASSIGNED",
   "APPROVAL_DELEGATION_UPDATED",
   "APPROVAL_POKED",
+  // PLH-3z-3: net-terms credit applications.
+  "CREDIT_APP_SUBMITTED",
+  "CREDIT_APP_APPROVED",
+  "CREDIT_APP_REJECTED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -242,7 +246,8 @@ export type AuditTargetType =
   | "BuyerOrg"
   | "SsoConfig"
   | "ApprovalRule"
-  | "Invoice";
+  | "Invoice"
+  | "CreditApplication";
 
 /**
  * Persist an audit log row. Best-effort: failures are reported to Sentry
