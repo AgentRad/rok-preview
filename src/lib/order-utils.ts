@@ -1,7 +1,7 @@
 import "server-only";
 import { after } from "next/server";
 import { prisma } from "./db";
-import { sendPaymentReceived } from "./email";
+import { sendPaymentReceived, sendInvoiceIssued } from "./email";
 import { captureError } from "./observability";
 import { intuitConfigured } from "./qbo-auth";
 import { syncInvoice } from "./qbo-sync";
@@ -170,4 +170,72 @@ export async function ensureInvoiceForOrder(orderId: string): Promise<void> {
     const code = (err as { code?: string }).code;
     if (code !== "P2002") throw err;
   }
+}
+
+/**
+ * PLH-3z-1: create a DUE invoice for a net-terms order at order-create time and
+ * email it. Unlike ensureInvoiceForOrder (which fires on PAID and marks the
+ * invoice PAID), this runs while the order is still PENDING because net-terms
+ * billing issues the invoice up front with a due date. Idempotent. Emails the
+ * buyer via sendInvoiceIssued through after() so a mail hiccup can't fail the
+ * order.
+ */
+export async function ensureNetTermsInvoiceForOrder(orderId: string): Promise<void> {
+  const existing = await prisma.invoice.findUnique({ where: { orderId } });
+  if (existing) return;
+
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) return;
+  // Only net-terms orders get an up-front DUE invoice. PREPAID orders keep
+  // using ensureInvoiceForOrder on payment.
+  if (order.paymentTerms === "PREPAID") return;
+
+  try {
+    await prisma.invoice.create({
+      data: {
+        number: invoiceNumberFor(order.reference),
+        orderId: order.id,
+        status: "DUE",
+        subtotalCents: order.subtotalCents,
+        freightCents: order.freightCents,
+        feeCents: order.feeCents,
+        taxCents: order.taxCents,
+        totalCents: order.totalCents,
+        buyerName: order.buyerName,
+        buyerEmail: order.buyerEmail,
+        shipTo: order.shipTo,
+      },
+    });
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    if (code !== "P2002") throw err;
+    return;
+  }
+
+  after(async () => {
+    try {
+      await sendInvoiceIssued({
+        id: order.id,
+        reference: order.reference,
+        buyerId: order.buyerId,
+        buyerName: order.buyerName,
+        buyerEmail: order.buyerEmail,
+        buyerCompanyName: order.buyerCompanyName,
+        buyerCompanyLogoUrl: order.buyerCompanyLogoUrl,
+        totalCents: order.totalCents,
+        subtotalCents: order.subtotalCents,
+        freightCents: order.freightCents,
+        feeCents: order.feeCents,
+        taxCents: order.taxCents,
+        feeRateBps: order.feeRateBps,
+        shipTo: order.shipTo,
+        purchaseOrderNumber: order.purchaseOrderNumber,
+        paymentTerms: order.paymentTerms,
+        invoiceDueDate: order.invoiceDueDate,
+        items: [],
+      });
+    } catch (err) {
+      captureError(err, { subsystem: "email", op: "invoice-issued", orderId: order.id });
+    }
+  });
 }

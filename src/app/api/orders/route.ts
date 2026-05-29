@@ -1,9 +1,9 @@
 import { NextResponse, after } from "next/server";
 import crypto from "node:crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma, type PaymentTerms } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { generateReference } from "@/lib/order-utils";
+import { generateReference, ensureNetTermsInvoiceForOrder } from "@/lib/order-utils";
 import { computeOrderTotals, computePerSupplierSlots } from "@/lib/order-totals";
 import { sendOrderConfirmation } from "@/lib/email";
 import { getActiveBuyerOrgContext } from "@/lib/buyer-org-access";
@@ -500,10 +500,23 @@ export async function POST(req: Request) {
   // org when they have one, so approvals + org spend-visibility survive the
   // member later leaving the org. Guests and orgless buyers stay null.
   let buyerOrgId: string | null = null;
+  // PLH-3z-1: net-terms. Snapshot the active org's payment terms onto the order.
+  // PREPAID for non-org buyers and PREPAID orgs keeps the existing Stripe
+  // checkout flow exactly as-is. Only a non-PREPAID org turns this into an
+  // invoice order with a due date.
+  let orderPaymentTerms: PaymentTerms = "PREPAID";
+  let invoiceDueDate: Date | null = null;
   if (user) {
     const orgCtx = await getActiveBuyerOrgContext(user);
     buyerOrgId = orgCtx?.org.id ?? null;
+    if (orgCtx && orgCtx.org.paymentTerms !== "PREPAID") {
+      orderPaymentTerms = orgCtx.org.paymentTerms;
+      const days =
+        orderPaymentTerms === "NET_15" ? 15 : orderPaymentTerms === "NET_60" ? 60 : 30;
+      invoiceDueDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    }
   }
+  const isInvoiceOrder = orderPaymentTerms !== "PREPAID";
 
   const order = await prisma.$transaction(async (tx) => {
     const created = await tx.order.create({
@@ -523,6 +536,8 @@ export async function POST(req: Request) {
         shipTo,
         purchaseOrderNumber,
         buyerOrgId,
+        paymentTerms: orderPaymentTerms,
+        invoiceDueDate,
         subtotalCents: totals.subtotalCents,
         freightCents: totals.freightCents,
         feeCents: orderFeeCents,
@@ -590,6 +605,15 @@ export async function POST(req: Request) {
   // page instead of proceeding directly to Stripe Checkout.
   const approvalStatus = await evaluateAndApplyApproval(order.id);
 
+  // PLH-3z-1: net-terms invoice orders bypass Stripe Checkout entirely. When
+  // the order is on net terms AND not waiting on approval, generate the DUE
+  // invoice now and email it. PREPAID orders are untouched (no invoice until
+  // payment, exactly as before). Approval-pending net orders defer invoice
+  // generation until the approval clears (handled when payment would resume).
+  if (isInvoiceOrder && approvalStatus !== "PENDING") {
+    await ensureNetTermsInvoiceForOrder(order.id);
+  }
+
   // Next 15 `after()` keeps the serverless function alive until the email
   // actually sends, so a Vercel cold-start kill can't drop it. Replaces
   // the previous fire-and-forget `.catch(...)` which broke on serverless.
@@ -644,5 +668,9 @@ export async function POST(req: Request) {
     // and the client should redirect to /orders/[id]?pending-approval=1
     // rather than proceeding to Stripe Checkout.
     pendingApproval: approvalStatus === "PENDING",
+    // PLH-3z-1: true when the order is billed on net terms (invoice, no Stripe
+    // Checkout). The client redirects to the order page instead of payment.
+    invoiceOrder: isInvoiceOrder,
+    paymentTerms: orderPaymentTerms,
   });
 }

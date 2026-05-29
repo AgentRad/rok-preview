@@ -278,6 +278,10 @@ type OrderLite = {
   // subject suffix when set so AP teams can match the email to a PO
   // without opening it.
   purchaseOrderNumber?: string | null;
+  // PLH-3z-1: net-terms invoice. When the order is billed on net terms these
+  // carry the terms label and due date for the invoice-issued email.
+  paymentTerms?: string | null;
+  invoiceDueDate?: Date | string | null;
   items: {
     nameSnapshot: string;
     skuSnapshot: string;
@@ -471,6 +475,37 @@ export async function sendPaymentReceived(order: OrderLite): Promise<void> {
     to: order.buyerEmail,
     subject: `Payment received for order ${order.reference}`,
     html: wrap("Payment received", body),
+  });
+}
+
+/**
+ * PLH-3z-1: net-terms invoice issued. Sent at order-create time for an invoice
+ * order (no Stripe Checkout). States the terms, the amount due, and the due
+ * date, and links to the hosted invoice. We link to the invoice page rather
+ * than attaching a PDF (no PDF renderer in the tree); the page is the system
+ * of record and AP teams can print it from there.
+ */
+export async function sendInvoiceIssued(order: OrderLite): Promise<void> {
+  const invoiceUrl = orderViewUrl(order, "/invoice");
+  const termsLabel = (order.paymentTerms ?? "NET_30").replace("NET_", "Net ");
+  const due = order.invoiceDueDate ? new Date(order.invoiceDueDate) : null;
+  const dueStr = due
+    ? due.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : "the date on the invoice";
+  const poLine = order.purchaseOrderNumber
+    ? `<p style="margin:4px 0;color:#555;">PO #: ${esc(order.purchaseOrderNumber)}</p>`
+    : "";
+  const body = `
+    <p>Hi ${esc(order.buyerName)},</p>
+    <p>Invoice for order <strong>${esc(order.reference)}</strong> has been issued on <strong>${esc(termsLabel)}</strong> terms. Payment is due by <strong>${esc(dueStr)}</strong>.</p>
+    ${poLine}
+    ${buyerBranding(order)}
+    ${totals(order)}
+    <p style="margin-top:22px;">${btn(invoiceUrl, "View invoice")}</p>`;
+  await send({
+    to: order.buyerEmail,
+    subject: `Invoice for order ${order.reference} (${termsLabel}, due ${dueStr})`,
+    html: wrap("Invoice issued", body),
   });
 }
 

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import BuyerOrgManager from "@/components/admin/BuyerOrgManager";
+import OrgTermsEditor from "@/components/admin/OrgTermsEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,12 @@ export default async function AdminBuyerOrgDetailPage({
           members and sees all org orders. APPROVER is reserved for a later
           round and behaves like BUYER for now. VIEWER is read-only.
         </p>
+
+        <OrgTermsEditor
+          orgId={org.id}
+          initialTerms={org.paymentTerms}
+          initialCreditLimitCents={org.creditLimitCents}
+        />
 
         <BuyerOrgManager orgId={org.id} initialMembers={members} initialInvites={invites} />
       </div>

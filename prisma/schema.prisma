@@ -56,6 +56,22 @@ enum InvoiceStatus {
   ISSUED
   PAID
   VOID
+  // PLH-3z-1: net-terms lifecycle. DUE = issued on net terms, not yet paid,
+  // not yet past the due date. PAST_DUE = unpaid past invoiceDueDate.
+  // PREPAID invoices keep using ISSUED -> PAID as before.
+  DUE
+  PAST_DUE
+}
+
+// PLH-3z-1: payment terms for enterprise net-terms billing. PREPAID is the
+// default for every org and every non-org buyer (existing Stripe checkout
+// flow, unchanged). NET_15/30/60 let an approved org place invoice orders
+// that bypass Stripe Checkout and are billed with a due date.
+enum PaymentTerms {
+  PREPAID
+  NET_15
+  NET_30
+  NET_60
 }
 
 enum ReturnStatus {
@@ -480,6 +496,12 @@ model BuyerOrg {
   taxExemptCertificateUrl String?
   taxExemptStatus         String?
   taxExemptExpiresAt      DateTime?
+  // PLH-3z-1: net-terms billing. paymentTerms defaults to PREPAID (existing
+  // Stripe checkout). An admin flips an org to NET_15/30/60 to enable invoice
+  // orders. creditLimitCents is a manual admin-set ceiling this round (no
+  // D-U-N-S / auto-approve until a later round); null = no explicit limit.
+  paymentTerms            PaymentTerms @default(PREPAID)
+  creditLimitCents        Int?
   members         BuyerOrgMember[]
   invites         BuyerOrgInvite[]
   addresses       BuyerOrgAddress[]
@@ -972,6 +994,12 @@ model Order {
   // deciding member for APPROVED/BYPASSED.
   approvalStatus        String              @default("NONE")
   approvedByMemberId    String?
+  // PLH-3z-1: net-terms snapshot. paymentTerms is captured at order creation
+  // from the buyer's active org (PREPAID for non-org buyers and PREPAID orgs,
+  // which keep the unchanged Stripe checkout flow). invoiceDueDate is set only
+  // for net-terms orders (order date + terms days).
+  paymentTerms          PaymentTerms        @default(PREPAID)
+  invoiceDueDate        DateTime?
   approvals             OrderApproval[]
   items                 OrderItem[]
   invoice               Invoice?
