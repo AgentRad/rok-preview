@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import type { Role, User } from "@prisma/client";
 import { prisma } from "./db";
+import { isSessionTokenPayload } from "./route-guards";
 
 const COOKIE = "pp_session";
 
@@ -39,6 +40,23 @@ function resolveSessionSecret(): Uint8Array {
 /** Shared accessor so other auth routes use the exact same secret. */
 export function getSessionSecret(): Uint8Array {
   return resolveSessionSecret();
+}
+
+// BUG (CRITICAL) defense-in-depth: the pre-2FA "ticket" used to be signed with
+// the SAME key as real session cookies, so a leaked/copied ticket verified as a
+// session. Sign the ticket with a domain-separated key derived from the session
+// secret (no new env var required). A token signed for one purpose cannot be
+// verified for the other, even if the kind-claim check were ever removed.
+let cachedTicketSecret: Uint8Array | null = null;
+export function getTicketSecret(): Uint8Array {
+  if (cachedTicketSecret) return cachedTicketSecret;
+  const base = resolveSessionSecret();
+  const label = new TextEncoder().encode(".2fa-pending-ticket.v1");
+  const combined = new Uint8Array(base.length + label.length);
+  combined.set(base, 0);
+  combined.set(label, base.length);
+  cachedTicketSecret = combined;
+  return cachedTicketSecret;
 }
 
 export function hashPassword(plain: string): Promise<string> {
@@ -113,6 +131,11 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, resolveSessionSecret());
+    // BUG (CRITICAL): reject anything that is not a true session token. A real
+    // session JWT (createSession) carries no kind claim; the 2FA-pending ticket
+    // carries kind:"2fa-pending". Without this, that ticket worked as a full
+    // session and the second factor was skipped entirely.
+    if (!isSessionTokenPayload(payload)) return null;
     const uid = payload.uid as string;
     if (!uid) return null;
     const user = await prisma.user.findUnique({ where: { id: uid } });

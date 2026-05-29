@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import { prisma } from "@/lib/db";
-import { verifyPassword, createSession, getSessionSecret } from "@/lib/auth";
+import { verifyPassword, createSession, getTicketSecret } from "@/lib/auth";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import {
   issueAccountToken,
@@ -137,11 +137,13 @@ export async function POST(req: Request) {
 
   // 2FA gate. Password was right, but we don't drop the session cookie yet.
   if (user.totpEnabledAt) {
+    // Signed with the domain-separated ticket secret, NOT the session secret,
+    // so this ticket can never be verified as a real pp_session cookie.
     const ticket = await new SignJWT({ uid: user.id, kind: "2fa-pending" })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
       .setExpirationTime("5m")
-      .sign(getSessionSecret());
+      .sign(getTicketSecret());
     return NextResponse.json({
       ok: false,
       requires2FA: true,

@@ -8,7 +8,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { demoPayGuard, quoteDeclineGuard } from "../src/lib/route-guards.ts";
+import {
+  demoPayGuard,
+  quoteDeclineGuard,
+  isSessionTokenPayload,
+} from "../src/lib/route-guards.ts";
 
 const OWNER = { id: "u_owner", role: "BUYER", status: "ACTIVE" };
 const ADMIN = { id: "u_admin", role: "ADMIN", status: "ACTIVE" };
@@ -179,4 +183,25 @@ test("quote-decline: 403 for a supplier WITHOUT access to this product", () => {
   const r = quoteDeclineGuard({ user: supplier, quote: QUOTE, supplierAccessOk: false });
   assert.equal(r.ok, false);
   assert.equal(r.status, 403);
+});
+
+// ---- BUG (CRITICAL): 2FA-pending ticket must not pass as a session token ----
+
+test("session-token: rejects a 2fa-pending ticket payload", () => {
+  assert.equal(isSessionTokenPayload({ uid: "u1", kind: "2fa-pending" }), false);
+});
+
+test("session-token: accepts a real session payload (uid, no kind)", () => {
+  assert.equal(isSessionTokenPayload({ uid: "u1", svf: 123 }), true);
+});
+
+test("session-token: accepts an SSO session payload (uid/sso/org, no kind)", () => {
+  assert.equal(
+    isSessionTokenPayload({ uid: "u1", svf: 123, sso: true, org: "o1" }),
+    true
+  );
+});
+
+test("session-token: rejects any non-null kind value", () => {
+  assert.equal(isSessionTokenPayload({ uid: "u1", kind: "anything" }), false);
 });

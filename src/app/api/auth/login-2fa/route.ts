@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/db";
-import { createSession, getSessionSecret } from "@/lib/auth";
+import { createSession, getTicketSecret } from "@/lib/auth";
 import { hashBackupCode, verifyTotp } from "@/lib/totp";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   let uid: string;
   try {
-    const { payload } = await jwtVerify(ticket, getSessionSecret());
+    const { payload } = await jwtVerify(ticket, getTicketSecret());
     if (payload.kind !== "2fa-pending" || typeof payload.uid !== "string") {
       throw new Error("bad ticket");
     }
@@ -53,6 +53,20 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Two-factor authentication is no longer enabled on this account." },
       { status: 400 }
+    );
+  }
+
+  // BUG (HIGH): re-check the account trust gate here. The ticket is issued
+  // before the TOTP step, so a user suspended/banned AFTER the password step
+  // could still complete login. Mirror the login route's generic 403 verbatim
+  // so SUSPENDED vs BANNED is not distinguishable.
+  if (user.status === "SUSPENDED" || user.status === "BANNED") {
+    return NextResponse.json(
+      {
+        error:
+          "This account is not available. If you believe this is a mistake, contact support@partsport.com.",
+      },
+      { status: 403 }
     );
   }
 

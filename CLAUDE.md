@@ -2493,9 +2493,34 @@ tax) logged to REMINDERS.md.
     the repo's established zero-dep test pattern; no Playwright/vitest harness
     exists). `npx next build` clean. Pushed to origin.
 
-Remaining QA1 fix queue (serial): QA1-fix2 session/login integrity (2FA-ticket
-accepted as a session cookie because `getCurrentUser` ignores `payload.kind`;
-login-2fa + account/recover skip the suspend/ban status check); QA1-fix3 SSO
+- **QA1-fix2 (`<pending>`).** Session/login integrity. Two auth bypasses closed.
+  - **CRITICAL: 2FA bypass via the pre-2FA ticket.** `/api/auth/login` minted the
+    `kind:"2fa-pending"` ticket with `getSessionSecret()` (the SAME key as real
+    `pp_session` cookies) and `getCurrentUser` in `src/lib/auth.ts` read only
+    `payload.uid`, never `payload.kind`. An attacker with just the password could
+    set the returned ticket as `pp_session` and be fully authenticated WITHOUT the
+    TOTP code. Fix (defense in depth): (1) `getCurrentUser` now rejects any token
+    whose payload carries a `kind` via the new pure predicate
+    `isSessionTokenPayload(payload)` in `route-guards.ts` (real session JWTs from
+    `createSession` carry only `uid`/`svf` + optional `sso`/`org`, no `kind`);
+    (2) the ticket is now signed/verified with a domain-separated `getTicketSecret()`
+    (session secret + `.2fa-pending-ticket.v1` label, no new env var), so a ticket
+    can never verify as a session cookie even if the `kind` check were removed.
+    `login` (sign) and `login-2fa` (verify) both switched to `getTicketSecret`.
+  - **HIGH: suspend/ban gate skipped on two session-minting paths.** `login-2fa`
+    and `account/recover` called `createSession` with no `user.status` check (the
+    gate lived only in `/api/auth/login`). A user suspended/banned after the
+    password step could still finish 2FA, and a banned-and-deleted user could
+    recover into an active session. Both now reject `status !== "ACTIVE"` with the
+    login route's verbatim generic 403 (SUSPENDED vs BANNED indistinguishable)
+    before `createSession`. `account/recover` consumes the token first (so it
+    cannot be replayed) then rejects.
+  - Locked in with 4 new cases in `scripts/test-route-guards.mjs` (now 21 cases):
+    a `{kind:"2fa-pending"}` payload is rejected, plain `{uid}` and SSO
+    `{uid,sso,org}` payloads accepted, any non-null `kind` rejected.
+    `npx next build` clean.
+
+Remaining QA1 fix queue (serial): QA1-fix3 SSO
 enforce/domainAllowlist accepted on an unverified domain (lockout + forced-IdP);
 QA1-fix4 approvals (self-approval has no separation-of-duties; GET one-click
 approve is auto-actionable by mail prefetch; OOO delegation to a VIEWER grants

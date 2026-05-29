@@ -58,6 +58,24 @@ async function handle(req: Request, method: "GET" | "POST") {
       status: 303,
     });
   }
+  // BUG (HIGH): re-check the account trust gate before recovering. Without this
+  // a banned-and-deleted user could consume an ACCOUNT_RECOVERY token, clear
+  // deletedAt, and mint an active session, bypassing the suspend/ban lock. The
+  // token is already consumed above (so it cannot be replayed); reject with the
+  // login route's generic 403 when the account is not ACTIVE.
+  const recovering = await prisma.user.findUnique({
+    where: { id: row.userId },
+    select: { status: true },
+  });
+  if (!recovering || recovering.status !== "ACTIVE") {
+    return NextResponse.json(
+      {
+        error:
+          "This account is not available. If you believe this is a mistake, contact support@partsport.com.",
+      },
+      { status: 403 }
+    );
+  }
   await prisma.user.update({
     where: { id: row.userId },
     data: { deletedAt: null },

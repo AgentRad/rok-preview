@@ -104,3 +104,17 @@ export function quoteDeclineGuard(input: {
   }
   return { ok: false, status: 403, error: "Not authorized." };
 }
+
+// BUG (CRITICAL): pre-2FA "ticket" accepted as a real session cookie.
+// /api/auth/login mints a JWT with kind:"2fa-pending" (signed, before the TOTP
+// step) and returns it to the client. getCurrentUser only read payload.uid, so
+// an attacker with just the password could set that ticket as the pp_session
+// cookie and be fully authenticated WITHOUT the second factor. A REAL session
+// JWT minted by createSession carries no kind claim (only uid/svf, plus
+// optional sso/org); reject any verified token that carries a kind. Pure
+// predicate so it is unit-testable without server-only/jose. (Defense in depth:
+// the ticket is also signed with a domain-separated secret, see getTicketSecret
+// in auth.ts, so a kind-less mistake still cannot cross over.)
+export function isSessionTokenPayload(payload: Record<string, unknown>): boolean {
+  return payload.kind === undefined || payload.kind === null;
+}
