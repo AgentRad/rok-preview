@@ -84,9 +84,17 @@ export function computeOrderTotals(
  * lines grouped by supplier (each line carrying the supplierId + the
  * dims needed for the flat-rate fallback), plus any server-verified
  * per-supplier freight quotes, return one SlotMath per supplier with
- * its own subtotal, freight, and fee. Surcharge attribution is
- * distributed proportionally to slot freight so the slot freight cents
- * sum exactly equals the order-level freight total.
+ * its own subtotal, freight, and fee.
+ *
+ * Each slot's base freight is the server-verified Shippo cents when a
+ * matched re-quote exists, else the deterministic per-supplier flat-ground
+ * calculation. Any flat surcharge (liftgate / residential / inside delivery)
+ * is then distributed pro-rata across slots by base freight, on top of the
+ * base, so the slot freight sum is internally consistent and the caller can
+ * adopt it directly as the order freight. This is the source of truth for a
+ * multi-supplier order: the real freight is the SUM of per-supplier
+ * shipments, which is independent of (and typically higher than) any single
+ * combined-cart flat estimate.
  */
 export type SlotMathLine = {
   supplierId: string;
@@ -106,9 +114,10 @@ export function computePerSupplierSlots(
   opts: {
     /** Map supplierId -> verified freight cents from a live Shippo re-quote. */
     verifiedFreightBySupplier?: Map<string, number>;
-    /** Order-level freight total (with surcharges already added). Slot freight
-     *  sum is reconciled against this; the delta is distributed pro-rata. */
-    orderFreightCents: number;
+    /** Flat freight surcharge cents (liftgate / residential / inside delivery)
+     *  to distribute pro-rata across slots by base freight, on top of the
+     *  per-supplier base. Defaults to 0. */
+    surchargeCents?: number;
     feeRateBps?: number;
   }
 ): SlotMath[] {
@@ -143,17 +152,20 @@ export function computePerSupplierSlots(
       feeCents: feeFor(subtotal, bps),
     });
   }
-  const slotFreightSum = slots.reduce((s, x) => s + x.freightCents, 0);
-  const delta = Math.max(0, opts.orderFreightCents - slotFreightSum);
-  if (delta > 0 && slots.length > 0) {
-    let remaining = delta;
+  // Distribute the flat surcharge pro-rata across slots by base freight,
+  // largest-remainder style with the last slot taking the rounding remainder,
+  // so the slot freight sum equals baseSum + surcharge exactly (no drift).
+  const surcharge = Math.max(0, Math.round(opts.surchargeCents ?? 0));
+  const baseSum = slots.reduce((s, x) => s + x.freightCents, 0);
+  if (surcharge > 0 && slots.length > 0) {
+    let remaining = surcharge;
     for (let i = 0; i < slots.length; i++) {
       const isLast = i === slots.length - 1;
       const share = isLast
         ? remaining
-        : slotFreightSum > 0
-        ? Math.round((delta * slots[i].freightCents) / slotFreightSum)
-        : Math.floor(delta / slots.length);
+        : baseSum > 0
+        ? Math.round((surcharge * slots[i].freightCents) / baseSum)
+        : Math.floor(surcharge / slots.length);
       slots[i].freightCents += share;
       remaining -= share;
     }

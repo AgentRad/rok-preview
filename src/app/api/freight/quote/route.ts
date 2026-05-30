@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { getFreightRates, isShippoConfigured } from "@/lib/freight-server";
-import { surchargeCents, type FreightSurcharges } from "@/lib/freight";
+import { surchargeCents, calculateFreight, type FreightSurcharges } from "@/lib/freight";
 
 export const runtime = "nodejs";
 
@@ -36,6 +36,16 @@ type ShipmentQuote = {
    * vs. "Live quotes not configured").
    */
   fallbackReason?: string;
+  /**
+   * Per-supplier deterministic flat-ground freight for THIS shipment,
+   * computed with the same calculateFreight() the order route uses in
+   * computePerSupplierSlots. When a shipment has no live rates (dims
+   * missing, no warehouse, Shippo off), the client displays and posts
+   * this number so the buyer sees the real per-supplier freight (the sum
+   * of which the server adopts as the order freight) instead of a stale
+   * combined-cart estimate.
+   */
+  fallbackCents: number;
 };
 
 /**
@@ -96,8 +106,10 @@ export async function POST(req: Request) {
     originCity: string;
     originState: string;
     items: { sku: string; qty: number }[];
+    subtotalCents: number;
     items_full: {
       qty: number;
+      quoteOnly: boolean;
       weightLbs: number | null;
       lengthIn: number | null;
       widthIn: number | null;
@@ -121,13 +133,16 @@ export async function POST(req: Request) {
         originCity: warehouse?.city || "",
         originState: warehouse?.state || "",
         items: [],
+        subtotalCents: 0,
         items_full: [],
       });
     }
     const group = groups.get(supplierId)!;
     group.items.push({ sku: p.sku, qty });
+    group.subtotalCents += p.priceCents * qty;
     group.items_full.push({
       qty,
+      quoteOnly: p.quoteOnly,
       weightLbs: p.weightLbs,
       lengthIn: p.lengthIn,
       widthIn: p.widthIn,
@@ -161,6 +176,13 @@ export async function POST(req: Request) {
         items: group.items_full,
       });
     }
+    const fallbackCents = calculateFreight({
+      items: group.items_full.map((it) => ({
+        qty: it.qty,
+        quoteOnly: it.quoteOnly,
+      })),
+      subtotalCents: group.subtotalCents,
+    }).freightCents;
     shipments.push({
       supplierId: group.supplierId,
       supplierName: group.supplierName,
@@ -170,6 +192,7 @@ export async function POST(req: Request) {
       best: rates[0] || null,
       rates,
       fallbackReason,
+      fallbackCents,
     });
   }
 

@@ -23,6 +23,7 @@ export async function POST(req: Request) {
       etaDays: p.etaDays,
       stock: p.stock,
       quoteOnly: p.quoteOnly,
+      supplierId: p.supplierId,
       supplierName: p.supplier.name,
     })),
   });

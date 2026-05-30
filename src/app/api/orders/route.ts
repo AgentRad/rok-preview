@@ -459,12 +459,29 @@ export async function POST(req: Request) {
   }
   const slots = computePerSupplierSlots(slotLinesInput, {
     verifiedFreightBySupplier: verifiedCentsBySupplier,
-    orderFreightCents: totals.freightCents,
+    surchargeCents: surchargeAdd,
   });
 
+  // The server-verified per-supplier freight is the source of truth. Each
+  // slot carries either the matched Shippo re-quote cents or the
+  // deterministic per-supplier flat-ground fallback, plus any pro-rata
+  // surcharge distributed by computePerSupplierSlots. For a multi-supplier
+  // cart the real order freight is the SUM of those slots, which typically
+  // exceeds the order-level combined-shipment estimate in `totals.freightCents`
+  // (one combined flat quote is cheaper than N per-supplier shipments). We
+  // adopt the slot sum as the order freight so the Order row and its slots
+  // agree by construction, and the old combined-cart estimate can no longer
+  // disagree with the slots and trip a 500. This mirrors how orderFeeCents
+  // already adopts the sum-of-slot fees below. The checkout client computes
+  // and displays this same per-supplier sum, so the buyer always sees and
+  // agrees to exactly what we charge (see the anti-underpay check below).
+  const slotSubtotalSum = slots.reduce((s, x) => s + x.subtotalCents, 0);
+  const reconciledFreightCents = slots.reduce((s, x) => s + x.freightCents, 0);
+  const slotFeeSum = slots.reduce((s, x) => s + x.feeCents, 0);
+
   // Server-trust check. If the client posted claimed totals, verify them
-  // against the server compute. Mismatch returns 400 so a tampered cart
-  // cannot pay less than the real total.
+  // against the server compute. Mismatch returns 400 so a tampered or stale
+  // cart cannot pay less than the real total.
   const claimedSubtotal = Number(body.claimedSubtotalCents);
   const claimedFreight = Number(body.claimedFreightCents);
   const claimedFee = Number(body.claimedFeeCents);
@@ -474,9 +491,20 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  if (Number.isFinite(claimedFreight) && claimedFreight !== totals.freightCents) {
+  // Anti-underpay: reject only when the client claims LESS freight than the
+  // server-verified per-supplier total (a tampered cart, or a stale estimate
+  // posted before the live per-supplier rates loaded). A buyer who saw and
+  // agreed to the correct (>=) freight passes; we then charge the server
+  // amount (reconciledFreightCents), which is <= what they claimed, so the
+  // buyer is never charged more than they agreed to. A stale-low claim gets a
+  // clear refresh-and-retry 400, never a 500.
+  if (Number.isFinite(claimedFreight) && claimedFreight < reconciledFreightCents) {
     return NextResponse.json(
-      { error: "Freight total mismatch. Refresh your cart and try again.", code: "FREIGHT_MISMATCH" },
+      {
+        error:
+          "Freight was updated to the live per-supplier rate. Review the new total and try again.",
+        code: "FREIGHT_MISMATCH",
+      },
       { status: 400 }
     );
   }
@@ -487,30 +515,37 @@ export async function POST(req: Request) {
     );
   }
 
-  // Sanity belt: every slot dollar must be present in the Order row.
-  // Subtotal + freight must match exactly (rounding on the slot fee
-  // distribution can drift by a cent vs the order-level feeFor of the
-  // grand subtotal, so we adopt the sum-of-slot fees as the order fee
-  // to keep both surfaces consistent).
-  const slotSubtotalSum = slots.reduce((s, x) => s + x.subtotalCents, 0);
-  const slotFreightFinalSum = slots.reduce((s, x) => s + x.freightCents, 0);
-  const slotFeeSum = slots.reduce((s, x) => s + x.feeCents, 0);
-  if (slotSubtotalSum !== totals.subtotalCents || slotFreightFinalSum !== totals.freightCents) {
-    captureError(new Error("PLH-3g slot math drift"), {
+  // Sanity belt: the slot subtotals must still sum to the order subtotal
+  // exactly (this is a pure partition of the same line items, so any drift
+  // is an impossible-state bug worth a 500). Freight is adopted from the
+  // slot sum above, so it agrees by construction and cannot drift here. We
+  // keep a non-fatal diagnostic when the adopted freight differs from the
+  // order-level combined estimate, since that is the normal multi-supplier
+  // case (per-supplier shipments cost more than one combined quote) and
+  // useful to observe, but it must never 500 the buyer.
+  if (slotSubtotalSum !== totals.subtotalCents) {
+    captureError(new Error("PLH-3g slot subtotal drift"), {
       subsystem: "orders",
       slotSubtotalSum,
-      slotFreightFinalSum,
       orderSubtotal: totals.subtotalCents,
-      orderFreight: totals.freightCents,
     });
     return NextResponse.json(
       { error: "Cart totals could not be reconciled. Please refresh and try again." },
       { status: 500 }
     );
   }
+  if (reconciledFreightCents !== totals.freightCents) {
+    captureError(new Error("PLH-3g freight reconciled to slot sum"), {
+      subsystem: "orders",
+      level: "info",
+      reconciledFreightCents,
+      orderEstimateFreight: totals.freightCents,
+      supplierCount: slots.length,
+    });
+  }
   const orderFeeCents = slotFeeSum;
   const orderTotalCents =
-    totals.subtotalCents + totals.freightCents + orderFeeCents + totals.taxCents;
+    totals.subtotalCents + reconciledFreightCents + orderFeeCents + totals.taxCents;
 
   // PLH-3y-6 prerequisite: permanently bind the order to the buyer's active
   // org when they have one, so approvals + org spend-visibility survive the
@@ -555,7 +590,7 @@ export async function POST(req: Request) {
         paymentTerms: orderPaymentTerms,
         invoiceDueDate,
         subtotalCents: totals.subtotalCents,
-        freightCents: totals.freightCents,
+        freightCents: reconciledFreightCents,
         feeCents: orderFeeCents,
         taxCents: totals.taxCents,
         totalCents: orderTotalCents,
@@ -674,7 +709,7 @@ export async function POST(req: Request) {
     orderId: order.id,
     reference: order.reference,
     subtotalCents: totals.subtotalCents,
-    freightCents: totals.freightCents,
+    freightCents: reconciledFreightCents,
     feeCents: orderFeeCents,
     taxCents: totals.taxCents,
     totalCents: orderTotalCents,

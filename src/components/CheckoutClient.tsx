@@ -37,6 +37,7 @@ type LookupProduct = {
   priceCents: number;
   etaDays: number;
   stock: number;
+  supplierId: string;
   supplierName: string;
 };
 
@@ -97,6 +98,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
       rateId: string | null;
     }[];
     fallbackReason?: string;
+    fallbackCents: number;
     selectedIdx: number;
   };
   const [shipments, setShipments] = useState<Shipment[]>([]);
@@ -113,15 +115,20 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
     (surcharges.liftgate ? SURCHARGE_CENTS.liftgate : 0) +
     (surcharges.residential ? SURCHARGE_CENTS.residential : 0) +
     (surcharges.insideDelivery ? SURCHARGE_CENTS.insideDelivery : 0);
-  const freightFromShipments =
-    shipments.length > 0
-      ? shipments.reduce((sum, s) => {
-          const rate = s.rates[s.selectedIdx];
-          return sum + (rate ? rate.cents : 0);
-        }, 0)
-      : 0;
-  const haveSelectedRates =
-    shipments.length > 0 && shipments.every((s) => s.rates.length > 0);
+  // Per-shipment freight: the selected live rate when one exists, else the
+  // server-provided per-supplier flat-ground fallback (calculateFreight, the
+  // same number the order route uses for that slot). Summing these gives the
+  // real per-supplier freight total the server will adopt as the order
+  // freight, even for a mixed cart where some suppliers have live rates and
+  // others fall back to flat ground.
+  function shipmentCents(s: Shipment): number {
+    const rate = s.rates[s.selectedIdx];
+    return rate ? rate.cents : s.fallbackCents;
+  }
+  const ratesFetched = shipments.length > 0;
+  const freightFromShipments = ratesFetched
+    ? shipments.reduce((sum, s) => sum + shipmentCents(s), 0)
+    : 0;
 
   // Pull the 5-digit ZIP out of the buyer-typed shipTo block.
   function extractZip(s: string): string | null {
@@ -160,6 +167,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
           originState: string;
           rates: Shipment["rates"];
           fallbackReason?: string;
+          fallbackCents?: number;
         }) => ({
           supplierId: s.supplierId,
           supplierName: s.supplierName,
@@ -168,6 +176,7 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
           originState: s.originState,
           rates: s.rates || [],
           fallbackReason: s.fallbackReason,
+          fallbackCents: s.fallbackCents ?? 0,
           selectedIdx: 0,
         })
       );
@@ -247,27 +256,37 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   }
 
   const valid = lines.filter((l) => products[l.sku]);
-  // When the per-supplier quote came back with rates for every shipment,
-  // honor that total. Otherwise the flat-rate fallback in computeOrderTotals
-  // runs and the freight breakdown UI shows a hint about what's missing.
-  const totals = computeOrderTotals(
-    valid.map((l) => ({
-      unitPriceCents: products[l.sku].priceCents,
-      qty: l.qty,
-      quoteOnly: (products[l.sku] as { quoteOnly?: boolean }).quoteOnly,
-    })),
-    haveSelectedRates
-      ? {
-          freightOverrideCents: freightFromShipments + surchargeTotalCents,
-          freightOverrideLabel:
-            shipments.length === 1
-              ? `${shipments[0].rates[shipments[0].selectedIdx]?.carrier ?? "Carrier"} ${
-                  shipments[0].rates[shipments[0].selectedIdx]?.service ?? ""
-                }`.trim()
-              : `${shipments.length} shipments`,
-        }
-      : {}
-  );
+  const supplierCount = new Set(valid.map((l) => products[l.sku].supplierId))
+    .size;
+  const multiSupplier = supplierCount > 1;
+  const lineInputs = valid.map((l) => ({
+    unitPriceCents: products[l.sku].priceCents,
+    qty: l.qty,
+    quoteOnly: (products[l.sku] as { quoteOnly?: boolean }).quoteOnly,
+  }));
+  // Base freight before surcharges: once the per-supplier quote has been
+  // fetched, it is the SUM of each shipment's real freight (selected live
+  // rate, or that supplier's flat-ground fallback), which is exactly what the
+  // server adopts as the order freight. Before rates are fetched we use the
+  // deterministic combined-cart estimate (correct for a single supplier; a
+  // multi-supplier cart must fetch rates before payment, enforced in
+  // createOrder). Surcharges are always added on top, so the displayed total,
+  // the posted claim, and the server compute all agree in every case.
+  const naturalFreight = computeOrderTotals(lineInputs).freight;
+  const baseFreightCents = ratesFetched
+    ? freightFromShipments
+    : naturalFreight.freightCents;
+  const freightLabel = !ratesFetched
+    ? naturalFreight.label
+    : shipments.length === 1
+      ? `${shipments[0].rates[shipments[0].selectedIdx]?.carrier ?? "Ground"} ${
+          shipments[0].rates[shipments[0].selectedIdx]?.service ?? ""
+        }`.trim() || "Ground shipping"
+      : `${shipments.length} shipments`;
+  const totals = computeOrderTotals(lineInputs, {
+    freightOverrideCents: baseFreightCents + surchargeTotalCents,
+    freightOverrideLabel: freightLabel,
+  });
   const subtotal = totals.subtotalCents;
   const freight = totals.freightCents;
   const freightInfo = totals.freight;
@@ -280,32 +299,46 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
   );
 
   async function createOrder() {
+    // A multi-supplier cart ships from several origins, so the real freight is
+    // the per-supplier sum, not the cheaper combined-cart estimate. Require the
+    // buyer to fetch live rates first so the displayed total matches what they
+    // are charged. Single-supplier carts compute deterministically without it.
+    if (multiSupplier && !ratesFetched) {
+      setError(
+        "Get freight rates for your delivery ZIP before continuing, so your shipping total is accurate."
+      );
+      return;
+    }
     setBusy(true);
     setError("");
-    const freightBreakdown =
-      haveSelectedRates
-        ? shipments.map((s) => {
-            const rate = s.rates[s.selectedIdx];
-            return {
-              supplierId: s.supplierId,
-              supplierName: s.supplierName,
-              originZip: s.originZip,
-              carrier: rate?.carrier || "Carrier",
-              service: rate?.service || "Standard",
-              cents: rate?.cents || 0,
-              etaDays: rate?.etaDays ?? null,
-            };
-          })
-        : undefined;
+    // Post the breakdown for every shipment once rates are fetched. Live-rate
+    // shipments carry their rateId so the server re-verifies them against
+    // Shippo; flat-ground shipments carry rateId null so the server flat-rates
+    // that slot. Either way the server-verified per-supplier sum is authoritative.
+    const freightBreakdown = ratesFetched
+      ? shipments.map((s) => {
+          const rate = s.rates[s.selectedIdx];
+          return {
+            supplierId: s.supplierId,
+            supplierName: s.supplierName,
+            originZip: s.originZip,
+            carrier: rate?.carrier || "Ground",
+            service: rate?.service || "Flat ground",
+            cents: rate ? rate.cents : s.fallbackCents,
+            etaDays: rate?.etaDays ?? null,
+            rateId: rate?.rateId ?? null,
+          };
+        })
+      : undefined;
     const topCarrier =
       shipments.length === 1
-        ? shipments[0].rates[shipments[0].selectedIdx]?.carrier
-        : haveSelectedRates
+        ? shipments[0].rates[shipments[0].selectedIdx]?.carrier ?? "Ground"
+        : ratesFetched
           ? "Multiple carriers"
           : null;
     const topService =
       shipments.length === 1
-        ? shipments[0].rates[shipments[0].selectedIdx]?.service
+        ? shipments[0].rates[shipments[0].selectedIdx]?.service ?? null
         : null;
 
     const res = await fetch("/api/orders", {
@@ -320,6 +353,10 @@ export default function CheckoutClient({ user, paypalClientId, paymentsConfigure
         freightCarrier: topCarrier,
         freightService: topService,
         freightSurcharges: surcharges,
+        // The freight the buyer sees and agrees to. The server rejects with a
+        // refresh-and-retry 400 only if its verified per-supplier total is
+        // HIGHER than this (stale/tampered), and never charges more than this.
+        claimedFreightCents: freight,
         purchaseOrderNumber: purchaseOrderNumber.trim() || undefined,
       }),
     });
