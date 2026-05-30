@@ -2922,4 +2922,38 @@ attorney glance at legal pages.
   never sets it, so real production cookies are always Secure.
 - Status: unit + e2e both GREEN. This is the regression net for every future deploy.
 
-## STATE OF PLAY (2026-05-29). Platform is feature-complete, security-hardened (audit + 2 re-audits + convergence, all clean), net-terms tax shipped, and covered by a green unit + real-app-e2e CI suite. All remaining work to launch is OWNER-SIDE: confirm the deploy/migration, run the 5 live smoke tests (docs/OWNER_SMOKE_TESTS.md), entity -> bank -> Stripe live keys, Sentry DSN, demo-data wipe, attorney review, real catalog import (UltraTech), and finally the THRADD rebrand (name + logo, deferred by Conrad to last). No autonomous code/test work remains open.
+## PLH-LIVE1 (2026-05-29). CRITICAL bug found by LIVE checkout testing on the prod preview + fixed.
+
+Driving a real multi-supplier checkout in the browser (the layer code review + the
+single-path e2e could not reach) surfaced a CRITICAL: `POST /api/orders` returned
+HTTP 500 (`PLH-3g slot math drift`, slotFreight 17700 vs orderFreight 7500). The
+seeded e2e never hit it because it needs a multi-supplier cart whose per-supplier
+freight (with flat-ground fallback for suppliers missing dims) sums above the
+combined order estimate.
+- **Two root causes (commit `0900fe0`):** (1) `computePerSupplierSlots` only
+  reconciled a positive delta (order freight > slot sum); when slot sum was larger
+  it didn't reconcile and the sanity belt threw 500. (2) DEEPER: the checkout client
+  never sent each shipment's `rateId`, so the server's live-rate verification never
+  matched and EVERY order fell to flat-rate, guaranteeing the multi-supplier flat
+  cart drift.
+- **Fix:** server adopts the server-verified per-supplier freight sum as the order
+  freight (`reconciledFreightCents`, mirroring how `orderFeeCents = slotFeeSum`
+  already worked); the belt now 500s only on subtotal partition drift (a true
+  impossible state) and logs freight reconciliation as a non-fatal info event;
+  surcharges distribute pro-rata on the slot base. Anti-underpay preserved: a
+  claimed freight BELOW the server amount returns 400 (never 500), and the buyer is
+  charged the server amount (<= claimed), so never more than displayed. Client now
+  shows the real per-supplier freight (live rates + flat fallbacks + surcharges),
+  re-renders when rates load, and posts the breakdown with `rateId` + claimed total.
+  `/api/freight/quote` returns per-supplier `fallbackCents`; `/api/products/lookup`
+  returns `supplierId`.
+- Locked in with `scripts/test-order-totals.mjs` (7 cases incl. the literal
+  17700-vs-7500 repro; needs `scripts/ts-ext-resolver.mjs` register-hook for the
+  extensionless imports order-totals.ts uses). Suite now 140. CI (unit + e2e) GREEN
+  on the fix commit. Single-supplier prepaid + net-terms paths unchanged.
+- Live re-click-through of the multi-supplier money round-trip remains an owner
+  smoke test (needs a Stripe test card + a real multi-supplier flat cart).
+- LESSON: live transactional testing finds money-path bugs that static audit +
+  happy-path e2e structurally miss. Drive the real flows.
+
+## STATE OF PLAY (2026-05-29). Platform is feature-complete, security-hardened (audit + 2 re-audits + convergence, all clean), net-terms tax shipped, covered by a green unit + real-app-e2e CI suite (140 unit + e2e), and a LIVE-found multi-supplier checkout 500 is fixed (PLH-LIVE1). In-progress: a live money-path hunt (drive each transactional flow on the prod preview: multi-supplier + single checkout through Stripe, RFQ->accept, refund, net-terms invoice, approval, returns, messaging) to flush any remaining operating bugs. Remaining launch work is OWNER-SIDE: confirm deploy/migration, the 5 live smoke tests (docs/OWNER_SMOKE_TESTS.md), entity -> bank -> Stripe live keys, Sentry DSN (Conrad has signed up at agent-pc.sentry.io; DSN pending), demo-data wipe, attorney review, UltraTech catalog import (CSV ready: Downloads/ultratech_catalog.csv, 391 SKUs), and finally the THRADD rebrand (name + logo, deferred to last).
