@@ -1,0 +1,14 @@
+import { chromium } from 'playwright';
+const BASE = 'https://rok-preview-git-claude-industrial-marketplace-rowau-agentrad.vercel.app';
+const b = await chromium.launch({ headless: true });
+const ctx = await b.newContext({ viewport: { width: 1440, height: 1200 } });
+const p = await ctx.newPage();
+await p.goto(BASE + '/product/TXF-PM75', { waitUntil: 'networkidle', timeout: 20000 });
+const btns = await p.locator('button').allTextContents();
+console.log('All buttons on page:', JSON.stringify(btns));
+const anyAdd = await p.locator('button:has-text("Add to cart")').count();
+console.log('Add to cart count:', anyAdd);
+const links = await p.locator('a').allTextContents();
+console.log('First 30 link texts:', JSON.stringify(links.slice(0, 30)));
+await p.screenshot({ path: 'test-runs/screenshots/anon/probe-product.png', fullPage: true });
+await b.close();

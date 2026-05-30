@@ -1,0 +1,129 @@
+import { NextResponse, after } from "next/server";
+import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { sendOrderDelivered } from "@/lib/email";
+import { markOrderShipped, markOrderDelivered, loadOrderLite } from "@/lib/shipping";
+import { captureError } from "@/lib/observability";
+import { writeAuditLog } from "@/lib/audit";
+
+const STAGES = ["Processing", "Shipped", "Delivered"] as const;
+type Stage = (typeof STAGES)[number];
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+  }
+
+  const body = (await req.json().catch(() => null)) as {
+    action?: string;
+    stage?: string;
+    carrier?: string;
+    trackingCode?: string;
+    purchaseOrderNumber?: string;
+  } | null;
+
+  // PLH-3v: admin PO edit. Branches off before the stage check so the PO
+  // can be updated regardless of order status (enterprise buyers may
+  // supply the PO after the fact).
+  if (body?.action === "po") {
+    const existing = await prisma.order.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Order not found." }, { status: 404 });
+    }
+    const next = String(body.purchaseOrderNumber || "").trim().slice(0, 64);
+    const nextValue = next ? next : null;
+    if (nextValue !== existing.purchaseOrderNumber) {
+      await prisma.order.update({
+        where: { id },
+        data: { purchaseOrderNumber: nextValue },
+      });
+      await writeAuditLog({
+        actor: { id: user.id, email: user.email },
+        action: "ORDER_PO_UPDATED",
+        targetType: "Order",
+        targetId: id,
+        summary: `Updated PO on order ${existing.reference}`,
+        metadata: {
+          before: existing.purchaseOrderNumber,
+          after: nextValue,
+        },
+      });
+    }
+    return NextResponse.json({ ok: true, purchaseOrderNumber: nextValue });
+  }
+
+  const stage = body?.stage as Stage | undefined;
+  if (!stage || !STAGES.includes(stage)) {
+    return NextResponse.json({ error: "Invalid stage." }, { status: 400 });
+  }
+
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) {
+    return NextResponse.json({ error: "Order not found." }, { status: 404 });
+  }
+  if (order.status !== "PAID" && order.status !== "FULFILLED") {
+    return NextResponse.json(
+      { error: "Only paid orders can be moved through fulfillment." },
+      { status: 400 }
+    );
+  }
+
+  if (stage === "Shipped") {
+    const result = await markOrderShipped(
+      id,
+      body?.carrier ?? "",
+      body?.trackingCode ?? ""
+    );
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    return NextResponse.json(result);
+  } else if (stage === "Delivered") {
+    // Refuse to skip Shipped on the way to Delivered. The buyer's order
+    // page renders the tracking card and the shipped-email is what tells
+    // the buyer to expect the delivery in the first place. If admin tries
+    // to flip a PAID order straight to Delivered, force them to mark
+    // Shipped first (which collects carrier + tracking via the shared
+    // markOrderShipped helper).
+    if (!order.carrier || !order.trackingCode) {
+      return NextResponse.json(
+        {
+          error:
+            "Mark this order Shipped first (with a carrier and tracking number) before flipping to Delivered.",
+        },
+        { status: 400 }
+      );
+    }
+    // PLH-3g P5: per-supplier delivery flip. Marks every slot Delivered
+    // and recomputes aggregate Order state. Fires the delivered email
+    // only on the first transition to fully Delivered.
+    const r = await markOrderDelivered(id);
+    if (!r.ok) {
+      return NextResponse.json({ error: r.error }, { status: r.status });
+    }
+    if (r.orderFullyDeliveredNow) {
+      const updated = await loadOrderLite(id);
+      if (updated) {
+        after(async () => {
+          try {
+            await sendOrderDelivered(updated);
+          } catch (err) {
+            captureError(err, { subsystem: "email", op: "order-delivered", orderId: id });
+          }
+        });
+      }
+    }
+  } else {
+    await prisma.order.update({
+      where: { id },
+      data: { shipmentStage: "Processing" },
+    });
+  }
+
+  return NextResponse.json({ ok: true });
+}

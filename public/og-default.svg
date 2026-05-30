@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <rect width="1200" height="630" fill="#f3f2ef"/>
+  <g transform="translate(80,80)">
+    <svg viewBox="0 0 64 64" width="120" height="120">
+      <path d="M32 10 51.5 21.5v23L32 56 12.5 44.5v-23Z" fill="none" stroke="#161616" stroke-width="3.4" stroke-linejoin="round"/>
+      <circle cx="32" cy="32" r="7" fill="#e0a32a"/>
+    </svg>
+  </g>
+  <text x="80" y="340" font-family="Hanken Grotesk, system-ui, sans-serif" font-size="84" font-weight="700" fill="#161616">PartsPort</text>
+  <text x="80" y="400" font-family="Hanken Grotesk, system-ui, sans-serif" font-size="36" font-weight="400" fill="#161616" opacity="0.7">The industrial parts marketplace</text>
+  <text x="80" y="500" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="22" font-weight="500" fill="#161616" opacity="0.6">Search. Compare. Order. Delivered.</text>
+  <rect x="80" y="540" width="80" height="6" fill="#e0a32a"/>
+</svg>

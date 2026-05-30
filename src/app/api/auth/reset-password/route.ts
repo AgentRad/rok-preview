@@ -1,0 +1,62 @@
+import { NextResponse } from "next/server";
+import crypto from "node:crypto";
+import { prisma } from "@/lib/db";
+import { hashPassword } from "@/lib/auth";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
+
+export const runtime = "nodejs";
+
+export async function POST(req: Request) {
+  const limit = await rateLimit("generic", clientIp(req));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429 }
+    );
+  }
+  const body = await req.json().catch(() => ({}));
+  const token = String(body.token || "").trim();
+  const newPassword = String(body.password || "");
+
+  if (!token || newPassword.length < 8 || newPassword.length > 128) {
+    return NextResponse.json(
+      { error: "Please enter a password between 8 and 128 characters." },
+      { status: 400 }
+    );
+  }
+
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const record = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+    include: { user: true },
+  });
+
+  if (!record || record.usedAt || record.expiresAt < new Date()) {
+    return NextResponse.json(
+      { error: "This reset link is invalid or has expired. Please request a new one." },
+      { status: 400 }
+    );
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  // PLH-1: invalidate every outstanding session for this user. Bumping
+  // sessionsValidFrom makes getCurrentUser reject any cookie issued
+  // before now on the next request.
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: record.userId },
+      data: { passwordHash, sessionsValidFrom: new Date() },
+    }),
+    prisma.passwordResetToken.update({
+      where: { id: record.id },
+      data: { usedAt: new Date() },
+    }),
+    // Invalidate other outstanding tokens for this user.
+    prisma.passwordResetToken.updateMany({
+      where: { userId: record.userId, usedAt: null, id: { not: record.id } },
+      data: { usedAt: new Date() },
+    }),
+  ]);
+
+  return NextResponse.json({ ok: true });
+}

@@ -1,0 +1,19 @@
+{
+  "name": "PartsPort",
+  "short_name": "PartsPort",
+  "description": "The industrial parts marketplace. Search, compare vetted-supplier options, and get delivery handled end to end.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f2ef",
+  "theme_color": "#f3f2ef",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

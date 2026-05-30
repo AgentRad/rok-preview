@@ -1,0 +1,255 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import SiteHeader from "@/components/SiteHeader";
+import SiteFooter from "@/components/SiteFooter";
+import ProductImage from "@/components/ProductImage";
+import { primaryImageUrl } from "@/lib/product-images";
+import QuoteActions from "@/components/QuoteActions";
+import MessageThread from "@/components/MessageThread";
+import DraftRfqReply from "@/components/DraftRfqReply";
+import { visibilitiesVisibleTo, type ViewerRole } from "@/lib/message-visibility";
+import { formatCents, feeFor, FEE_RATE_LABEL } from "@/lib/money";
+
+export const dynamic = "force-dynamic";
+
+const STATUS_CLASS: Record<string, string> = {
+  OPEN: "badge-pending",
+  QUOTED: "badge-paid",
+  ACCEPTED: "badge-fulfilled",
+  DECLINED: "badge-cancelled",
+};
+
+export default async function QuotePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const quote = await prisma.quoteRequest.findUnique({
+    where: { id },
+    include: {
+      product: { include: { supplier: true } },
+      messages: {
+        orderBy: { createdAt: "asc" },
+        include: { attachments: { orderBy: { createdAt: "asc" } } },
+      },
+    },
+  });
+  if (!quote) notFound();
+
+  const viewer = await getCurrentUser();
+  const isBuyer = !!viewer && !!quote.buyerId && viewer.id === quote.buyerId;
+  const isAdmin = viewer?.role === "ADMIN";
+  let isQuoteSupplier = false;
+  let canDraftReply = false;
+  if (viewer?.role === "SUPPLIER") {
+    const { userHasAccessToSupplier, canSendMessages } = await import(
+      "@/lib/supplier-access"
+    );
+    const access = await userHasAccessToSupplier(
+      viewer.id,
+      quote.product.supplierId
+    );
+    isQuoteSupplier = access.ok;
+    canDraftReply = access.ok && canSendMessages(access.role);
+  }
+  if (isAdmin) canDraftReply = true;
+  const canMessage = !!viewer && (isBuyer || isAdmin || isQuoteSupplier);
+  const viewerThreadRole: ViewerRole = isAdmin
+    ? "admin"
+    : isQuoteSupplier
+      ? "supplier"
+      : isBuyer
+        ? "buyer"
+        : "none";
+  const visibleSet = new Set(visibilitiesVisibleTo(viewerThreadRole));
+  const visibleMessages = quote.messages.filter((m) => visibleSet.has(m.visibility));
+
+  const p = quote.product;
+  const quoted = quote.quotedUnitCents != null;
+  const subtotal = quoted ? quote.quotedUnitCents! * quote.qty : 0;
+  const freight = 0;
+  const fee = feeFor(subtotal);
+  const tax = 0;
+  const total = subtotal + freight + fee + tax;
+
+  return (
+    <>
+      <SiteHeader />
+      <main id="main" className="app-page">
+        <div className="page-pad narrow">
+          <div className="breadcrumb">
+            <Link href="/catalog">Catalog</Link> › Quote {quote.reference}
+          </div>
+          <h1 className="page-title">Quote request</h1>
+          <p className="page-sub">
+            {quote.reference} · submitted {quote.createdAt.toLocaleDateString()}{" "}
+            ·{" "}
+            <span className={"badge " + (STATUS_CLASS[quote.status] || "")}>
+              {quote.status}
+            </span>
+          </p>
+
+          {quote.status === "OPEN" && (
+            <div className="alert alert-info" style={{ marginTop: 18 }}>
+              Request received. A vetted supplier is preparing your price.
+              You&rsquo;ll see it here, typically within one business day.
+            </div>
+          )}
+          {quote.status === "ACCEPTED" && quote.orderId && (
+            <div className="alert alert-ok" style={{ marginTop: 18 }}>
+              ✓ Quote accepted. An order has been created.{" "}
+              <Link href={`/orders/${quote.orderId}`} style={{ color: "inherit", fontWeight: 700 }}>
+                Go to your order →
+              </Link>
+            </div>
+          )}
+          {quote.status === "DECLINED" && (
+            <div className="alert alert-error" style={{ marginTop: 18 }}>
+              This quote was declined. You can request a new quote from the
+              product page anytime.
+            </div>
+          )}
+
+          <div className="card" style={{ marginTop: 22 }}>
+            <div className="card-body">
+              <div className="quote-product">
+                <div className="quote-thumb">
+                  <ProductImage imageUrl={primaryImageUrl(p)} icon={p.icon} name={p.name} />
+                </div>
+                <div>
+                  <div className="product-mfr">{p.manufacturer}</div>
+                  <div style={{ fontWeight: 600, fontSize: 16, marginTop: 3 }}>
+                    {p.name}
+                  </div>
+                  <div className="muted-text" style={{ fontSize: 13, marginTop: 4 }}>
+                    SKU {p.sku} · Quantity {quote.qty} · Supplier {p.supplier.name}
+                  </div>
+                </div>
+              </div>
+              {quote.message && (
+                <p className="muted-text" style={{ fontSize: 13.5, marginTop: 14, lineHeight: 1.6 }}>
+                  <strong style={{ color: "var(--ink)" }}>Your notes:</strong>{" "}
+                  {quote.message}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {quote.status === "QUOTED" && quoted && (
+            <div className="card" style={{ marginTop: 22 }}>
+              <div className="card-head">
+                <h2>Supplier quote</h2>
+              </div>
+              <div className="card-body">
+                {quote.quoteExpiresAt && (
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color:
+                        quote.quoteExpiresAt.getTime() < Date.now()
+                          ? "var(--amber-deep)"
+                          : "var(--muted)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    {quote.quoteExpiresAt.getTime() < Date.now()
+                      ? "This quote has expired. Please request a new quote."
+                      : `Quote expires in ${Math.max(
+                          1,
+                          Math.ceil(
+                            (quote.quoteExpiresAt.getTime() - Date.now()) /
+                              (24 * 60 * 60 * 1000)
+                          )
+                        )} days.`}
+                  </div>
+                )}
+                <div className="summary-line">
+                  <span>Unit price</span>
+                  <span>{formatCents(quote.quotedUnitCents!)}</span>
+                </div>
+                <div className="summary-line">
+                  <span>Quantity</span>
+                  <span>× {quote.qty}</span>
+                </div>
+                <div className="summary-line">
+                  <span>Subtotal</span>
+                  <span>{formatCents(subtotal)}</span>
+                </div>
+                <div className="summary-line">
+                  <span>Freight</span>
+                  <span>{formatCents(freight)}</span>
+                </div>
+                <div className="summary-line">
+                  <span>Platform fee ({FEE_RATE_LABEL})</span>
+                  <span style={{ color: "var(--amber-deep)" }}>{formatCents(fee)}</span>
+                </div>
+                <div className="summary-line">
+                  <span>Sales tax</span>
+                  <span>{formatCents(tax)}</span>
+                </div>
+                <div className="summary-line total">
+                  <span>Order total</span>
+                  <span>{formatCents(total)}</span>
+                </div>
+                {quote.quoteNote && (
+                  <p className="muted-text" style={{ fontSize: 13, margin: "10px 0 16px" }}>
+                    <strong style={{ color: "var(--ink)" }}>Supplier note:</strong>{" "}
+                    {quote.quoteNote}
+                  </p>
+                )}
+                <div style={{ marginTop: 14 }}>
+                  <QuoteActions
+                    quoteId={quote.id}
+                    isOwner={isBuyer || isAdmin}
+                    buyerEmailHint={quote.buyerEmail}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="card" id="messages" style={{ marginTop: 22 }}>
+            <div className="card-head">
+              <h2>Conversation{visibleMessages.length > 0 ? ` · ${visibleMessages.length}` : ""}</h2>
+            </div>
+            <div className="card-body">
+              {canDraftReply && process.env.ANTHROPIC_API_KEY && (
+                <DraftRfqReply quoteId={quote.id} />
+              )}
+              <MessageThread
+                quoteId={quote.id}
+                canPost={canMessage}
+                viewerRole={viewerThreadRole}
+                messages={visibleMessages.map((m) => ({
+                  id: m.id,
+                  senderName: m.senderName,
+                  senderRole: m.senderRole,
+                  body: m.body,
+                  createdAt: m.createdAt.toISOString(),
+                  visibility: m.visibility,
+                  attachments: m.attachments.map((a) => ({
+                    id: a.id,
+                    fileName: a.fileName,
+                    fileSize: a.fileSize,
+                    mimeType: a.mimeType,
+                    blobUrl: a.blobUrl,
+                  })),
+                }))}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 24 }} className="row-gap">
+            <Link className="btn btn-ghost" href="/catalog">
+              Back to catalog
+            </Link>
+          </div>
+        </div>
+      </main>
+      <SiteFooter />
+    </>
+  );
+}

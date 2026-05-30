@@ -1,0 +1,53 @@
+{
+  "name": "partsport",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && prisma migrate deploy && node prisma/seed.mjs && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "postinstall": "prisma generate",
+    "db:seed": "node prisma/seed.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.97.1",
+    "@node-saml/node-saml": "^5.1.0",
+    "@paypal/react-paypal-js": "^8.8.3",
+    "@prisma/client": "^6.3.1",
+    "@sentry/nextjs": "^10.53.1",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/blob": "^2.4.0",
+    "@vercel/speed-insights": "^2.0.0",
+    "bcryptjs": "^2.4.3",
+    "jose": "^5.9.6",
+    "libphonenumber-js": "^1.13.3",
+    "next": "15.2.6",
+    "otpauth": "^9.5.1",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "resend": "^6.12.3",
+    "server-only": "^0.0.1",
+    "shippo": "^2.18.0",
+    "stripe": "^22.1.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "critters": "^0.0.23",
+    "playwright": "^1.60.0",
+    "prisma": "^6.3.1",
+    "typescript": "^5.7.3"
+  },
+  "browserslist": [
+    "Chrome >= 90",
+    "Firefox >= 90",
+    "Safari >= 14",
+    "Edge >= 90"
+  ]
+}

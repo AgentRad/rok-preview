@@ -1,0 +1,90 @@
+name: CI tests (unit + e2e)
+
+# Runs the full automated test layer the post-build QA protocol calls for:
+#  - unit/logic suites (pure, no DB) via node --test
+#  - real end-to-end browser smoke against the booted app + an ephemeral Postgres
+#
+# The app boots with payments/SSO/email UNCONFIGURED (demo mode), so these tests
+# need no real Stripe/IdP/inbox. Those live paths stay as owner smoke tests in
+# docs/OWNER_SMOKE_TESTS.md.
+
+on:
+  push:
+    branches: [claude/industrial-marketplace-ROwAU]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - name: Unit / logic suites
+        run: >-
+          node --experimental-strip-types --test
+          scripts/test-route-guards.mjs
+          scripts/test-net-terms-tax.mjs
+          scripts/test-unsubscribe-token.mjs
+          scripts/test-strip-quoted-reply.mjs
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: partsport
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/partsport
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/partsport
+      SESSION_SECRET: ci_e2e_session_secret_0123456789_abcdefghij
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      E2E_BASE_URL: http://localhost:3000
+      # Serve the production build over http://localhost for e2e: relax the
+      # session-cookie Secure flag so the browser stores it. CI-only; Vercel
+      # never sets this, so real production cookies stay Secure.
+      ALLOW_INSECURE_COOKIES: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - name: Install Chromium for Playwright
+        run: npx playwright install chromium --with-deps
+      - name: Build (prisma migrate deploy + seed + next build)
+        run: npm run build
+      - name: Boot app and run e2e smoke
+        run: |
+          npm run start &
+          APP_PID=$!
+          echo "waiting for app on :3000"
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000 >/dev/null; then echo "app is up"; break; fi
+            sleep 2
+          done
+          curl -sf http://localhost:3000 >/dev/null || { echo "app did not come up"; kill $APP_PID; exit 1; }
+          node --test e2e/*.test.mjs
+          STATUS=$?
+          kill $APP_PID 2>/dev/null || true
+          exit $STATUS

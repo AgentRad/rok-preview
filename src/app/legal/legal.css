@@ -1,0 +1,91 @@
+/* Scoped to /legal/* routes only. Loaded by src/app/legal/layout.tsx.
+   Pulled out of globals.css in P11.10 so the homepage's render-blocking
+   CSS payload drops by ~3 KB. These selectors are not used outside the
+   legal layout. */
+
+.legal-wrap {
+  display: grid; gap: 36px;
+  grid-template-columns: 240px minmax(0, 1fr);
+  max-width: 1180px; margin: 0 auto;
+  padding: 36px 24px 64px;
+}
+@media (max-width: 820px) {
+  .legal-wrap { grid-template-columns: 1fr; }
+}
+.legal-nav {
+  position: sticky; top: 84px; align-self: start;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); padding: 18px 18px 14px;
+  font-size: 13.5px;
+}
+.legal-nav-label {
+  font-family: var(--mono);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--steel);
+  margin: 0 0 10px;
+}
+.legal-nav ul { list-style: none; padding: 0; margin: 0; }
+.legal-nav li { padding: 5px 0; }
+.legal-nav li a {
+  color: var(--ink); text-decoration: none; font-weight: 500;
+}
+.legal-nav li a:hover { text-decoration: underline; }
+.legal-nav li.is-current a {
+  color: var(--amber-deep); font-weight: 700;
+}
+.legal-nav-foot {
+  margin: 14px 0 0; padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px; color: var(--steel);
+}
+.legal-nav-foot a { color: var(--blue); text-decoration: none; font-weight: 600; }
+
+.legal-doc {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 32px 36px;
+  min-width: 0;
+}
+.legal-doc-head { margin-bottom: 18px; }
+.legal-doc-head h1 {
+  font-size: 32px; line-height: 1.2; letter-spacing: -0.02em;
+  margin: 6px 0 8px;
+}
+.legal-doc-head .eyebrow {
+  font-family: var(--mono);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--steel);
+}
+.legal-lede { font-size: 15px; color: var(--steel); margin: 0 0 8px; }
+.legal-meta {
+  font-family: var(--mono);
+  font-size: 12px; color: var(--steel);
+}
+.legal-toc {
+  margin: 18px 0 28px; padding: 14px 16px;
+  background: var(--bg); border-left: 3px solid var(--ink);
+  font-size: 13px; line-height: 1.7;
+}
+.legal-toc strong { color: var(--ink); margin-right: 6px; }
+.legal-toc a { color: var(--blue); text-decoration: none; }
+.legal-toc a:hover { text-decoration: underline; }
+.legal-section { margin: 26px 0; scroll-margin-top: 88px; }
+.legal-section h2 {
+  font-size: 19px; margin: 0 0 10px;
+  border-bottom: 1px solid var(--line); padding-bottom: 8px;
+}
+.legal-section p {
+  font-size: 14.5px; line-height: 1.65; color: var(--ink);
+  margin: 10px 0;
+}
+.legal-section ul {
+  margin: 8px 0 12px 18px; padding: 0;
+  font-size: 14.5px; line-height: 1.65;
+}
+.legal-section li { padding: 3px 0; }
+.legal-doc-foot {
+  margin-top: 36px; padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 13px; color: var(--steel);
+}
+.legal-doc-foot a { color: var(--blue); text-decoration: none; font-weight: 600; }
+.legal-doc-foot-note { display: block; margin-top: 16px; font-size: 11.5px; color: var(--steel-light); line-height: 1.55; }

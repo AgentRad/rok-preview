@@ -1,0 +1,1464 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+enum Role {
+  BUYER
+  SUPPLIER
+  ADMIN
+  MANUFACTURER
+}
+
+enum SupplierStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+// PLH-3w P1: account-level trust status, distinct from SupplierStatus
+// (which scopes a Supplier org). SUSPENDED is a reversible lockout
+// (admin can unsuspend); BANNED is terminal and also blacklists the
+// email via BannedEmail so re-signup is refused.
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELLED
+  REFUNDED
+}
+
+enum QuoteStatus {
+  OPEN
+  QUOTED
+  ACCEPTED
+  DECLINED
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PAID
+  VOID
+  // PLH-3z-1: net-terms lifecycle. DUE = issued on net terms, not yet paid,
+  // not yet past the due date. PAST_DUE = unpaid past invoiceDueDate.
+  // PREPAID invoices keep using ISSUED -> PAID as before.
+  DUE
+  PAST_DUE
+  // PLH-3z-2: Stripe marked the invoice uncollectible (manual write-off in
+  // the Stripe dashboard or via the invoice.marked_uncollectible webhook).
+  UNCOLLECTIBLE
+}
+
+// PLH-3z-1: payment terms for enterprise net-terms billing. PREPAID is the
+// default for every org and every non-org buyer (existing Stripe checkout
+// flow, unchanged). NET_15/30/60 let an approved org place invoice orders
+// that bypass Stripe Checkout and are billed with a due date.
+enum PaymentTerms {
+  PREPAID
+  NET_15
+  NET_30
+  NET_60
+}
+
+enum ReturnStatus {
+  OPEN
+  APPROVED
+  REJECTED
+  RESOLVED
+}
+
+enum PayoutStatus {
+  DUE
+  PROCESSING
+  PAID
+  FAILED
+}
+
+enum SupplierMemberRole {
+  OWNER
+  ADMIN
+  SALES
+  FULFILLMENT
+  CATALOG
+  FINANCE
+  VIEWER
+}
+
+// PLH-3y-1: buyer organization role. ADMIN manages members + settings and
+// sees all org orders. APPROVER is a stub this round (treated like BUYER;
+// real approval workflows land in PLH-3y-6). BUYER can place orders and see
+// their own. VIEWER is read-only and cannot place orders.
+enum BuyerOrgRole {
+  ADMIN
+  APPROVER
+  BUYER
+  VIEWER
+}
+
+// PLH-3y-2: how an org's orders are paid for. MEMBER_PAYS is the default and
+// the current behavior (each member pays with their own card). HYBRID adds an
+// optional org-level Stripe Customer so an org can centralize payment; the
+// member can still pay with their own card, but a permitted member may choose
+// to charge the org card at checkout.
+enum BuyerOrgBillingMode {
+  MEMBER_PAYS
+  HYBRID
+}
+
+// PLH-3y-3: lifecycle of a claimed org email domain. PENDING is awaiting the
+// DNS TXT record; VERIFIED means the cron found the token; FAILED means the
+// record disappeared or never showed up within the verification window.
+// PLH-3z-4: org-level credit suspension for past-due net-terms balances. This
+// is distinct from the per-USER suspend from PLH-3w (User.status). ACTIVE is
+// the default; a member of a SUSPENDED org cannot place new orders. Auto-set
+// by the dunning cron at 30 days past due and auto-cleared when all past-due
+// invoices are paid.
+enum BuyerOrgStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum BuyerOrgDomainStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum MessageVisibility {
+  PUBLIC
+  SUPPLIER_INTERNAL
+  BUYER_INTERNAL
+  ADMIN_ONLY
+}
+
+// PLH-3y-4: identity provider protocol for an org's SSO config. SAML ships
+// this round; OIDC lands in PLH-3y-5 (the OIDC columns on SsoConfig are
+// present but unused until then).
+enum SsoIdpType {
+  SAML
+  OIDC
+}
+
+model User {
+  id                         String                    @id @default(cuid())
+  email                      String                    @unique
+  passwordHash               String
+  name                       String
+  role                       Role                      @default(BUYER)
+  manufacturerName           String?
+  // Partial unique index on (manufacturerName) where role='MANUFACTURER'
+  // is enforced by migration 20260607000000_unique_oem_manufacturer_name.
+  // Prisma doesn't model partial uniques natively.
+  manufacturerTagline        String                    @default("")
+  manufacturerBio            String                    @default("")
+  manufacturerLogoUrl        String?
+  manufacturerWebsite        String                    @default("")
+  // Buyer company profile (B2B). Shown on checkout, order detail, invoice,
+  // and in the shipped/paid emails when set. Optional; guest checkout
+  // doesn't get this.
+  companyName                String?
+  companyLogoUrl             String?
+  totpSecret                 String?
+  totpEnabledAt              DateTime?
+  // Legacy backup-code store (Json array of sha256 hashes). PLH-3w P2
+  // moved the canonical store to backupCodesHashed; login still reads
+  // this as a fallback for accounts enrolled before P2.
+  totpBackupCodes            Json?
+  // PLH-3w P2: single-use 2FA backup codes, sha256-hashed at rest. 8 are
+  // generated when 2FA is enabled (or regenerated); each is removed on
+  // use at login.
+  backupCodesHashed          String[]                  @default([])
+  // QA2 auth/SSO: last consumed TOTP 30-second step (counter), persisted on a
+  // successful 2FA login so the same code cannot be replayed within the
+  // window:1 (~90s) tolerance. Null until the user's first 2FA login.
+  lastTotpStep               Int?
+  // PLH-3w P2: admin "2FA recovery in progress" override. When set in the
+  // future, the per-role 2FA interstitial is suppressed for this user so
+  // they can sign in and re-enroll. Expires after 1 hour.
+  twoFactorRecoveryUntil     DateTime?
+  // PLH-3w P1: account trust status. ACTIVE is the default; SUSPENDED is a
+  // reversible lockout, BANNED is terminal. Login is refused for both
+  // non-ACTIVE states; suspension/ban also bump sessionsValidFrom to kill
+  // outstanding cookies.
+  status                     UserStatus                @default(ACTIVE)
+  suspendedAt                DateTime?
+  suspendedReason            String?
+  suspendedByUserId          String?
+  // Email verification. emailVerified is null until the user clicks the
+  // link in the welcome email; verified buyers/suppliers can complete
+  // state-changing flows (orders, listings). The token + expiry are
+  // cleared on success or on resend.
+  emailVerified              DateTime?
+  // PLH-1: verify token is hashed at rest (SHA-256, hex). The raw token only
+  // appears in the URL we email and in memory between generation and send.
+  // Mirrors PasswordResetToken / AccountToken.
+  emailVerificationTokenHash String?                   @unique
+  emailVerificationExpiresAt DateTime?
+  emailVerificationSentAt    DateTime?
+  // PLH-1: bumped on password change, password reset, 2FA disable, email
+  // change confirmation, and account self-delete. Every existing session
+  // cookie issued before this timestamp is rejected on the next request.
+  sessionsValidFrom          DateTime                  @default(now())
+  // Soft delete for GDPR/CCPA. When set, PII is anonymized but order
+  // history is retained for tax/accounting. Hard-delete happens after
+  // 30 days unless the user recovers.
+  deletedAt                  DateTime?
+  // PLH-1 commit 2: set by the anonymize-deleted-accounts cron 30 days
+  // after deletedAt. After this point, email and name are scrubbed but
+  // Order rows remain intact for tax/accounting.
+  anonymizedAt               DateTime?
+  supplier                   Supplier?
+  orders                     Order[]
+  resetTokens                PasswordResetToken[]
+  reviews                    Review[]
+  addresses                  Address[]
+  messages                   Message[]
+  supplierMemberships        SupplierMember[]
+  // PLH-3y-1: buyer org membership + the currently-selected org. The
+  // switcher writes activeBuyerOrgId; later rounds read it to scope orders,
+  // shared resources, and approvals to the active org.
+  buyerOrgMemberships        BuyerOrgMember[]
+  activeBuyerOrg             BuyerOrg?                 @relation("ActiveBuyerOrg", fields: [activeBuyerOrgId], references: [id])
+  activeBuyerOrgId           String?
+  // PLH-2 Phase 4d (D1): CAN-SPAM opt-out gates for non-transactional
+  // mail. Transactional emails (auth, password reset, order
+  // confirmation, payment receipt, refund, return, payout failure,
+  // 2FA, security alerts) always send and bypass these flags. These
+  // three only gate marketing-ish broadcasts.
+  notifyOrderEmails          Boolean                   @default(true)
+  notifyMarketingEmails      Boolean                   @default(true)
+  notifyProductUpdates       Boolean                   @default(true)
+  createdAt                  DateTime                  @default(now())
+  accountTokens              AccountToken[]
+  // PLH-3c F3: OEM approval gate. A MANUFACTURER user submits a
+  // ManufacturerApplication when they pick a brand name; admin must
+  // APPROVE it before User.manufacturerName is written and the
+  // storefront becomes live.
+  manufacturerApplication    ManufacturerApplication?
+  reviewedManufacturerApps   ManufacturerApplication[] @relation("ReviewedManufacturerApps")
+  // PLH-3i P1: QuickBooks Online Customer id, cached after the first
+  // ensureCustomer sync so subsequent invoices reuse the same QBO row.
+  qboCustomerId              String?
+  threadLastReads            ThreadLastRead[]
+  directMessageThreadsCreated DirectMessageThread[]      @relation("DirectMessageThreadsCreated")
+  directMessageParticipations DirectMessageParticipant[]
+}
+
+/**
+ * Single-use account tokens for sensitive flows that have to go through
+ * a confirmation email round-trip: changing the sign-in email and
+ * undoing a soft-deleted account during the grace period. Pattern
+ * matches PasswordResetToken (tokenHash stored at rest).
+ */
+model AccountToken {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  // Hex-encoded SHA-256 of the random token. The raw token only ever
+  // appears in the URL emailed to the user.
+  tokenHash String    @unique
+  // EMAIL_CHANGE | ACCOUNT_RECOVERY
+  type      String
+  payload   Json?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([type])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Review {
+  id           String    @id @default(cuid())
+  buyer        User      @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  buyerId      String
+  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId    String
+  supplier     Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId   String
+  order        Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId      String
+  rating       Int
+  title        String    @default("")
+  body         String    @default("")
+  hiddenAt     DateTime?
+  hiddenReason String    @default("")
+  hiddenById   String?
+  createdAt    DateTime  @default(now())
+
+  @@unique([buyerId, productId, orderId])
+  @@index([productId])
+  @@index([supplierId])
+  @@index([orderId])
+}
+
+model Address {
+  id                      String   @id @default(cuid())
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                  String
+  label                   String   @default("")
+  recipient               String
+  company                 String   @default("")
+  line1                   String
+  line2                   String   @default("")
+  city                    String
+  region                  String
+  postalCode              String
+  country                 String   @default("US")
+  phone                   String   @default("")
+  isDefault               Boolean  @default(false)
+  // Tax-exempt buyers can upload a resale or government-entity certificate.
+  // When present and APPROVED, Stripe Tax (or any tax engine) skips
+  // computation on the order. Admin reviews the cert before approval.
+  taxExemptCertificateUrl String?
+  taxExemptStatus         String? // "PENDING" | "APPROVED" | "REJECTED" | null
+  // PLH-3j P4: cert expiry. Daily cron emails buyers 30 days out;
+  // checkout re-prompts when past expiry to avoid skipping tax on a
+  // stale cert.
+  taxExemptExpiresAt      DateTime?
+  createdAt               DateTime @default(now())
+  // PLH-3j P2: soft-delete so historical Order ship-to denorm is not
+  // lost when the buyer removes the row from their address book.
+  // Read paths filter deletedAt IS NULL; DELETE flips this instead.
+  deletedAt               DateTime?
+
+  @@index([userId])
+  @@index([userId, deletedAt])
+  @@index([taxExemptExpiresAt])
+}
+
+model SearchEvent {
+  id        String   @id @default(cuid())
+  query     String
+  createdAt DateTime @default(now())
+}
+
+model Supplier {
+  id                          String              @id @default(cuid())
+  name                        String
+  contactEmail                String
+  status                      SupplierStatus      @default(APPROVED)
+  rating                      Float               @default(4.7)
+  reviews                     Int                 @default(0)
+  onTimeRate                  Float               @default(97.5)
+  certifications              String              @default("")
+  logoUrl                     String?
+  website                     String              @default("")
+  description                 String              @default("")
+  // Go-live gate. Defaults to false. The supplier's products are filtered
+  // out of the public catalog, the home page, brand storefronts, search,
+  // and the sitemap until an admin flips this to true (typically after the
+  // 10-item onboarding checklist passes: legal docs approved, bank info
+  // on file, at least one product). See lib/supplier-access.ts.
+  publicVisible               Boolean             @default(false)
+  // LEGACY payout method summary (Polish 6). Superseded by Stripe Connect
+  // in P8. Kept on existing rows for audit history but the supplier UI
+  // surfaces the stripeConnect* fields below as the source of truth.
+  bankInfoStatus              String              @default("MISSING") // MISSING | PENDING | ON_FILE | REJECTED
+  bankInfoLast4               String?
+  bankInfoType                String? // CHECKING | SAVINGS
+  bankInfoBankName            String?
+  bankInfoNote                String              @default("")
+  bankInfoUpdatedAt           DateTime?
+  // Stripe Connect Express. Supplier onboards via Stripe-hosted flow; the
+  // PartsPort UI just renders an "Active / Pending / Disabled" status.
+  // PartsPort never touches the account or routing numbers.
+  stripeAccountId             String?             @unique
+  stripeChargesEnabled        Boolean             @default(false)
+  stripePayoutsEnabled        Boolean             @default(false)
+  stripeOnboardingCompletedAt DateTime?
+  // Reserve / chargeback holdback. Each Payout subtracts this percent of
+  // the supplier subtotal before transferring; held funds accumulate in
+  // reserveBalanceCents and release after 60 days via cron (P8 S6) when
+  // no chargeback or refund has hit the order.
+  reservePercent              Int                 @default(500) // basis points (500 = 5%)
+  reserveBalanceCents         Int                 @default(0)
+  // P9.5: refund shortfall accounting. When a refund clears more than the
+  // available reserveBalanceCents (typical for 60+ day-old orders where
+  // the supplier was already paid out), the difference is added here and
+  // netted against future Payouts via lib/payouts.ts. Always >= 0.
+  owedToPlatformCents         Int                 @default(0)
+  user                        User?               @relation(fields: [userId], references: [id])
+  userId                      String?             @unique
+  products                    Product[]
+  productReviews              Review[]
+  payouts                     Payout[]
+  members                     SupplierMember[]
+  invites                     SupplierInvite[]
+  documents                   SupplierDocument[]
+  warehouses                  SupplierWarehouse[]
+  orderSlots                  OrderSupplierSlot[]
+  createdAt                   DateTime            @default(now())
+}
+
+model SupplierDocument {
+  id         String    @id @default(cuid())
+  supplier   Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId String
+  // SUPPLIER_AGREEMENT | W9 | INSURANCE_COI | OTHER. Kept as a string so we
+  // can introduce new kinds without a schema migration; the API rejects
+  // unknown values.
+  kind       String
+  filename   String
+  url        String
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewNote String    @default("")
+  reviewedAt DateTime?
+  reviewedBy String?
+  uploadedAt DateTime  @default(now())
+
+  @@index([supplierId])
+  @@index([status])
+}
+
+/**
+ * Origin warehouse for a supplier. Real-rate freight quotes need an
+ * origin zip; we let suppliers register multiple warehouses (regional
+ * stock points) and pick a default. When a buyer lands on the checkout
+ * page, we compute freight using each supplier's default warehouse as
+ * the origin.
+ */
+model SupplierWarehouse {
+  id         String   @id @default(cuid())
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId String
+  label      String   @default("")
+  zip        String
+  city       String
+  state      String // two-letter US state code
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([supplierId])
+}
+
+model SupplierMember {
+  id         String             @id @default(cuid())
+  supplier   Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  role       SupplierMemberRole @default(ADMIN)
+  createdAt  DateTime           @default(now())
+
+  @@unique([supplierId, userId])
+  @@index([userId])
+}
+
+model SupplierInvite {
+  id          String             @id @default(cuid())
+  supplier    Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId  String
+  email       String
+  role        SupplierMemberRole @default(ADMIN)
+  tokenHash   String             @unique
+  invitedById String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime           @default(now())
+
+  @@index([supplierId])
+  @@index([email])
+}
+
+// PLH-3y-1: buyer organization foundation. Admin-managed only this round
+// (no self-serve creation). Members are grouped under an org so a later
+// round can layer shared resources, billing, SSO, and approvals on top.
+model BuyerOrg {
+  id              String           @id @default(cuid())
+  name            String
+  createdByUserId String?
+  createdAt       DateTime         @default(now())
+  // PLH-3y-2: billing mode + optional centralized payment. billingMode
+  // defaults to MEMBER_PAYS (each member uses their own card). HYBRID adds an
+  // org-level Stripe Customer (stripeCustomerId) so a permitted member can
+  // charge the org card at checkout. The customer is created lazily by an
+  // admin when HYBRID is turned on.
+  billingMode             BuyerOrgBillingMode @default(MEMBER_PAYS)
+  stripeCustomerId        String?
+  // PLH-3y-2: org-level tax-exempt cert. Lifted from the per-Address cert
+  // (PLH-3j P4) so a single org cert applies to every member's orders.
+  // Member-level certs still work; the org cert is an additional source.
+  // taxExemptStatus mirrors the Address values ("PENDING" | "APPROVED" |
+  // "REJECTED" | null); checkout only waives tax on APPROVED + not-expired.
+  taxExemptCertificateUrl String?
+  taxExemptStatus         String?
+  taxExemptExpiresAt      DateTime?
+  // PLH-3z-1: net-terms billing. paymentTerms defaults to PREPAID (existing
+  // Stripe checkout). An admin flips an org to NET_15/30/60 to enable invoice
+  // orders. creditLimitCents is a manual admin-set ceiling this round (no
+  // D-U-N-S / auto-approve until a later round); null = no explicit limit.
+  paymentTerms            PaymentTerms @default(PREPAID)
+  creditLimitCents        Int?
+  // PLH-3z-4: org-level credit suspension. SUSPENDED orgs cannot place new
+  // orders (gated in /api/orders + checkout-from-quote). Set by the ar-dunning
+  // cron at 30 days past due; cleared automatically when all past-due invoices
+  // clear (invoice.paid webhook / manual mark-paid).
+  status          BuyerOrgStatus   @default(ACTIVE)
+  suspendedAt     DateTime?
+  suspendedReason String?
+  members         BuyerOrgMember[]
+  invites         BuyerOrgInvite[]
+  addresses       BuyerOrgAddress[]
+  domains         BuyerOrgDomain[]
+  // PLH-3y-4: at most one SSO configuration per org.
+  ssoConfig       SsoConfig?
+  loginEvents     SsoLoginEvent[]
+  activeForUsers  User[]           @relation("ActiveBuyerOrg")
+  // PLH-3y-6: orders permanently bound to this org.
+  orders          Order[]          @relation("BuyerOrgOrders")
+  approvalRules   ApprovalRule[]
+  // PLH-3z-3: net-terms credit applications submitted for this org.
+  creditApplications CreditApplication[]
+}
+
+// PLH-3y-4: per-org single sign-on configuration. SAML 2.0 ships this round;
+// the OIDC columns are present but unused until PLH-3y-5. An org admin (or a
+// site admin) pastes the IdP's EntityID, SSO URL, and signing certificate;
+// PartsPort verifies the SAML assertion signature with a vetted library
+// (@node-saml/node-saml) on every login. enforced=false by default so password
+// login stays on until an org admin explicitly locks the domain.
+model SsoConfig {
+  id              String     @id @default(cuid())
+  buyerOrgId      String     @unique
+  buyerOrg        BuyerOrg   @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  idpType         SsoIdpType @default(SAML)
+  // SAML fields.
+  idpEntityId     String?
+  idpSsoUrl       String?
+  idpSloUrl       String?
+  idpX509Cert     String?    @db.Text
+  // Staged signing cert for zero-downtime IdP cert rotation. When set, an
+  // assertion is accepted if it verifies against either the current or the
+  // next cert.
+  idpX509CertNext String?    @db.Text
+  // OIDC fields (PLH-3y-5). Generic OIDC: works with Google Workspace, Okta
+  // OIDC, and Azure AD OIDC. oidcIssuer is the issuer URL; discovery and JWKS
+  // are resolved at runtime from <issuer>/.well-known/openid-configuration.
+  oidcIssuer      String?
+  oidcClientId    String?
+  oidcClientSecret String?   @db.Text
+  // SCIM 2.0 provisioning (PLH-3y-5). scimTokenHash is SHA-256 hex of the
+  // bearer token, shown to the admin exactly once at generation; only the hash
+  // and the last 4 chars persist. scimEnabled gates the endpoints.
+  scimEnabled     Boolean    @default(false)
+  scimTokenHash   String?    @unique
+  scimTokenLast4  String?
+  // Common.
+  domainAllowlist String[]
+  // SAML assertion attribute name carrying the user's group memberships.
+  // Defaults handled in code to the standard claim + memberOf.
+  groupAttributeName String?
+  // { "PartsPort-Admins": "ADMIN", "Procurement": "BUYER" }
+  groupRoleMap    Json?
+  defaultRole     BuyerOrgRole @default(BUYER)
+  // When true, password login is disabled for users whose email domain is in
+  // domainAllowlist. A site admin (platform Role=ADMIN) always keeps a
+  // break-glass password path, as does a member with emergencyPasswordAccess.
+  enforced        Boolean    @default(false)
+  sessionMaxAgeMin Int       @default(480)
+  honorIdpSessionExpiry Boolean @default(true)
+  configuredById  String?
+  configuredAt    DateTime   @default(now())
+  rotatedCertAt   DateTime?
+
+  @@index([buyerOrgId])
+}
+
+// PLH-3y-4: high-volume per-login audit trail for SSO. The management-plane
+// events (config edits, cert rotation) go to AuditLog; this table records the
+// outcome of every assertion processed at the ACS endpoint.
+model SsoLoginEvent {
+  id          String   @id @default(cuid())
+  buyerOrgId  String
+  buyerOrg    BuyerOrg @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  userId      String?
+  email       String
+  // SUCCESS | FAILED_SIG | FAILED_NOTAFTER | FAILED_DOMAIN | FAILED_AUDIENCE
+  outcome     String
+  ipHash      String
+  userAgent   String
+  createdAt   DateTime @default(now())
+
+  @@index([buyerOrgId, createdAt])
+  @@index([email, createdAt])
+}
+
+// PLH-3y-3: a claimed email domain for an org. An admin claims a domain, the
+// system mints a verificationToken, the admin adds a DNS TXT record, and a
+// cron (verify-org-domains) confirms the record exists and flips status to
+// VERIFIED. Once verified AND autoJoinEnabled is true, a new user registering
+// with an email at this domain is auto-added as a member with autoJoinRole.
+// autoJoinEnabled defaults false: the admin must turn it on explicitly per
+// domain after verification (LOCKED DECISION). Free-email providers are
+// blocked from being claimed at the API layer.
+model BuyerOrgDomain {
+  id                String               @id @default(cuid())
+  buyerOrg          BuyerOrg             @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  buyerOrgId        String
+  domain            String               @unique
+  verificationToken String
+  status            BuyerOrgDomainStatus @default(PENDING)
+  verifiedAt        DateTime?
+  txtLastCheckedAt  DateTime?
+  autoJoinEnabled   Boolean              @default(false)
+  autoJoinRole      BuyerOrgRole         @default(VIEWER)
+  createdByUserId   String?
+  createdAt         DateTime             @default(now())
+
+  @@index([buyerOrgId])
+  @@index([status])
+}
+
+// PLH-3y-2: org-level shared shipping addresses. Any member can select one of
+// these as the ship-to at checkout; ADMIN manages them. Kept as a separate
+// model (not an extension of Address) so the personal address book's per-user
+// 25-cap, soft-delete, and per-address tax-exempt logic stay untouched. Org
+// tax-exempt lives on BuyerOrg, not here, since an org has one cert.
+model BuyerOrgAddress {
+  id         String    @id @default(cuid())
+  buyerOrg   BuyerOrg  @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  buyerOrgId String
+  label      String    @default("")
+  recipient  String
+  company    String    @default("")
+  line1      String
+  line2      String    @default("")
+  city       String
+  region     String
+  postalCode String
+  country    String    @default("US")
+  phone      String    @default("")
+  addedByUserId String?
+  createdAt  DateTime  @default(now())
+  // Soft-delete so historical Order ship-to denorm is not lost when an admin
+  // removes the row. Read paths filter deletedAt IS NULL.
+  deletedAt  DateTime?
+
+  @@index([buyerOrgId, deletedAt])
+}
+
+model BuyerOrgMember {
+  id            String       @id @default(cuid())
+  buyerOrg      BuyerOrg     @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  buyerOrgId    String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  role          BuyerOrgRole @default(BUYER)
+  joinedAt      DateTime     @default(now())
+  addedByUserId String?
+  // PLH-3y-4: per-member break-glass. When the org enforces SSO (domain lock),
+  // a member with this flag may still password-login. Off by default; an org
+  // admin opts a specific member in for emergency recovery.
+  emergencyPasswordAccess Boolean @default(false)
+  // PLH-3y-5: SCIM/SSO deprovision flag. SCIM PATCH active=false or DELETE sets
+  // this (soft) so order ownership and history survive. A non-null value
+  // suspends the membership: the user can no longer act in the org. Re-activate
+  // by clearing it (SCIM PATCH active=true).
+  deactivatedAt DateTime?
+  // PLH-3y-6: approver out-of-office delegation. When oooUntil is in the
+  // future, approval routing sends this member's approvals to
+  // delegateToMemberId instead. The original approver still appears in the
+  // OrderApproval audit trail.
+  oooUntil           DateTime?
+  delegateToMemberId String?
+
+  @@unique([buyerOrgId, userId])
+  @@index([userId])
+}
+
+model BuyerOrgInvite {
+  id              String       @id @default(cuid())
+  buyerOrg        BuyerOrg     @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  buyerOrgId      String
+  email           String
+  role            BuyerOrgRole @default(BUYER)
+  tokenHash       String       @unique
+  invitedByUserId String?
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime     @default(now())
+
+  // Only one pending (not-yet-accepted) invite per email per org. Enforced
+  // by a partial unique index in the migration (acceptedAt IS NULL), which
+  // Prisma can't model natively.
+  @@index([buyerOrgId])
+  @@index([email])
+}
+
+// PLH-3y-6: a threshold-based approval rule for a buyer org. ALL set filter
+// conditions must match for the rule to apply to an order. Rules with the same
+// chainGroup execute sequentially in chainOrder; an order is fully APPROVED
+// only when every chain step completes. Orgs ship with NO rules (approvals off)
+// until an admin adds one.
+model ApprovalRule {
+  id                String       @id @default(cuid())
+  buyerOrgId        String
+  buyerOrg          BuyerOrg     @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  name              String
+  // Filter conditions. A null field means "no constraint on this dimension".
+  minTotalCents     Int?
+  maxTotalCents     Int?
+  category          String?      // matches Product.category on any order item
+  supplierId        String?      // matches any order item's supplier
+  placedByMemberId  String?      // route only when this member places the order
+  // Action: who must approve. approverMemberId pins a specific member;
+  // approverRole routes to any member with this role (typically APPROVER).
+  approverMemberId  String?
+  approverRole      BuyerOrgRole?
+  // Chaining: rules sharing a chainGroup execute in ascending chainOrder.
+  chainGroup        String?
+  chainOrder        Int          @default(0)
+  // Auto-escalate when an approval sits PENDING longer than this many hours.
+  escalateAfterHours Int?
+  escalateToMemberId String?
+  // Auto-approve when the order matches a recent approved order from the same
+  // member (same supplier + product set, within 25% of total, last 90d).
+  autoApproveIfHistoricalMatch Boolean @default(false)
+  enabled           Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+
+  @@index([buyerOrgId, enabled])
+}
+
+// PLH-3y-6: one row per approval decision (or pending step) on an order.
+// outcome PENDING marks an open step assigned to approverMemberId; the other
+// outcomes record a terminal decision (or an ESCALATED reassignment event).
+model OrderApproval {
+  id                String   @id @default(cuid())
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ruleId            String?  // null for emergency bypass + auto-approve
+  approverMemberId  String?  // null for AUTO_APPROVED / BYPASSED
+  // PENDING | APPROVED | REJECTED | AUTO_APPROVED | ESCALATED | BYPASSED
+  outcome           String   @default("PENDING")
+  chainOrder        Int      @default(0)
+  reason            String   @default("")
+  createdAt         DateTime @default(now())
+  decidedAt         DateTime?
+
+  @@index([orderId])
+  @@index([approverMemberId, outcome])
+  @@index([outcome, createdAt])
+}
+
+model Product {
+  id            String         @id @default(cuid())
+  sku           String         @unique
+  name          String
+  category      String
+  manufacturer  String
+  icon          String
+  imageUrl      String?
+  priceCents    Int
+  unit          String         @default("each")
+  etaDays       Int
+  stock         Int            @default(0)
+  quoteOnly     Boolean        @default(false)
+  description   String
+  specs         Json
+  // Freight inputs. Populated by the supplier on the listing form (and by
+  // bulk CSV import where present). When weight + dims + freightClass are
+  // all set on every line of an order, real-rate Shippo quotes light up;
+  // otherwise the deterministic fallback in lib/freight.ts takes over.
+  // freightClass values follow NMFC (50, 55, 60, 65, 70, 77.5, 85, 92.5,
+  // 100, 110, 125, 150, 175, 200, 250, 300, 400, 500); stored as a string
+  // because the codes aren't sequential integers.
+  weightLbs     Float?
+  freightClass  String?
+  lengthIn      Float?
+  widthIn       Float?
+  heightIn      Float?
+  supplier      Supplier       @relation(fields: [supplierId], references: [id])
+  supplierId    String
+  active        Boolean        @default(true)
+  orderItems    OrderItem[]
+  quoteRequests QuoteRequest[]
+  reviews       Review[]
+  images        ProductImage[]
+  createdAt     DateTime       @default(now())
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String   @default("")
+  ordinal   Int
+  createdAt DateTime @default(now())
+
+  @@unique([productId, ordinal])
+  @@index([productId, ordinal])
+}
+
+model Payout {
+  id               String              @id @default(cuid())
+  reference        String              @unique
+  supplier         Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId       String
+  order            Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId          String
+  // amountCents is what the supplier actually receives: subtotal share
+  // minus reserve. reservedCents records what was held back, mirrored
+  // onto Order.reservedCents for the buyer-facing order view.
+  amountCents      Int
+  reservedCents    Int                 @default(0)
+  status           PayoutStatus        @default(DUE)
+  // Stripe transfer id for the supplier portion. Null on legacy manual
+  // payouts (pre-P8) and on payouts where Connect onboarding wasn't done.
+  stripeTransferId String?             @unique
+  // Number of retry attempts the payout-retry cron has burned; gives the
+  // cron an exponential backoff and a stopping point.
+  retryAttempts    Int                 @default(0)
+  lastRetryAt      DateTime?
+  failureReason    String              @default("")
+  note             String              @default("")
+  createdAt        DateTime            @default(now())
+  paidAt           DateTime?
+  orderSlots       OrderSupplierSlot[]
+
+  @@unique([supplierId, orderId])
+  @@index([status])
+}
+
+/**
+ * Audit trail for reserve holdback. Type values:
+ * HOLD       - amount held when a payout was created
+ * RELEASE    - amount released back to the supplier after the 60-day
+ * quiet window or admin manual release
+ * DRAW_DOWN  - amount pulled from the reserve to cover a refund or
+ * chargeback
+ * The running supplier balance is in Supplier.reserveBalanceCents; this
+ * table is the per-transaction history.
+ */
+model SupplierReserveTransaction {
+  id          String   @id @default(cuid())
+  supplierId  String
+  type        String // HOLD | RELEASE | DRAW_DOWN | OWED_INCURRED
+  amountCents Int
+  orderId     String?
+  reason      String   @default("")
+  // PLH-2 Phase 4e (E3): RELEASE rows go through a two-stage lifecycle so
+  // the Stripe transfer fires AFTER the candidate is staked out but BEFORE
+  // reserveBalanceCents is decremented. status values:
+  //   PENDING   - row staked out before the Stripe transfer fires.
+  //               reserveBalanceCents NOT yet decremented.
+  //   COMPLETED - the transfer succeeded (or was skipped for non-Connect
+  //               suppliers). reserveBalanceCents has been decremented.
+  //   FAILED    - the transfer failed. reserveBalanceCents was NOT
+  //               touched. The next cron run retries.
+  // Pre-existing rows have status NULL which is treated as COMPLETED for
+  // backwards compatibility. HOLD / DRAW_DOWN / OWED_INCURRED rows ignore
+  // this field.
+  status      String?
+  createdAt   DateTime @default(now())
+
+  @@index([supplierId])
+  @@index([orderId])
+  @@index([status])
+}
+
+/**
+ * Stripe refund records. One row per refund (a single order can have
+ * multiple partial refunds). amountCents is positive; the running total
+ * is mirrored onto Order.refundedCents for fast access on the order view.
+ */
+model Refund {
+  id              String   @id @default(cuid())
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId         String
+  stripeRefundId  String?  @unique
+  amountCents     Int
+  reason          String   @default("")
+  returnRequestId String?
+  refundedBy      String? // User.id of the admin who triggered it
+  status          String   @default("succeeded") // succeeded | pending | failed
+  createdAt       DateTime @default(now())
+  // PLH-3i P3: id of the QBO RefundReceipt document this Refund pushed
+  // to QuickBooks Online. Null = not yet synced (or sync skipped because
+  // the original Invoice wasn't synced; reconcile cron in P4 will catch
+  // those). Idempotency primitive for syncRefund().
+  qboRefundReceiptId String?
+
+  @@index([orderId])
+  @@index([returnRequestId])
+}
+
+model ReturnRequest {
+  id         String       @id @default(cuid())
+  reference  String       @unique
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String
+  buyerId    String?
+  reason     String
+  details    String       @default("")
+  status     ReturnStatus @default(OPEN)
+  adminNote  String       @default("")
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model Order {
+  id                    String              @id @default(cuid())
+  reference             String              @unique
+  status                OrderStatus         @default(PENDING)
+  buyer                 User?               @relation(fields: [buyerId], references: [id])
+  buyerId               String?
+  buyerEmail            String
+  buyerName             String
+  // Snapshotted from User.companyName / User.companyLogoUrl at order
+  // creation time so later profile edits never retroactively rewrite a
+  // past invoice's branding.
+  buyerCompanyName      String?
+  buyerCompanyLogoUrl   String?
+  shipTo                String
+  // P9.5: server-side idempotency. Hash of (Idempotency-Key header or
+  // body.idempotencyKey) + buyer (userId or email). Two identical POSTs
+  // collide on this unique index; the second POST returns the existing
+  // order id instead of creating a duplicate. Pre-P9.5 the route had no
+  // dedupe and the verify chat confirmed duplicates were being created.
+  idempotencyKey        String?             @unique
+  subtotalCents         Int
+  freightCents          Int                 @default(0)
+  feeCents              Int
+  taxCents              Int                 @default(0)
+  totalCents            Int
+  feeRateBps            Int                 @default(600)
+  paymentMethod         String              @default("paypal")
+  paypalOrderId         String?
+  // Stripe payment_intent id captured from the checkout session webhook.
+  // Required for the Stripe refund flow (P8 S4).
+  stripePaymentIntentId String?
+  // Running totals updated transactionally:
+  //   refundedCents: sum of Refund rows; flips Order to REFUNDED at full.
+  //   reservedCents: mirror of sum(Payout.reservedCents) for this order.
+  refundedCents         Int                 @default(0)
+  reservedCents         Int                 @default(0)
+  // P9 freight. freightCarrier/Service: label for the chosen rate.
+  // freightBreakdown: when the cart spans multiple suppliers, this is
+  // the per-supplier-shipment array (carrier, service, cents, originZip).
+  // freightSurcharges: { liftgate, residential, insideDelivery } booleans
+  // (P9 S4). Stored as JSON to avoid a migration per new surcharge type.
+  freightCarrier        String?
+  freightService        String?
+  freightBreakdown      Json?
+  freightSurcharges     Json?
+  // P9.5: Shippo labels. shippoLabels is an array of { supplierId,
+  // labelUrl, trackingNumber, carrier, service, transactionId } - one
+  // per shipment, mirrors freightBreakdown. P9 S5 only stored a single
+  // carrier+tracking on top-level fields; multi-supplier orders need
+  // per-shipment labels. Existing single-supplier orders keep using the
+  // top-level carrier + trackingCode fields.
+  shippoLabels          Json?
+  shipmentStage         String              @default("")
+  carrier               String?
+  trackingCode          String?
+  // PLH-3a B1: real ship timestamp set inside markOrderShipped() when an
+  // order transitions to shipmentStage = "Shipped". Idempotent (only set
+  // when null). Supplier-health uses this for accurate avg days-to-ship
+  // instead of approximating with createdAt.
+  shippedAt             DateTime?
+  // PLH-3c F5: set when an order transitions to Delivered (auto-deliver
+  // cron, ops-page mark-delivered, buyer self-confirm). Idempotent (only
+  // set when null). Drives the 30-day post-delivery return window.
+  deliveredAt           DateTime?
+  // PLH-2 Phase 4e (E2): set when sendOrderDelivered fires successfully
+  // after the auto-deliver cron flips the order. If the email throws, this
+  // stays null and the AUTO_DELIVER_EMAIL_FAILED audit row is the trail.
+  deliveryEmailSentAt   DateTime?
+  // PLH-3v: enterprise procurement requirement. Buyers can attach their
+  // company's PO number at checkout for invoice reference. 64-char cap;
+  // indexed for substring search in the buyer order history.
+  purchaseOrderNumber   String?
+  // PLH-3y-6: persistent org tie. Set at order creation when the buyer has an
+  // activeBuyerOrgId. PLH-3y-2 made org spend-visibility membership-based with
+  // no column; approvals need orders permanently bound to an org (a member can
+  // leave and the order must still belong to the org). Historical orders stay
+  // null. The spend-visibility filter prefers this column when present and
+  // falls back to current-membership for legacy null-buyerOrgId orders.
+  buyerOrgId            String?
+  buyerOrg              BuyerOrg?           @relation("BuyerOrgOrders", fields: [buyerOrgId], references: [id])
+  // PLH-3y-6: approval workflow state. approvalStatus composes with `status`
+  // (the payment/fulfillment lifecycle): an order with approvalStatus=PENDING
+  // cannot transition status to PAID (server-enforced in create-session).
+  // NONE = no approval needed / non-org order. PENDING = awaiting an approver.
+  // APPROVED / AUTO_APPROVED / BYPASSED all clear the gate. REJECTED is
+  // terminal (status moves to CANCELLED). approvedByMemberId records the final
+  // deciding member for APPROVED/BYPASSED.
+  approvalStatus        String              @default("NONE")
+  approvedByMemberId    String?
+  // PLH-3z-1: net-terms snapshot. paymentTerms is captured at order creation
+  // from the buyer's active org (PREPAID for non-org buyers and PREPAID orgs,
+  // which keep the unchanged Stripe checkout flow). invoiceDueDate is set only
+  // for net-terms orders (order date + terms days).
+  paymentTerms          PaymentTerms        @default(PREPAID)
+  invoiceDueDate        DateTime?
+  approvals             OrderApproval[]
+  items                 OrderItem[]
+  invoice               Invoice?
+  returns               ReturnRequest[]
+  payouts               Payout[]
+  refunds               Refund[]
+  messages              Message[]
+  reviews               Review[]
+  supplierSlots         OrderSupplierSlot[]
+  createdAt             DateTime            @default(now())
+  paidAt                DateTime?
+  cancelledAt           DateTime?
+
+  @@index([purchaseOrderNumber])
+  @@index([buyerOrgId])
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  number        String        @unique
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId       String        @unique
+  status        InvoiceStatus @default(ISSUED)
+  issuedAt      DateTime      @default(now())
+  subtotalCents Int
+  freightCents  Int
+  feeCents      Int
+  taxCents      Int
+  totalCents    Int
+  buyerName     String
+  buyerEmail    String
+  shipTo        String
+  // PLH-3i P1: QuickBooks Online Invoice id, written by the sync helper
+  // after createInvoice succeeds. Null until P2 sync runs (or when QBO is
+  // not configured).
+  qboInvoiceId  String?
+  // PLH-3z-2: net-terms collection via Stripe Invoices. stripeInvoiceId is the
+  // Stripe-hosted invoice created at order time for a net-terms order
+  // (collection_method=send_invoice, ACH). Null for PREPAID invoices and when
+  // Stripe is not configured / the create call failed soft. dueDate mirrors
+  // Order.invoiceDueDate. paidAt/paidReference/paymentMethod are stamped when
+  // the invoice.paid webhook (or a manual admin record-payment) settles the
+  // invoice. partialPaidCents tracks the running sum of PaymentRecord rows so
+  // a partial wire keeps the invoice open until the full balance clears.
+  stripeInvoiceId String?        @unique
+  // PLH-3z-4: Stripe-hosted invoice payment page URL, captured at finalize
+  // time. Dunning emails deep-link to this when present (self-service ACH
+  // pay), else fall back to the on-platform invoice page. Null for PREPAID
+  // invoices and when Stripe is not configured.
+  stripeHostedInvoiceUrl String?
+  dueDate         DateTime?
+  paidAt          DateTime?
+  paidReference   String?
+  paymentMethod   String?
+  partialPaidCents Int           @default(0)
+  payments        PaymentRecord[]
+  dunningLogs     InvoiceDunningLog[]
+}
+
+// PLH-3z-4: dunning idempotency. One row per (invoice, stage) so a dunning
+// stage email fires exactly once per invoice no matter how many times the
+// ar-dunning cron runs. There is no Email model in this codebase (email sends
+// are fire-and-forget helpers), so this is the dedicated idempotency table the
+// PLH-3z-2 / 3z-3 deviation notes flagged. stage is one of the cadence labels
+// ("T-3" | "T0" | "T+7" | "T+30").
+model InvoiceDunningLog {
+  id        String   @id @default(cuid())
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId String
+  stage     String
+  sentAt    DateTime @default(now())
+
+  @@unique([invoiceId, stage])
+  @@index([invoiceId])
+}
+
+// PLH-3z-2: one row per payment applied to an invoice. The Stripe webhook
+// inserts a row on invoice.paid (source=stripe_webhook, recordedBy null); an
+// admin reconciling an off-platform wire/check inserts a row via the manual
+// record-payment route (source=manual_admin, recordedBy=admin User id). The
+// invoice flips PAID once sum(amountCents) >= Invoice.totalCents.
+model PaymentRecord {
+  id          String   @id @default(cuid())
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String
+  amountCents Int
+  receivedAt  DateTime
+  method      String // "ach" | "wire" | "check" | "card" | "other"
+  reference   String   @default("")
+  source      String // "stripe_webhook" | "manual_admin" | "import"
+  recordedBy  String? // User.id of the admin who recorded (manual only)
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([invoiceId])
+}
+
+// PLH-3z-3: a buyer org's request for net-terms billing. An org ADMIN submits
+// the application (company legal name, EIN, expected monthly spend, trade
+// references, requested terms + limit, optional W-9 URL). A site admin reviews
+// at /admin/credit-applications and either approves (which sets the org's
+// paymentTerms + creditLimitCents from the approved values) or rejects with a
+// note. orgId is nullable per spec (a future flow may accept a prospect with no
+// org yet); the buyer-facing flow this round always submits for the submitter's
+// active org. Credit limit is admin-set on approval (no D-U-N-S auto-lookup, no
+// auto-approve this round).
+model CreditApplication {
+  id                   String        @id @default(cuid())
+  reference            String        @unique
+  org                  BuyerOrg?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId                String?
+  submittedByUserId    String
+  legalName            String
+  dba                  String?
+  ein                  String
+  yearsInBusiness      Int?
+  expectedMonthlyCents Int
+  requestedLimitCents  Int
+  requestedTerms       PaymentTerms
+  billingAddress       String
+  apContactName        String
+  apContactEmail       String
+  apContactPhone       String?
+  // [{ companyName, contact, phone, email }, ...]
+  references           Json
+  w9BlobUrl            String?
+  dunsNumber           String?
+  notes                String        @default("")
+  // PENDING | APPROVED | REJECTED
+  status               String        @default("PENDING")
+  reviewedBy           String?
+  reviewedAt           DateTime?
+  reviewerNote         String        @default("")
+  // May differ from the requested values (admin can downgrade on approval).
+  approvedLimitCents   Int?
+  approvedTerms        PaymentTerms?
+  createdAt            DateTime      @default(now())
+
+  @@index([orgId])
+  @@index([status])
+}
+
+model OrderItem {
+  id             String  @id @default(cuid())
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId        String
+  product        Product @relation(fields: [productId], references: [id])
+  productId      String
+  nameSnapshot   String
+  skuSnapshot    String
+  supplierName   String
+  unitPriceCents Int
+  qty            Int
+}
+
+model QuoteRequest {
+  id              String      @id @default(cuid())
+  reference       String      @unique
+  product         Product     @relation(fields: [productId], references: [id])
+  productId       String
+  qty             Int         @default(1)
+  buyerId         String?
+  buyerName       String
+  buyerEmail      String
+  company         String      @default("")
+  message         String      @default("")
+  status          QuoteStatus @default(OPEN)
+  quotedUnitCents Int?
+  quoteNote       String      @default("")
+  // Polish 12 H1: quotes default to a 30-day window once priced. The
+  // accept endpoint returns 410 past expiry; the buyer-facing quote
+  // page surfaces "Quote expires in N days".
+  quoteExpiresAt  DateTime?
+  // Polish 12 H2: unique so concurrent /accept POSTs can't write two
+  // different Order ids onto the same quote. The create-order +
+  // update-quote wrapper catches P2002 and returns the existing
+  // winner's orderId (idempotent 200).
+  orderId         String?     @unique
+  messages        Message[]
+  createdAt       DateTime    @default(now())
+  quotedAt        DateTime?
+}
+
+model Message {
+  id                 String        @id @default(cuid())
+  order              Order?        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId            String?
+  quote              QuoteRequest? @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId            String?
+  // PLH-3q: cross-role direct message thread. Exactly one of (orderId,
+  // quoteId, directThreadId) is set per row. Enforced at the API
+  // boundary, not via a CHECK constraint (Prisma cannot model the OR).
+  directThread       DirectMessageThread? @relation(fields: [directThreadId], references: [id], onDelete: Cascade)
+  directThreadId     String?
+  sender             User?         @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  senderId           String?
+  senderName         String
+  senderEmail        String
+  senderRole         String
+  body               String
+  createdAt          DateTime      @default(now())
+  inboundFingerprint String?       @unique
+  visibility         MessageVisibility @default(PUBLIC)
+  attachments        MessageAttachment[]
+  // PLH-3w P3: abuse reporting. A user flags a message; an admin reviews it
+  // at /admin/reported-messages and either dismisses or suspends the sender.
+  reportedAt         DateTime?
+  reportedByUserId   String?
+  reportReason       String?
+  reviewedAt         DateTime?
+  reviewedByUserId   String?
+
+  @@index([orderId])
+  @@index([quoteId])
+  @@index([directThreadId])
+  // PLH-3w P3: drives the admin review queue (pending = reported, not yet
+  // reviewed). Partial-ish ordering handled in the query.
+  @@index([reportedAt])
+}
+
+/// PLH-3q: standalone direct-message thread, not tied to an Order or
+/// QuoteRequest. Any user can start one (subject to permission rules in
+/// src/lib/dm-permissions.ts). Threads support CC and group chat up to
+/// 10 participants total. Email semantics: added participants see
+/// messages from joinedAt forward, not prior history.
+model DirectMessageThread {
+  id            String                      @id @default(cuid())
+  subject       String
+  createdById   String
+  createdBy     User                        @relation("DirectMessageThreadsCreated", fields: [createdById], references: [id])
+  createdAt     DateTime                    @default(now())
+  lastMessageAt DateTime                    @default(now())
+  participants  DirectMessageParticipant[]
+  messages      Message[]
+}
+
+model DirectMessageParticipant {
+  id            String              @id @default(cuid())
+  thread        DirectMessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId      String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  joinedAt      DateTime            @default(now())
+  addedByUserId String
+
+  @@unique([threadId, userId])
+  @@index([userId, joinedAt])
+}
+
+// PLH-3p F2: file attachments on a Message. Files live in Vercel Blob;
+// the row stores the public URL plus size/mime so the UI renders chips
+// without re-fetching the blob. Cap is 5 per message, 5 MB each, types
+// limited to PNG/JPEG/PDF/DOCX (magic-byte checked at upload time).
+model MessageAttachment {
+  id        String   @id @default(cuid())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId String
+  fileName  String
+  fileSize  Int
+  mimeType  String
+  blobUrl   String
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+}
+
+// PLH-3p F4: per-user "last read" pointer for a message thread. One row per
+// (user, kind, threadId). Absence of a row is treated as "all messages on
+// the thread are unread" so badges light up on first inbound message.
+model ThreadLastRead {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  threadKind String
+  threadId   String
+  lastReadAt DateTime @default(now())
+
+  @@unique([userId, threadKind, threadId])
+  @@index([userId])
+}
+
+// PLH-3w P1: email blacklist. A BANNED user's email lands here so the
+// register flow can refuse re-signup with a generic "registration
+// unavailable" message (no enumeration). Stored lowercased to match the
+// normalizeEmail() the register route uses.
+model BannedEmail {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  bannedAt       DateTime @default(now())
+  bannedByUserId String
+  reason         String
+
+  @@index([bannedByUserId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String
+  // Free-form string instead of an enum so we can introduce new actions
+  // without a schema migration. Set of well-known values is enforced at
+  // the lib/audit.ts boundary.
+  action     String
+  targetType String
+  targetId   String
+  summary    String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+/**
+ * Per-US-state tax registration tracker. Stripe Tax computes liability
+ * automatically; this table records where PartsPort has actually
+ * registered to remit. Used by /admin/tax-registrations.
+ */
+model TaxRegistration {
+  id                 String    @id @default(cuid())
+  state              String    @unique // "TX" | "CA" | etc.
+  registrationStatus String // NOT_REQUIRED | REQUIRED | REGISTERED | FILING
+  registeredAt       DateTime?
+  nextFilingDue      DateTime?
+  notes              String    @default("")
+  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime  @default(now())
+}
+
+/**
+ * PLH-2 Phase 4e (E5): singleton row tracking the reconcile cron cursor.
+ * The reconcile cron walks Stripe charges and transfers in 7-day chunks
+ * starting from `cursor`. On success it advances `cursor` to the end of
+ * the processed window. A long outage catches up over multiple runs
+ * instead of silently losing any data beyond Stripe's 7-day default.
+ * Singleton: one row with id = "singleton".
+ */
+model ReconciliationState {
+  id        String    @id @default("singleton")
+  cursor    DateTime?
+  updatedAt DateTime  @updatedAt
+}
+
+/// PLH-3c F3: OEM approval gate. Anyone signing up as MANUFACTURER must
+/// submit a brand name for admin review; the public storefront and the
+/// claimed-brand dropdown only surface APPROVED rows. Existing
+/// manufacturerName users are auto-backfilled to APPROVED in the
+/// 20260607010000 migration.
+model ManufacturerApplication {
+  id               String       @id @default(cuid())
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manufacturerName String
+  status           MfgAppStatus @default(PENDING)
+  submittedAt      DateTime     @default(now())
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewedBy       User?        @relation("ReviewedManufacturerApps", fields: [reviewedByUserId], references: [id])
+  rejectionReason  String?
+
+  @@index([status])
+}
+
+enum MfgAppStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// PLH-3g Phase 1: per-supplier slot inside an Order. Today every Order is
+/// single-supplier, so backfill creates exactly one slot per Order. The
+/// model exists so the upcoming multi-supplier cart refactor can attach N
+/// slots per Order with per-supplier subtotal, freight, fee, refund, and
+/// payout linkage. Payout still carries a single orderId/supplierId pair
+/// for backward compat; orderSlots is the forward path.
+model OrderSupplierSlot {
+  id            String    @id @default(cuid())
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  supplierId    String
+  supplier      Supplier  @relation(fields: [supplierId], references: [id])
+  subtotalCents Int
+  freightCents  Int
+  feeCents      Int
+  refundedCents Int       @default(0)
+  payoutId      String?
+  payout        Payout?   @relation(fields: [payoutId], references: [id])
+  // PLH-3g P5: per-supplier shipment dispatch. Each slot tracks its own
+  // ship state so a multi-supplier order can have one supplier shipped
+  // while another is still Pending. The parent Order.shipmentStage is
+  // recomputed as the aggregate (see markSlotShipped in lib/shipping.ts).
+  carrier       String?
+  trackingCode  String?
+  trackingUrl   String?
+  shipmentStage String    @default("Pending")
+  shippedAt     DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([orderId, supplierId])
+  @@index([supplierId])
+  @@index([payoutId])
+}
+
+/// PLH-3i P1: third-party integration credentials. One row per (provider,
+/// realmId) pair. accessToken + refreshToken stored raw in @db.Text
+/// (known gap; no ENCRYPTION_KEY infra in place at this round).
+model IntegrationCredential {
+  id                String    @id @default(cuid())
+  provider          String
+  realmId           String
+  accessToken       String    @db.Text
+  refreshToken      String    @db.Text
+  expiresAt         DateTime
+  connectedByUserId String
+  connectedAt       DateTime  @default(now())
+  lastUsedAt        DateTime?
+
+  @@unique([provider, realmId])
+}
+
+model SupplierApplication {
+  id           String            @id @default(cuid())
+  companyName  String
+  contactName  String
+  email        String
+  website      String            @default("")
+  category     String
+  yearsTrading String
+  certs        String            @default("")
+  message      String            @default("")
+  status       ApplicationStatus @default(PENDING)
+  createdAt    DateTime          @default(now())
+}
